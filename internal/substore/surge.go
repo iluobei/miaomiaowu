@@ -13,11 +13,11 @@ type SurgeProducer struct {
 }
 
 var ipVersions = map[string]string{
-	"dual":         "dual",
-	"ipv4":         "v4-only",
-	"ipv6":         "v6-only",
-	"ipv4-prefer":  "prefer-v4",
-	"ipv6-prefer":  "prefer-v6",
+	"dual":        "dual",
+	"ipv4":        "v4-only",
+	"ipv6":        "v6-only",
+	"ipv4-prefer": "prefer-v4",
+	"ipv6-prefer": "prefer-v6",
 }
 
 // NewSurgeProducer creates a new Surge producer
@@ -42,6 +42,13 @@ func (p *SurgeProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 	var result []string
 	for _, proxy := range proxies {
 		line, err := p.ProduceOne(proxy, outputType, opts)
+
+		// convert dailer-proxy to underlying-proxy
+		dailerProxy := GetString(proxy, "dialer-proxy")
+		if dailerProxy != "" {
+			line += fmt.Sprintf(", underlying-proxy=%s", dailerProxy)
+		}
+
 		if err != nil {
 			if !opts.IncludeUnsupportedProxy {
 				continue
