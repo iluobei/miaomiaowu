@@ -120,6 +120,12 @@ function SubscribeFilesPage() {
   // 编辑配置状态
   const [configContent, setConfigContent] = useState('')
 
+  // 缺失节点替换对话框状态
+  const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
+  const [missingNodes, setMissingNodes] = useState<string[]>([])
+  const [replacementChoice, setReplacementChoice] = useState<'PROXY' | 'DIRECT'>('DIRECT')
+  const [pendingConfigAfterSave, setPendingConfigAfterSave] = useState('')
+
   // 导入表单
   const [importForm, setImportForm] = useState({
     name: '',
@@ -523,6 +529,106 @@ function SubscribeFilesPage() {
     setShowAllNodes(false)
   }
 
+  // 验证 rules 中的节点是否存在于 proxy-groups 中
+  const validateRulesNodes = (parsedConfig: any) => {
+    const rules = parsedConfig.rules || []
+    const proxyGroupNames = new Set(parsedConfig['proxy-groups']?.map((g: any) => g.name) || [])
+
+    // 添加特殊节点
+    proxyGroupNames.add('DIRECT')
+    proxyGroupNames.add('REJECT')
+    proxyGroupNames.add('PROXY')
+    proxyGroupNames.add('no-resolve')
+
+    const missingNodes = new Set<string>()
+
+    // 检查每条规则
+    rules.forEach((rule: any, index: number) => {
+      let nodeName: string | null = null
+
+      if (typeof rule === 'string') {
+        // 字符串格式的规则: "DOMAIN-SUFFIX,google.com,PROXY_GROUP"
+        const parts = rule.split(',')
+        if (parts.length < 2) return
+        nodeName = parts[parts.length - 1].trim()
+      } else if (typeof rule === 'object' && rule !== null) {
+        // 对象格式的规则，查找可能的节点字段
+        nodeName = rule.target || rule.group || rule.proxy || rule.ruleset
+      } else {
+        return
+      }
+
+      // 如果节点名称不在 proxy-groups 中，添加到缺失列表
+      if (nodeName && !proxyGroupNames.has(nodeName)) {
+        console.log(`[validateRulesNodes] 发现缺失节点: "${nodeName}"`)
+        missingNodes.add(nodeName)
+      }
+    })
+
+    return {
+      missingNodes: Array.from(missingNodes)
+    }
+  }
+
+  // 应用缺失节点替换
+  const handleApplyReplacement = () => {
+    try {
+      const parsedConfig = parseYAML(pendingConfigAfterSave) as any
+      const rules = parsedConfig.rules || []
+      const proxyGroupNames = new Set(parsedConfig['proxy-groups']?.map((g: any) => g.name) || [])
+
+      // 添加特殊节点
+      proxyGroupNames.add('DIRECT')
+      proxyGroupNames.add('REJECT')
+      proxyGroupNames.add('PROXY')
+      proxyGroupNames.add('no-resolve')
+
+      // 替换 rules 中缺失的节点
+      parsedConfig.rules = rules.map((rule: any) => {
+        if (typeof rule === 'string') {
+          const parts = rule.split(',')
+          if (parts.length < 2) return rule
+          const nodeName = parts[parts.length - 1].trim()
+          // 如果节点缺失，替换为用户选择的值
+          if (nodeName && !proxyGroupNames.has(nodeName)) {
+            parts[parts.length - 1] = replacementChoice
+            return parts.join(',')
+          }
+        } else if (typeof rule === 'object' && rule !== null) {
+          // 对象格式的规则，检查并替换可能的节点字段
+          const nodeName = rule.target || rule.group || rule.proxy || rule.ruleset
+          if (nodeName && !proxyGroupNames.has(nodeName)) {
+            const updatedRule = { ...rule }
+            if (updatedRule.target) updatedRule.target = replacementChoice
+            else if (updatedRule.group) updatedRule.group = replacementChoice
+            else if (updatedRule.proxy) updatedRule.proxy = replacementChoice
+            else if (updatedRule.ruleset) updatedRule.ruleset = replacementChoice
+            return updatedRule
+          }
+        }
+
+        return rule
+      })
+
+      // 转换回YAML
+      const finalConfig = dumpYAML(parsedConfig, { lineWidth: -1, noRefs: true })
+      setConfigContent(finalConfig)
+
+      // 更新查询缓存
+      queryClient.setQueryData(['nodes-config', editingNodesFile?.id], {
+        content: finalConfig
+      })
+
+      // 只关闭替换对话框，不关闭编辑节点对话框
+      setMissingNodesDialogOpen(false)
+      toast.success(`已将缺失节点替换为 ${replacementChoice}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '应用替换失败'
+      toast.error(message)
+      console.error('应用替换失败:', error)
+    }
+  }
+
   const handleSaveNodes = async () => {
     if (!editingNodesFile) return
 
@@ -617,12 +723,21 @@ function SubscribeFilesPage() {
       // 转换回YAML
       const newContent = dumpYAML(parsed, { lineWidth: -1, noRefs: true })
 
-      // 更新编辑配置对话框中的内容
-      setConfigContent(newContent)
-
-      // 只关闭编辑节点对话框，不保存到文件
-      setEditNodesDialogOpen(false)
-      toast.success('已应用节点配置')
+      // 验证 rules 中引用的节点是否都存在
+      const validationResult = validateRulesNodes(parsed)
+      if (validationResult.missingNodes.length > 0) {
+        // 有缺失的节点，显示替换对话框
+        setMissingNodes(validationResult.missingNodes)
+        setPendingConfigAfterSave(newContent)
+        setMissingNodesDialogOpen(true)
+      } else {
+        // 没有缺失节点，直接应用
+        // 更新编辑配置对话框中的内容
+        setConfigContent(newContent)
+        // 只关闭编辑节点对话框，不保存到文件
+        setEditNodesDialogOpen(false)
+        toast.success('已应用节点配置')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '应用配置失败'
       toast.error(message)
@@ -1520,6 +1635,62 @@ function SubscribeFilesPage() {
         activeCard={activeCard}
         saveButtonText='应用并保存'
       />
+
+      {/* 缺失节点替换对话框 */}
+      <Dialog open={missingNodesDialogOpen} onOpenChange={setMissingNodesDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle>发现缺失节点</DialogTitle>
+            <DialogDescription>
+              以下节点在 rules 中被引用，但不存在于 proxy-groups 中
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4'>
+            {/* 缺失节点列表 */}
+            <div className='max-h-[200px] overflow-y-auto border rounded-md p-3 space-y-1'>
+              {missingNodes.map((node, index) => (
+                <div key={index} className='text-sm font-mono bg-muted px-2 py-1 rounded'>
+                  {node}
+                </div>
+              ))}
+            </div>
+            {/* 替换选项 */}
+            <div className='space-y-2'>
+              <Label>选择替换为：</Label>
+              <div className='flex gap-2'>
+                <Button
+                  variant={replacementChoice === 'DIRECT' ? 'default' : 'outline'}
+                  onClick={() => setReplacementChoice('DIRECT')}
+                  className='flex-1'
+                >
+                  DIRECT
+                </Button>
+                <Button
+                  variant={replacementChoice === 'PROXY' ? 'default' : 'outline'}
+                  onClick={() => setReplacementChoice('PROXY')}
+                  className='flex-1'
+                >
+                  PROXY
+                </Button>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                将把上述缺失的节点替换为 <span className='font-semibold'>{replacementChoice}</span>
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => setMissingNodesDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button onClick={handleApplyReplacement}>
+              应用替换
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

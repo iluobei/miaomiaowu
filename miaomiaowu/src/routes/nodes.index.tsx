@@ -630,12 +630,11 @@ function NodesPage() {
     for (const line of lines) {
       const trimmed = line.trim()
       if (!trimmed || !trimmed.includes('://')) continue
-
       const parsedNode = parseProxyUrl(trimmed)
       const clashNode = parsedNode ? toClashProxy(parsedNode) : null
-       const name = parsedNode?.name || clashNode?.name || '未知'
-       const normalizedParsed = cloneProxyWithName(parsedNode, name)
-       const normalizedClash = cloneProxyWithName(clashNode, name)
+      const name = parsedNode?.name || clashNode?.name || '未知'
+      const normalizedParsed = cloneProxyWithName(parsedNode, name)
+      const normalizedClash = cloneProxyWithName(clashNode, name)
 
       parsed.push({
         id: Math.random().toString(36).substring(7),

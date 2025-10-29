@@ -167,8 +167,11 @@ function parseShadowsocks(url: string): ProxyNode | null {
     // 格式1: base64(method:password)@server:port
     if (mainPart.includes('@')) {
       const [encodedPart, serverPart] = mainPart.split('@')
-      const decoded = base64Decode(encodedPart)
-      const [m, p] = decoded.split(':')
+      // 修复ss password含有:号, urlencode格式转换
+      const decoded = base64Decode(encodedPart.indexOf('%') == -1 ? encodedPart : decodeURIComponent(encodedPart))
+      const colonIndex = decoded.indexOf(':')
+      const m = decoded.substring(0, colonIndex)
+      const p = decoded.substring(colonIndex + 1)
       method = m
       password = p
 
@@ -184,7 +187,9 @@ function parseShadowsocks(url: string): ProxyNode | null {
       const authPart = decoded.substring(0, atIndex)
       const serverPart = decoded.substring(atIndex + 1)
 
-      const [m, p] = authPart.split(':')
+      const colonIndex = authPart.indexOf(':')
+      const m = authPart.substring(0, colonIndex)
+      const p = authPart.substring(colonIndex + 1)
       method = m
       password = p
 
@@ -225,7 +230,9 @@ function parseSocks(url: string): ProxyNode | null {
 
     const [encodedAuth, serverPart] = mainPart.split('@')
     const decoded = base64Decode(encodedAuth)
-    const [username, password] = decoded.split(':')
+    const colonIndex = decoded.indexOf(':')
+    const username = decoded.substring(0, colonIndex)
+    const password = decoded.substring(colonIndex + 1)
 
     const [server, portStr] = serverPart.split(':')
     const port = parseInt(portStr) || 0
