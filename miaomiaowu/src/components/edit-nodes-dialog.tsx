@@ -1,11 +1,13 @@
-import React from 'react'
-import { GripVertical, X } from 'lucide-react'
+import React, { useState } from 'react'
+import { GripVertical, X, Plus } from 'lucide-react'
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
 
 interface ProxyGroup {
   name: string
@@ -74,8 +76,12 @@ export function EditNodesDialog({
   activeCard,
   onConfigureChainProxy,
   cancelButtonText = '取消',
-  saveButtonText = '保存'
+  saveButtonText = '确定'
 }: EditNodesDialogProps) {
+  // 添加代理组对话框状态
+  const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -83,6 +89,29 @@ export function EditNodesDialog({
       },
     })
   )
+
+  // 添加新代理组
+  const handleAddGroup = () => {
+    if (!newGroupName.trim()) return
+
+    const newGroup: ProxyGroup = {
+      name: newGroupName.trim(),
+      type: 'select',
+      proxies: []
+    }
+
+    // 添加到首位
+    _onProxyGroupsChange([newGroup, ...proxyGroups])
+
+    // 重置并关闭对话框
+    setNewGroupName('')
+    setAddGroupDialogOpen(false)
+  }
+
+  // 快速选择预定义名称
+  const handleQuickSelect = (name: string) => {
+    setNewGroupName(name)
+  }
 
   // 可排序的节点组件
   interface SortableProxyProps {
@@ -297,6 +326,7 @@ export function EditNodesDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='!max-w-[95vw] w-[95vw] max-h-[90vh] flex flex-col' style={{ maxWidth: '95vw', width: '95vw' }}>
         <DialogHeader>
@@ -405,10 +435,15 @@ export function EditNodesDialog({
             {/* 操作按钮 */}
             <div className='flex-shrink-0 mb-4'>
               <div className='flex gap-2'>
-                <Button variant='outline' onClick={() => onOpenChange(false)} className='flex-1'>
-                  {cancelButtonText}
+                <Button
+                  variant='outline'
+                  onClick={() => setAddGroupDialogOpen(true)}
+                  className='flex-1'
+                >
+                  <Plus className='h-4 w-4 mr-1' />
+                  添加代理组
                 </Button>
-                <Button onClick={onSave} className='flex-1' disabled={isSaving}>
+                <Button onClick={onSave} disabled={isSaving} className='flex-1'>
                   {isSaving ? '保存中...' : saveButtonText}
                 </Button>
               </div>
@@ -486,5 +521,61 @@ export function EditNodesDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* 添加代理组对话框 */}
+    <Dialog open={addGroupDialogOpen} onOpenChange={setAddGroupDialogOpen}>
+      <DialogContent className='max-w-2xl'>
+        <DialogHeader>
+          <DialogTitle>添加代理组</DialogTitle>
+          <DialogDescription>
+            输入自定义名称或从预定义选项中快速选择
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className='space-y-4'>
+          {/* 输入框 */}
+          <div>
+            <Input
+              placeholder='输入代理组名称...'
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddGroup()
+                }
+              }}
+            />
+          </div>
+
+          {/* 预定义选项 */}
+          <div>
+            <p className='text-sm text-muted-foreground mb-2'>快速选择：</p>
+            <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
+              {Object.entries(OUTBOUND_NAMES).map(([key, value]) => (
+                <Button
+                  key={key}
+                  variant='outline'
+                  size='sm'
+                  className='justify-start text-left h-auto py-2 px-3'
+                  onClick={() => handleQuickSelect(value)}
+                >
+                  <span className='truncate'>{value}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant='outline' onClick={() => setAddGroupDialogOpen(false)}>
+            取消
+          </Button>
+          <Button onClick={handleAddGroup} disabled={!newGroupName.trim()}>
+            保存
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

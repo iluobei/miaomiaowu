@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
+
+	"gopkg.in/yaml.v3"
 )
 
 type nodesHandler struct {
@@ -93,11 +94,6 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req nodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeBadRequest(w, "请求格式不正确")
-		return
-	}
-
-	if req.RawURL == "" {
-		writeBadRequest(w, "节点URL是必填项")
 		return
 	}
 

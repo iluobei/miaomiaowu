@@ -188,6 +188,16 @@ func (r *TrafficRepository) DeleteNode(ctx context.Context, id int64, username s
 		return errors.New("username is required")
 	}
 
+	// 获取节点的 raw_url，用于后续检查外部订阅
+	var rawURL string
+	err := r.db.QueryRowContext(ctx, `SELECT raw_url FROM nodes WHERE id = ? AND username = ?`, id, username).Scan(&rawURL)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNodeNotFound
+		}
+		return fmt.Errorf("get node raw_url: %w", err)
+	}
+
 	res, err := r.db.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND username = ?`, id, username)
 	if err != nil {
 		return fmt.Errorf("delete node: %w", err)
@@ -199,6 +209,26 @@ func (r *TrafficRepository) DeleteNode(ctx context.Context, id int64, username s
 	}
 	if affected == 0 {
 		return ErrNodeNotFound
+	}
+
+	// 检查该 raw_url 是否还有其他节点使用
+	// 如果没有，则删除对应的外部订阅
+	if rawURL != "" {
+		var count int
+		err = r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE username = ? AND raw_url = ?`, username, rawURL).Scan(&count)
+		if err != nil {
+			// 记录错误但不影响删除节点的操作
+			return nil
+		}
+
+		// 如果没有节点使用该订阅链接，删除外部订阅
+		if count == 0 {
+			_, err = r.db.ExecContext(ctx, `DELETE FROM external_subscriptions WHERE username = ? AND url = ?`, username, rawURL)
+			if err != nil {
+				// 记录错误但不影响删除节点的操作
+				// 可以在这里添加日志记录
+			}
+		}
 	}
 
 	return nil

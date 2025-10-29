@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Loader2, Save, Layers, Activity } from 'lucide-react'
+import { Copy, Download, Loader2, Save, Layers, Activity, Upload } from 'lucide-react'
 import { type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Topbar } from '@/components/layout/topbar'
@@ -115,6 +115,11 @@ function SubscriptionGeneratorPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [hasManuallyGrouped, setHasManuallyGrouped] = useState(false)
 
+  // 上传模板状态
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadingTemplate, setUploadingTemplate] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   // 保存订阅对话框状态
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [subscribeName, setSubscribeName] = useState('')
@@ -161,6 +166,50 @@ function SubscriptionGeneratorPage() {
   const savedNodes = nodesData?.nodes ?? []
   const enabledNodes = savedNodes.filter(n => n.enabled)
   const templates = templatesData?.templates ?? []
+
+  // 默认选择第一个模板
+  useEffect(() => {
+    if (ruleMode === 'template' && templates.length > 0 && !selectedTemplate) {
+      setSelectedTemplate(templates[0])
+    }
+  }, [ruleMode, templates, selectedTemplate])
+
+  // 上传模板 mutation
+  const uploadTemplateMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('template', file)
+      const response = await api.post('/api/admin/rule-templates/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return response.data as { filename: string }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
+      setSelectedTemplate(data.filename)
+      setUploadDialogOpen(false)
+      toast.success('模板上传成功')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '上传模板失败')
+    }
+  })
+
+  const handleUploadTemplate = () => {
+    const file = fileInputRef.current?.files?.[0]
+    if (!file) {
+      toast.error('请选择文件')
+      return
+    }
+
+    // 检查文件扩展名
+    if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
+      toast.error('只支持 .yaml 或 .yml 文件')
+      return
+    }
+
+    uploadTemplateMutation.mutate(file)
+  }
 
   // 获取所有协议类型
   const protocols = Array.from(new Set(enabledNodes.map(n => n.protocol.toLowerCase()))).sort()
@@ -636,13 +685,27 @@ function SubscriptionGeneratorPage() {
     const hasLandingNode = proxyGroups.some(g => g.name === '🌄 落地节点')
     const hasRelayNode = proxyGroups.some(g => g.name === '🌠 中转节点')
 
+    // 从链式代理节点中提取落地节点和中转节点
+    const chainProxyNodes = enabledNodes.filter(node => node.node_name.includes('⇋'))
+
+    const landingNodeNames = new Set<string>()
+    const relayNodeNames = new Set<string>()
+
+    chainProxyNodes.forEach(node => {
+      const parts = node.node_name.split('⇋')
+      if (parts.length === 2) {
+        landingNodeNames.add(parts[0].trim())
+        relayNodeNames.add(parts[1].trim())
+      }
+    })
+
     const newGroups: ProxyGroup[] = []
 
     if (!hasLandingNode) {
       newGroups.push({
         name: '🌄 落地节点',
         type: 'select',
-        proxies: []
+        proxies: Array.from(landingNodeNames)
       })
     }
 
@@ -650,7 +713,7 @@ function SubscriptionGeneratorPage() {
       newGroups.push({
         name: '🌠 中转节点',
         type: 'select',
-        proxies: []
+        proxies: Array.from(relayNodeNames)
       })
     }
 
@@ -981,7 +1044,7 @@ function SubscriptionGeneratorPage() {
       <Topbar />
 
       <main className='mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 pt-24'>
-        <div className='mx-auto max-w-5xl space-y-6'>
+        <div className='mx-auto space-y-6'>
           <div className='space-y-2'>
             <h1 className='text-3xl font-bold tracking-tight'>订阅链接生成器</h1>
             <p className='text-muted-foreground'>
@@ -1107,9 +1170,9 @@ function SubscriptionGeneratorPage() {
                     </div>
                   )}
 
-                  <div className='rounded-md border'>
+                  <div className='rounded-md border max-h-[440px] overflow-y-auto'>
                   <Table>
-                    <TableHeader>
+                    <TableHeader className='sticky top-0 bg-background z-10'>
                       <TableRow>
                         <TableHead className='w-[50px]'>
                           <Checkbox
@@ -1231,6 +1294,13 @@ function SubscriptionGeneratorPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <Button
+                      variant='outline'
+                      onClick={() => setUploadDialogOpen(true)}
+                    >
+                      <Upload className='mr-2 h-4 w-4' />
+                      上传
+                    </Button>
                     <div className='flex items-end'>
                       <div
                         onClick={() => {
@@ -1425,7 +1495,7 @@ function SubscriptionGeneratorPage() {
         handleNodeDragEnd={handleNodeDragEnd}
         activeGroupTitle={activeGroupTitle}
         activeCard={activeCard}
-        saveButtonText="应用分组"
+        saveButtonText="确定"
       />
 
       {/* 缺失节点替换对话框 */}
@@ -1479,6 +1549,41 @@ function SubscriptionGeneratorPage() {
             </Button>
             <Button onClick={handleApplyReplacement}>
               确认替换
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 上传模板对话框 */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>上传模板</DialogTitle>
+            <DialogDescription>
+              选择一个 YAML 格式的模板文件上传到 rule_templates 文件夹
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='template-file'>模板文件</Label>
+              <Input
+                id='template-file'
+                type='file'
+                accept='.yaml,.yml'
+                ref={fileInputRef}
+              />
+              <p className='text-xs text-muted-foreground'>
+                支持 .yaml 或 .yml 格式
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setUploadDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleUploadTemplate} disabled={uploadTemplateMutation.isPending}>
+              {uploadTemplateMutation.isPending && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+              上传
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -105,6 +105,8 @@ const CLIENT_TYPES = [
 function SubscriptionPage() {
   const { auth } = useAuthStore()
   const [qrValue, setQrValue] = useState<string | null>(null)
+  // 为每个订阅文件保存当前显示的URL
+  const [displayURLs, setDisplayURLs] = useState<Record<number, string>>({})
 
   const { data: tokenData } = useQuery({
     queryKey: ['user-token'],
@@ -159,7 +161,10 @@ function SubscriptionPage() {
     return url.toString()
   }
 
-  const handleCopy = async (urlText: string, clientName: string) => {
+  const handleCopy = async (fileId: number, urlText: string, clientName: string) => {
+    // 更新该订阅文件显示的URL
+    setDisplayURLs(prev => ({ ...prev, [fileId]: urlText }))
+
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(urlText)
@@ -195,6 +200,8 @@ function SubscriptionPage() {
           {subscribeFiles.map((file) => {
             const Icon = ICON_MAP[file.name] ?? QrCode
             const subscribeURL = buildSubscriptionURL(file.filename)
+            // 使用当前显示的URL，如果没有则使用默认URL
+            const displayURL = displayURLs[file.id] || subscribeURL
             const clashURL = `clash://install-config?url=${encodeURIComponent(subscribeURL)}`
             const updatedLabel = file.updated_at
               ? dateFormatter.format(new Date(file.updated_at))
@@ -237,7 +244,7 @@ function SubscriptionPage() {
                     ) : null}
                   </div>
                   <div className='break-all rounded-lg border bg-muted/40 p-3 font-mono text-xs shadow-inner sm:text-sm'>
-                    {subscribeURL}
+                    {displayURL}
                   </div>
                   <div className='grid grid-cols-2 gap-2'>
                     {showCopy ? (
@@ -258,7 +265,7 @@ function SubscriptionPage() {
                             return (
                               <DropdownMenuItem
                                 key={client.type}
-                                onClick={() => handleCopy(clientURL, client.name)}
+                                onClick={() => handleCopy(file.id, clientURL, client.name)}
                                 className='cursor-pointer'
                               >
                                 <img src={client.icon} alt={client.name} className='mr-2 size-4' />

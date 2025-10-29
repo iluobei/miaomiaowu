@@ -526,6 +526,23 @@ function SubscribeFilesPage() {
   const handleSaveNodes = async () => {
     if (!editingNodesFile || !nodesConfigQuery.data?.content) return
 
+    // 辅助函数：重新排序节点属性，确保 name, type, server, port 在前4位
+    const reorderProxyProperties = (proxy: any) => {
+      const orderedProxy: any = {}
+      // 前4个属性按顺序添加
+      if ('name' in proxy) orderedProxy.name = proxy.name
+      if ('type' in proxy) orderedProxy.type = proxy.type
+      if ('server' in proxy) orderedProxy.server = proxy.server
+      if ('port' in proxy) orderedProxy.port = proxy.port
+      // 添加其他所有属性
+      Object.keys(proxy).forEach(key => {
+        if (!['name', 'type', 'server', 'port'].includes(key)) {
+          orderedProxy[key] = proxy[key]
+        }
+      })
+      return orderedProxy
+    }
+
     try {
       const parsed = parseYAML(nodesConfigQuery.data.content) as any
 
@@ -551,7 +568,9 @@ function SubscribeFilesPage() {
               const clashConfig = typeof node.clash_config === 'string'
                 ? JSON.parse(node.clash_config)
                 : node.clash_config
-              nodeConfigs.push(clashConfig)
+              // 重新排序属性，确保 name, type, server, port 在前4位
+              const orderedConfig = reorderProxyProperties(clashConfig)
+              nodeConfigs.push(orderedConfig)
             } catch (e) {
               console.error(`解析节点 ${node.node_name} 的配置失败:`, e)
             }
@@ -566,10 +585,10 @@ function SubscribeFilesPage() {
           // 合并：使用新的节点配置，添加现有但未使用的节点
           const updatedProxies = [...nodeConfigs]
 
-          // 添加现有但未使用的节点
+          // 添加现有但未使用的节点（也重新排序）
           existingProxies.forEach((proxy: any) => {
             if (!usedNodeNames.has(proxy.name) && !updatedProxies.some(p => p.name === proxy.name)) {
-              updatedProxies.push(proxy)
+              updatedProxies.push(reorderProxyProperties(proxy))
             }
           })
 

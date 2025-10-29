@@ -87,71 +87,6 @@ func (s *subscriptionEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get username from context
-	username := auth.UsernameFromContext(request.Context())
-
-	// Check if force sync external subscriptions is enabled
-	if username != "" && s.repo != nil {
-		settings, err := s.repo.GetUserSettings(request.Context(), username)
-		if err == nil && settings.ForceSyncExternal {
-			log.Printf("[Subscription] User %s has force sync enabled (cache_expire_minutes: %d)", username, settings.CacheExpireMinutes)
-
-			// Get external subscriptions first
-			externalSubs, err := s.repo.ListExternalSubscriptions(request.Context(), username)
-			if err != nil || len(externalSubs) == 0 {
-				// No external subscriptions or error, skip sync
-				log.Printf("[Subscription] User %s has no external subscriptions, skipping sync", username)
-				s.inner.ServeHTTP(w, request)
-				return
-			}
-
-			log.Printf("[Subscription] User %s has %d external subscriptions", username, len(externalSubs))
-
-			// Check if we need to sync based on cache expiration
-			shouldSync := false
-
-			if settings.CacheExpireMinutes > 0 {
-				// Check last sync time for all external subscriptions
-				for _, sub := range externalSubs {
-					if sub.LastSyncAt == nil {
-						// Never synced before
-						log.Printf("[Subscription] Subscription %s (%s) never synced, will sync", sub.Name, sub.URL)
-						shouldSync = true
-						break
-					}
-
-					// Calculate time difference in minutes
-					elapsed := time.Since(*sub.LastSyncAt).Minutes()
-					if elapsed >= float64(settings.CacheExpireMinutes) {
-						// Cache expired
-						log.Printf("[Subscription] Subscription %s (%s) cache expired (%.2f >= %d minutes), will sync", sub.Name, sub.URL, elapsed, settings.CacheExpireMinutes)
-						shouldSync = true
-						break
-					}
-				}
-				if !shouldSync {
-					log.Printf("[Subscription] All subscriptions are within cache time, skipping sync")
-				}
-			} else {
-				// Cache expire minutes is 0, always sync
-				log.Printf("[Subscription] Cache expire minutes is 0, will always sync")
-				shouldSync = true
-			}
-
-			if shouldSync {
-				log.Printf("[Subscription] Starting external subscriptions sync for user %s", username)
-				// Sync external subscriptions before serving the subscription
-				if err := syncExternalSubscriptions(request.Context(), s.repo, s.inner.baseDir, username); err != nil {
-					log.Printf("[Subscription] Failed to sync external subscriptions: %v", err)
-					// Log error but don't fail the request
-					// The sync is best-effort
-				} else {
-					log.Printf("[Subscription] External subscriptions sync completed successfully")
-				}
-			}
-		}
-	}
-
 	s.inner.ServeHTTP(w, request)
 }
 
@@ -252,6 +187,85 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusInternalServerError, err)
 		}
 		return
+	}
+
+	// Check if force sync external subscriptions is enabled and sync only referenced subscriptions
+	if username != "" && h.repo != nil {
+		settings, err := h.repo.GetUserSettings(r.Context(), username)
+		if err == nil && settings.ForceSyncExternal {
+			log.Printf("[Subscription] User %s has force sync enabled (cache_expire_minutes: %d)", username, settings.CacheExpireMinutes)
+
+			// Get external subscriptions referenced in current file
+			usedExternalSubs, err := getExternalSubscriptionsFromFile(r.Context(), data, username, h.repo)
+			if err != nil {
+				log.Printf("[Subscription] Failed to get external subscriptions from file: %v", err)
+			} else if len(usedExternalSubs) > 0 {
+				log.Printf("[Subscription] Found %d external subscriptions referenced in current file", len(usedExternalSubs))
+
+				// Get user's external subscriptions to check cache and get URLs
+				allExternalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
+				if err != nil {
+					log.Printf("[Subscription] Failed to list external subscriptions: %v", err)
+				} else {
+					// Filter to only sync subscriptions that are referenced in the current file
+					var subsToSync []storage.ExternalSubscription
+					subURLMap := make(map[string]string) // URL -> name mapping
+
+					for _, sub := range allExternalSubs {
+						subURLMap[sub.URL] = sub.Name
+						if _, used := usedExternalSubs[sub.URL]; used {
+							subsToSync = append(subsToSync, sub)
+						}
+					}
+
+					log.Printf("[Subscription] ForceSyncExternal enabled: will sync %d/%d external subscriptions referenced in current file", len(subsToSync), len(allExternalSubs))
+
+					// Check if we need to sync based on cache expiration
+					shouldSync := false
+					if settings.CacheExpireMinutes > 0 {
+						// Check last sync time only for referenced subscriptions
+						for _, sub := range subsToSync {
+							if sub.LastSyncAt == nil {
+								// Never synced before
+								log.Printf("[Subscription] Subscription %s (%s) never synced, will sync", sub.Name, sub.URL)
+								shouldSync = true
+								break
+							}
+
+							// Calculate time difference in minutes
+							elapsed := time.Since(*sub.LastSyncAt).Minutes()
+							if elapsed >= float64(settings.CacheExpireMinutes) {
+								// Cache expired
+								log.Printf("[Subscription] Subscription %s (%s) cache expired (%.2f >= %d minutes), will sync", sub.Name, sub.URL, elapsed, settings.CacheExpireMinutes)
+								shouldSync = true
+								break
+							}
+						}
+						if !shouldSync {
+							log.Printf("[Subscription] All referenced subscriptions are within cache time, skipping sync")
+						}
+					} else {
+						// Cache expire minutes is 0, always sync
+						log.Printf("[Subscription] Cache expire minutes is 0, will always sync referenced subscriptions")
+						shouldSync = true
+					}
+
+					if shouldSync {
+						log.Printf("[Subscription] Starting external subscriptions sync for user %s (only referenced subscriptions)", username)
+						// Sync only the referenced external subscriptions
+						if err := syncReferencedExternalSubscriptions(r.Context(), h.repo, h.baseDir, username, subsToSync); err != nil {
+							log.Printf("[Subscription] Failed to sync external subscriptions: %v", err)
+							// Log error but don't fail the request
+							// The sync is best-effort
+						} else {
+							log.Printf("[Subscription] External subscriptions sync completed successfully")
+						}
+					}
+				}
+			} else {
+				log.Printf("[Subscription] No external subscriptions referenced in current file, skipping sync")
+			}
+		}
 	}
 
 	// 根据参数t的类型调用substore的转换代码
@@ -453,6 +467,101 @@ func getKeys(m map[string]bool) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// getExternalSubscriptionsFromFile extracts external subscription URLs from YAML file content
+// by analyzing proxies and querying the database for their raw_url (external subscription links)
+func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username string, repo *storage.TrafficRepository) (map[string]bool, error) {
+	usedURLs := make(map[string]bool)
+
+	// Parse YAML content
+	var yamlContent map[string]any
+	if err := yaml.Unmarshal(data, &yamlContent); err != nil {
+		return usedURLs, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// Extract proxies and query database for their raw_url
+	if proxies, ok := yamlContent["proxies"].([]any); ok {
+		log.Printf("[Subscription] Found %d proxies in subscription file", len(proxies))
+
+		// Collect all proxy names
+		proxyNames := make(map[string]bool)
+		for _, proxy := range proxies {
+			if proxyMap, ok := proxy.(map[string]any); ok {
+				if name, ok := proxyMap["name"].(string); ok && name != "" {
+					proxyNames[name] = true
+				}
+			}
+		}
+
+		if len(proxyNames) > 0 {
+			log.Printf("[Subscription] Querying database for %d proxies to find external subscription URLs", len(proxyNames))
+
+			// Query database for nodes with these names
+			nodes, err := repo.ListNodes(ctx, username)
+			if err != nil {
+				log.Printf("[Subscription] Failed to list nodes from database: %v", err)
+				return usedURLs, fmt.Errorf("failed to list nodes: %w", err)
+			}
+
+			// Find matching nodes and collect their raw_url
+			for _, node := range nodes {
+				if proxyNames[node.NodeName] && node.RawURL != "" {
+					usedURLs[node.RawURL] = true
+					log.Printf("[Subscription] Found external subscription URL from node '%s': %s", node.NodeName, node.RawURL)
+				}
+			}
+		}
+	}
+
+	log.Printf("[Subscription] Found %d unique external subscription URLs referenced in current file", len(usedURLs))
+	return usedURLs, nil
+}
+
+// syncReferencedExternalSubscriptions syncs only the specified external subscriptions
+func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.TrafficRepository, subscribeDir, username string, subsToSync []storage.ExternalSubscription) error {
+	if repo == nil || username == "" || len(subsToSync) == 0 {
+		return fmt.Errorf("invalid parameters")
+	}
+
+	// Get user settings to check match rule
+	userSettings, err := repo.GetUserSettings(ctx, username)
+	if err != nil {
+		// If settings not found, use default match rule
+		userSettings.MatchRule = "node_name"
+	}
+
+	log.Printf("[Subscription] User %s has %d referenced external subscriptions to sync (match rule: %s)", username, len(subsToSync), userSettings.MatchRule)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Track total nodes synced
+	totalNodesSynced := 0
+
+	for _, sub := range subsToSync {
+		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings.MatchRule)
+		if err != nil {
+			log.Printf("[Subscription] Failed to sync subscription %s (%s): %v", sub.Name, sub.URL, err)
+			continue
+		}
+
+		totalNodesSynced += nodeCount
+
+		// Update last sync time and node count
+		// Use updatedSub which contains traffic info from parseAndUpdateTrafficInfo
+		now := time.Now()
+		updatedSub.LastSyncAt = &now
+		updatedSub.NodeCount = nodeCount
+		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
+			log.Printf("[Subscription] Failed to update sync time for subscription %s: %v", sub.Name, err)
+		}
+	}
+
+	log.Printf("[Subscription] Completed: synced %d nodes total from %d referenced subscriptions", totalNodesSynced, len(subsToSync))
+
+	return nil
 }
 
 // convertSubscription converts a YAML subscription file to the specified client format

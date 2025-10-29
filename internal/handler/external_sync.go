@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -22,11 +23,12 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		return fmt.Errorf("invalid parameters")
 	}
 
-	// Get user settings to check match rule
+	// Get user settings to check match rule and ForceSyncExternal
 	userSettings, err := repo.GetUserSettings(ctx, username)
 	if err != nil {
 		// If settings not found, use default match rule
 		userSettings.MatchRule = "node_name"
+		userSettings.ForceSyncExternal = false
 	}
 
 	// Get user's external subscriptions
@@ -40,7 +42,32 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		return nil
 	}
 
-	log.Printf("[External Sync] User %s has %d external subscriptions to sync (match rule: %s)", username, len(externalSubs), userSettings.MatchRule)
+	// If ForceSyncExternal is enabled, only sync subscriptions used in config files
+	var subsToSync []storage.ExternalSubscription
+	if userSettings.ForceSyncExternal {
+		usedURLs, err := getUsedExternalSubscriptionURLs(ctx, repo, subscribeDir, username)
+		if err != nil {
+			log.Printf("[External Sync] Failed to get used subscription URLs: %v, falling back to sync all", err)
+			subsToSync = externalSubs
+		} else {
+			// Filter subscriptions to only those used in config files
+			for _, sub := range externalSubs {
+				if _, used := usedURLs[sub.URL]; used {
+					subsToSync = append(subsToSync, sub)
+				}
+			}
+			log.Printf("[External Sync] ForceSyncExternal enabled: syncing %d/%d subscriptions actually used in config files", len(subsToSync), len(externalSubs))
+		}
+	} else {
+		subsToSync = externalSubs
+	}
+
+	if len(subsToSync) == 0 {
+		log.Printf("[External Sync] No subscriptions to sync for user %s", username)
+		return nil
+	}
+
+	log.Printf("[External Sync] User %s has %d external subscriptions to sync (match rule: %s)", username, len(subsToSync), userSettings.MatchRule)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -49,7 +76,7 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 	// Track total nodes synced
 	totalNodesSynced := 0
 
-	for _, sub := range externalSubs {
+	for _, sub := range subsToSync {
 		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings.MatchRule)
 		if err != nil {
 			log.Printf("[External Sync] Failed to sync subscription %s (%s): %v", sub.Name, sub.URL, err)
@@ -68,9 +95,56 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		}
 	}
 
-	log.Printf("[External Sync] Completed: synced %d nodes total from %d subscriptions", totalNodesSynced, len(externalSubs))
+	log.Printf("[External Sync] Completed: synced %d nodes total from %d subscriptions", totalNodesSynced, len(subsToSync))
 
 	return nil
+}
+
+// getUsedExternalSubscriptionURLs extracts all external subscription URLs used in user's subscribe files
+func getUsedExternalSubscriptionURLs(ctx context.Context, repo *storage.TrafficRepository, subscribeDir, username string) (map[string]bool, error) {
+	usedURLs := make(map[string]bool)
+
+	if subscribeDir == "" {
+		return usedURLs, fmt.Errorf("subscribe directory not configured")
+	}
+
+	// Get all subscribe files for the user
+	allFiles, err := repo.ListSubscribeFiles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list subscribe files: %w", err)
+	}
+
+	// Read each YAML file from the subscribe directory
+	for _, file := range allFiles {
+		// Read the YAML file from disk
+		filePath := fmt.Sprintf("%s/%s", subscribeDir, file.Filename)
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Printf("[External Sync] Failed to read file %s: %v", filePath, err)
+			continue
+		}
+
+		// Parse YAML content
+		var yamlContent map[string]any
+		if err := yaml.Unmarshal(content, &yamlContent); err != nil {
+			log.Printf("[External Sync] Failed to parse YAML for file %s: %v", file.Name, err)
+			continue
+		}
+
+		// Extract proxy-providers URLs
+		if proxyProviders, ok := yamlContent["proxy-providers"].(map[string]any); ok {
+			for _, provider := range proxyProviders {
+				if providerMap, ok := provider.(map[string]any); ok {
+					if url, ok := providerMap["url"].(string); ok && url != "" {
+						usedURLs[url] = true
+						log.Printf("[External Sync] Found used subscription URL in file %s: %s", file.Name, url)
+					}
+				}
+			}
+		}
+	}
+
+	return usedURLs, nil
 }
 
 // syncSingleExternalSubscription fetches and syncs nodes from a single external subscription

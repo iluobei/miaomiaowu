@@ -111,6 +111,7 @@ function NodesPage() {
   const [selectedNodeForProbe, setSelectedNodeForProbe] = useState<ParsedNode | null>(null)
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
   const [sourceNodeForExchange, setSourceNodeForExchange] = useState<ParsedNode | null>(null)
+  const [exchangeFilterText, setExchangeFilterText] = useState<string>('')
 
   // 自定义标签状态
   const [manualTag, setManualTag] = useState<string>('手动输入')
@@ -1263,7 +1264,7 @@ trojan://password@example.com:443?sni=example.com#Trojan节点`}
                                   >
                                     <Pencil className='size-4' />
                                   </Button>
-                                  {node.isSaved && (
+                                  {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
                                     <Button
                                       variant='ghost'
                                       size='icon'
@@ -1561,7 +1562,12 @@ trojan://password@example.com:443?sni=example.com#Trojan节点`}
       </Dialog>
 
       {/* 节点交换对话框 */}
-      <Dialog open={exchangeDialogOpen} onOpenChange={setExchangeDialogOpen}>
+      <Dialog open={exchangeDialogOpen} onOpenChange={(open) => {
+        setExchangeDialogOpen(open)
+        if (!open) {
+          setExchangeFilterText('') // 关闭对话框时清空筛选
+        }
+      }}>
         <DialogContent className='max-w-2xl max-h-[80vh] overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>创建链式代理节点</DialogTitle>
@@ -1570,11 +1576,37 @@ trojan://password@example.com:443?sni=example.com#Trojan节点`}
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
-            {savedNodes && savedNodes.length > 0 ? (
-              <div className='space-y-2'>
-                {savedNodes
-                  .filter(node => node.id !== sourceNodeForExchange?.id) // 排除源节点自己
-                  .map((node) => (
+            {/* 筛选输入框 */}
+            <div className='space-y-2'>
+              <Input
+                placeholder='搜索节点名称、协议或标签...'
+                value={exchangeFilterText}
+                onChange={(e) => setExchangeFilterText(e.target.value)}
+                className='text-sm'
+              />
+              <p className='text-xs text-muted-foreground'>
+                自动排除链式代理节点
+              </p>
+            </div>
+
+            {(() => {
+              // 筛选逻辑
+              const filteredNodes = savedNodes
+                .filter(node => node.id !== sourceNodeForExchange?.id) // 排除源节点自己
+                .filter(node => !node.protocol.includes('⇋')) // 排除链式代理节点（协议包含⇋）
+                .filter(node => {
+                  if (!exchangeFilterText.trim()) return true
+                  const searchText = exchangeFilterText.toLowerCase()
+                  return (
+                    node.node_name.toLowerCase().includes(searchText) ||
+                    node.protocol.toLowerCase().includes(searchText) ||
+                    (node.tag && node.tag.toLowerCase().includes(searchText))
+                  )
+                })
+
+              return filteredNodes.length > 0 ? (
+                <div className='space-y-2'>
+                  {filteredNodes.map((node) => (
                     <Button
                       key={node.id}
                       variant='outline'
@@ -1604,12 +1636,13 @@ trojan://password@example.com:443?sni=example.com#Trojan节点`}
                       </div>
                     </Button>
                   ))}
-              </div>
-            ) : (
-              <div className='text-center text-sm text-muted-foreground py-8'>
-                暂无可用的节点
-              </div>
-            )}
+                </div>
+              ) : (
+                <div className='text-center text-sm text-muted-foreground py-8'>
+                  {exchangeFilterText.trim() ? '未找到匹配的节点' : '暂无可用的节点'}
+                </div>
+              )
+            })()}
           </div>
         </DialogContent>
       </Dialog>
