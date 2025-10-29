@@ -121,11 +121,19 @@ export function EditNodesDialog({
 
   // 处理代理组改名
   const handleRenameGroup = (oldName: string, newName: string) => {
-    if (!newName.trim() || newName.trim() === oldName) {
+    const trimmedName = newName.trim()
+
+    // 如果名称为空，不执行任何操作
+    if (!trimmedName) {
       return
     }
 
-    const trimmedName = newName.trim()
+    // 如果名称没有改变，直接退出编辑模式
+    if (trimmedName === oldName) {
+      setEditingGroupName(null)
+      setEditingGroupValue('')
+      return
+    }
 
     // 检查是否与现有组名重复
     const existingGroup = proxyGroups.find(group => group.name === trimmedName && group.name !== oldName)
