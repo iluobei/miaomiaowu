@@ -19,7 +19,7 @@ import (
 	"miaomiaowu/subscribes"
 )
 
-const version = "0.1.3"
+const version = "0.1.4"
 
 func main() {
 	addr := getAddr()
