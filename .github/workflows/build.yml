@@ -1,0 +1,213 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: miaomiaowu/package-lock.json
+
+      - name: Go mod verify
+        run: go mod verify
+
+      - name: Go mod download
+        run: go mod download
+
+      - name: Install frontend dependencies
+        run: |
+          cd miaomiaowu
+          npm ci
+
+      - name: Run frontend lint
+        continue-on-error: true
+        run: |
+          cd miaomiaowu
+          npm run lint
+
+      - name: Run frontend format check
+        continue-on-error: true
+        run: |
+          cd miaomiaowu
+          npm run format:check
+
+      - name: Run knip (unused code check)
+        continue-on-error: true
+        run: |
+          cd miaomiaowu
+          npm run knip
+
+  build:
+    name: Build Binaries
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: mmw-linux-amd64
+          - goos: linux
+            goarch: arm64
+            output: mmw-linux-arm64
+          - goos: windows
+            goarch: amd64
+            output: mmw-windows-amd64.exe
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: miaomiaowu/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd miaomiaowu
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd miaomiaowu
+          npm run build
+
+      - name: Build backend
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -trimpath -ldflags="-s -w" -o build/${{ matrix.output }} ./cmd/server
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: build/${{ matrix.output }}
+          retention-days: 7
+
+  docker:
+    name: Build and Push Docker Image
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Linux AMD64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mmw-linux-amd64
+          path: release
+
+      - name: Download Linux ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mmw-linux-arm64
+          path: release
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mmw-windows-amd64.exe
+          path: release
+
+      - name: Add executable permissions
+        run: |
+          chmod +x release/mmw-linux-amd64
+          chmod +x release/mmw-linux-arm64
+
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum mmw-linux-amd64 > checksums.txt
+          sha256sum mmw-linux-arm64 >> checksums.txt
+          sha256sum mmw-windows-amd64.exe >> checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release/mmw-linux-amd64
+            release/mmw-linux-arm64
+            release/mmw-windows-amd64.exe
+            release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,110 @@
+port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
+proxies:
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - ♻️ 自动选择
+      - DIRECT
+  - name: ♻️ 自动选择
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+  - name: 🎯 全球直连
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+      - ♻️ 自动选择
+  - name: 🛑 全球拦截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🎯 全球直连
+      - ♻️ 自动选择
+rules:
+  - RULE-SET,LocalAreaNetwork,🎯 全球直连
+  - RULE-SET,BanAD,🛑 全球拦截
+  - RULE-SET,BanProgramAD,🛑 全球拦截
+  - RULE-SET,GoogleCN,🎯 全球直连
+  - RULE-SET,SteamCN,🎯 全球直连
+  - RULE-SET,Telegram,🚀 节点选择
+  - RULE-SET,ProxyMedia,🚀 节点选择
+  - RULE-SET,ProxyLite,🚀 节点选择
+  - RULE-SET,ChinaDomain,🎯 全球直连
+  - RULE-SET,ChinaCompanyIp,🎯 全球直连
+  - GEOIP,CN,🎯 全球直连
+  - MATCH,🐟 漏网之鱼
+rule-providers:
+  LocalAreaNetwork:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9Mb2NhbEFyZWFOZXR3b3JrLmxpc3Q
+    path: ./providers/8402706212293704900.yaml
+    interval: 86400
+  BanAD:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9CYW5BRC5saXN0
+    path: ./providers/2929890640486968208.yaml
+    interval: 86400
+  BanProgramAD:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9CYW5Qcm9ncmFtQUQubGlzdA
+    path: ./providers/13100800048415605598.yaml
+    interval: 86400
+  GoogleCN:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9Hb29nbGVDTi5saXN0
+    path: ./providers/8997359483101995722.yaml
+    interval: 86400
+  SteamCN:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9SdWxlc2V0L1N0ZWFtQ04ubGlzdA
+    path: ./providers/11115024949171979044.yaml
+    interval: 86400
+  Telegram:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9UZWxlZ3JhbS5saXN0
+    path: ./providers/6843833041621724009.yaml
+    interval: 86400
+  ProxyMedia:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9Qcm94eU1lZGlhLmxpc3Q
+    path: ./providers/10012823639462502292.yaml
+    interval: 86400
+  ProxyLite:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9Qcm94eUxpdGUubGlzdA
+    path: ./providers/1492623656695407400.yaml
+    interval: 86400
+  ChinaDomain:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9DaGluYURvbWFpbi5saXN0
+    path: ./providers/6475375759347264633.yaml
+    interval: 86400
+  ChinaCompanyIp:
+    type: http
+    behavior: classical
+    url: https://api.dler.io/getruleset?type=6&url=cnVsZXMvQUNMNFNTUi9DbGFzaC9DaGluYUNvbXBhbnlJcC5saXN0
+    path: ./providers/5734624832319094997.yaml
+    interval: 86400

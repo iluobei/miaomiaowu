@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+LICENSE
+
+# Build artifacts
+build/
+dist/
+*.exe
+server
+
+# Dependencies
+node_modules/
+miaomiaowu/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+*.db
+*.sqlite
+# Note: subscribes/*.yaml and rule_templates/*.yaml files are needed for go:embed, so don't exclude them
+
+# Logs
+*.log
+
+# Test files
+*_test.go
+test/

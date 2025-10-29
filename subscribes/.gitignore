@@ -1,0 +1,12 @@
+# Ignore all YAML files (user's subscription rules)
+*.yaml
+*.yml
+
+# Keep the .gitignore itself
+!.gitignore
+
+# Keep the README
+!README.md
+
+# Keep the placeholder file for Go embed
+!.keep.yaml
