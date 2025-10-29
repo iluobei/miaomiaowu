@@ -524,7 +524,11 @@ function SubscribeFilesPage() {
   }
 
   const handleSaveNodes = async () => {
-    if (!editingNodesFile || !nodesConfigQuery.data?.content) return
+    if (!editingNodesFile) return
+
+    // 使用当前的 configContent（可能已经被 handleRenameGroup 修改过），如果没有则使用查询数据
+    const currentContent = configContent || nodesConfigQuery.data?.content
+    if (!currentContent) return
 
     // 辅助函数：重新排序节点属性，确保 name, type, server, port 在前4位
     const reorderProxyProperties = (proxy: any) => {
@@ -544,7 +548,7 @@ function SubscribeFilesPage() {
     }
 
     try {
-      const parsed = parseYAML(nodesConfigQuery.data.content) as any
+      const parsed = parseYAML(currentContent) as any
 
       // 收集所有代理组中使用的节点名称
       const usedNodeNames = new Set<string>()
@@ -897,6 +901,62 @@ function SubscribeFilesPage() {
         proxies: group.proxies.filter(proxy => proxy !== groupName)
       }))
     })
+  }
+
+  // 处理代理组改名
+  const handleRenameGroup = (oldName: string, newName: string) => {
+    setProxyGroups(groups => {
+      // 更新被改名的组
+      const updatedGroups = groups.map(group => {
+        if (group.name === oldName) {
+          return { ...group, name: newName }
+        }
+        // 更新其他组中对这个组的引用
+        return {
+          ...group,
+          proxies: group.proxies.map(proxy => proxy === oldName ? newName : proxy)
+        }
+      })
+      return updatedGroups
+    })
+
+    // 同时更新配置文件内容中的 rules 部分
+    if (nodesConfigQuery.data?.content) {
+      try {
+        const parsed = parseYAML(nodesConfigQuery.data.content) as any
+        if (parsed && parsed['rules'] && Array.isArray(parsed['rules'])) {
+          // 更新 rules 中的代理组引用
+          const updatedRules = parsed['rules'].map((rule: any) => {
+            if (typeof rule === 'string') {
+              // 规则格式: "DOMAIN-SUFFIX,google.com,PROXY_GROUP"
+              const parts = rule.split(',')
+              if (parts.length >= 3 && parts[2] === oldName) {
+                parts[2] = newName
+                return parts.join(',')
+              }
+            } else if (typeof rule === 'object' && rule.target) {
+              // 对象格式的规则，更新 target 字段
+              if (rule.target === oldName) {
+                return { ...rule, target: newName }
+              }
+            }
+            return rule
+          })
+          parsed['rules'] = updatedRules
+
+          // 转换回YAML并更新配置内容
+          const newContent = dumpYAML(parsed, { lineWidth: -1, noRefs: true })
+          setConfigContent(newContent)
+
+          // 更新 nodesConfigQuery 的缓存
+          queryClient.setQueryData(['nodes-config', editingNodesFile?.id], {
+            content: newContent
+          })
+        }
+      } catch (error) {
+        console.error('更新配置文件中的代理组引用失败:', error)
+      }
+    }
   }
 
   // 计算可用节点
@@ -1452,6 +1512,7 @@ function SubscribeFilesPage() {
         onDropToAvailable={handleDropToAvailable}
         onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
         onRemoveGroup={handleRemoveGroup}
+        onRenameGroup={handleRenameGroup}
         handleCardDragStart={handleCardDragStart}
         handleCardDragEnd={handleCardDragEnd}
         handleNodeDragEnd={handleNodeDragEnd}

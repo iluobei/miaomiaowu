@@ -117,7 +117,6 @@ function SubscriptionGeneratorPage() {
 
   // 上传模板状态
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [uploadingTemplate, setUploadingTemplate] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 保存订阅对话框状态
@@ -600,22 +599,31 @@ function SubscriptionGeneratorPage() {
     proxyGroupNames.add('REJECT')
     proxyGroupNames.add('PROXY')
     proxyGroupNames.add('no-resolve')
-    
+
     const missingNodes = new Set<string>()
 
     // 检查每条规则
-    rules.forEach((rule: string) => {
-      if (typeof rule !== 'string') return
+    rules.forEach((rule: any, index: number) => {
+      let nodeName: string | null = null
 
-      const parts = rule.split(',')
-      if (parts.length < 2) return
-
-      // 规则的最后一部分是节点名称
-      const nodeName = parts[parts.length - 1].trim()
+      if (typeof rule === 'string') {
+        // 字符串格式的规则: "DOMAIN-SUFFIX,google.com,PROXY_GROUP"
+        const parts = rule.split(',')
+        if (parts.length < 2) return
+        nodeName = parts[parts.length - 1].trim()
+      } else if (typeof rule === 'object' && rule !== null) {
+        // 对象格式的规则，查找可能的节点字段
+        nodeName = rule.target || rule.group || rule.proxy || rule.ruleset
+      } else {
+        toast(`[validateRulesNodes] 规则 ${index} 不是字符串或对象格式:`, rule)
+        return
+      }
 
       // 如果节点名称不在 proxy-groups 中，添加到缺失列表
       if (nodeName && !proxyGroupNames.has(nodeName)) {
-        missingNodes.add(nodeName)
+        toast(`[validateRulesNodes] 发现缺失节点: "${nodeName}"`)
+        // 此处改为rule, 更直观一点
+        missingNodes.add(rule)
       }
     })
 
@@ -638,18 +646,27 @@ function SubscriptionGeneratorPage() {
       proxyGroupNames.add('no-resolve')
 
       // 替换 rules 中缺失的节点
-      parsedConfig.rules = rules.map((rule: string) => {
-        if (typeof rule !== 'string') return rule
-
-        const parts = rule.split(',')
-        if (parts.length < 2) return rule
-
-        const nodeName = parts[parts.length - 1].trim()
-
-        // 如果节点缺失，替换为用户选择的值
-        if (nodeName && !proxyGroupNames.has(nodeName)) {
-          parts[parts.length - 1] = replacementChoice
-          return parts.join(',')
+      parsedConfig.rules = rules.map((rule: any) => {
+        if (typeof rule === 'string') {
+          const parts = rule.split(',')
+          if (parts.length < 2) return rule
+          const nodeName = parts[parts.length - 1].trim()
+          // 如果节点缺失，替换为用户选择的值
+          if (nodeName && !proxyGroupNames.has(nodeName)) {
+            parts[parts.length - 1] = replacementChoice
+            return parts.join(',')
+          }
+        } else if (typeof rule === 'object' && rule !== null) {
+          // 对象格式的规则，检查并替换可能的节点字段
+          const nodeName = rule.target || rule.group || rule.proxy || rule.ruleset
+          if (nodeName && !proxyGroupNames.has(nodeName)) {
+            const updatedRule = { ...rule }
+            if (updatedRule.target) updatedRule.target = replacementChoice
+            else if (updatedRule.group) updatedRule.group = replacementChoice
+            else if (updatedRule.proxy) updatedRule.proxy = replacementChoice
+            else if (updatedRule.ruleset) updatedRule.ruleset = replacementChoice
+            return updatedRule
+          }
         }
 
         return rule
@@ -1020,6 +1037,106 @@ function SubscriptionGeneratorPage() {
         proxies: group.proxies.filter(proxy => proxy !== groupName)
       }))
     })
+  }
+
+  // 处理代理组改名
+  const handleRenameGroup = (oldName: string, newName: string) => {
+    setProxyGroups(groups => {
+      // 更新被改名的组
+      const updatedGroups = groups.map(group => {
+        if (group.name === oldName) {
+          return { ...group, name: newName }
+        }
+        // 更新其他组中对这个组的引用
+        return {
+          ...group,
+          proxies: group.proxies.map(proxy => proxy === oldName ? newName : proxy)
+        }
+      })
+      return updatedGroups
+    })
+
+    // 同时更新待处理的配置（如果存在）
+    if (pendingConfigAfterGrouping) {
+      try {
+        const parsedConfig = yaml.load(pendingConfigAfterGrouping) as any
+        if (parsedConfig && parsedConfig['proxy-groups']) {
+          // 更新 proxy-groups 中的组名
+          parsedConfig['proxy-groups'] = parsedConfig['proxy-groups'].map((group: any) => ({
+            ...group,
+            name: group.name === oldName ? newName : group.name,
+            proxies: group.proxies.map((proxy: string) => proxy === oldName ? newName : proxy)
+          }))
+        }
+
+        // 更新 rules 中的代理组引用
+        if (parsedConfig && parsedConfig['rules'] && Array.isArray(parsedConfig['rules'])) {
+          const updatedRules = parsedConfig['rules'].map((rule: any) => {
+            if (typeof rule === 'string') {
+              // 规则格式: "DOMAIN-SUFFIX,google.com,PROXY_GROUP"
+              const parts = rule.split(',')
+              if (parts.length >= 3 && parts[2] === oldName) {
+                parts[2] = newName
+                return parts.join(',')
+              }
+            } else if (typeof rule === 'object' && rule.target) {
+              // 对象格式的规则，更新 target 字段
+              if (rule.target === oldName) {
+                return { ...rule, target: newName }
+              }
+            }
+            return rule
+          })
+          parsedConfig['rules'] = updatedRules
+        }
+
+        // 转换回YAML并更新待处理配置
+        const newConfig = yaml.dump(parsedConfig, { lineWidth: -1, noRefs: true })
+        setPendingConfigAfterGrouping(newConfig)
+      } catch (error) {
+        console.error('更新待处理配置中的代理组引用失败:', error)
+      }
+    }
+
+    // 更新当前显示的配置（如果存在）
+    if (clashConfig) {
+      try {
+        const parsedConfig = yaml.load(clashConfig) as any
+        if (parsedConfig && parsedConfig['proxy-groups']) {
+          // 更新 proxy-groups 中的组名
+          parsedConfig['proxy-groups'] = parsedConfig['proxy-groups'].map((group: any) => ({
+            ...group,
+            name: group.name === oldName ? newName : group.name,
+            proxies: group.proxies.map((proxy: string) => proxy === oldName ? newName : proxy)
+          }))
+        }
+
+        // 更新 rules 中的代理组引用
+        if (parsedConfig && parsedConfig['rules'] && Array.isArray(parsedConfig['rules'])) {
+          const updatedRules = parsedConfig['rules'].map((rule: any) => {
+            if (typeof rule === 'string') {
+              const parts = rule.split(',')
+              if (parts.length >= 3 && parts[2] === oldName) {
+                parts[2] = newName
+                return parts.join(',')
+              }
+            } else if (typeof rule === 'object' && rule.target) {
+              if (rule.target === oldName) {
+                return { ...rule, target: newName }
+              }
+            }
+            return rule
+          })
+          parsedConfig['rules'] = updatedRules
+        }
+
+        // 转换回YAML并更新当前配置
+        const newConfig = yaml.dump(parsedConfig, { lineWidth: -1, noRefs: true })
+        setClashConfig(newConfig)
+      } catch (error) {
+        console.error('更新当前配置中的代理组引用失败:', error)
+      }
+    }
   }
 
   // 处理手动分组对话框关闭
@@ -1490,6 +1607,7 @@ function SubscriptionGeneratorPage() {
         onDropToAvailable={handleDropToAvailable}
         onRemoveNodeFromGroup={handleRemoveProxy}
         onRemoveGroup={handleRemoveGroup}
+        onRenameGroup={handleRenameGroup}
         handleCardDragStart={handleCardDragStart}
         handleCardDragEnd={handleCardDragEnd}
         handleNodeDragEnd={handleNodeDragEnd}

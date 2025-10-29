@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { GripVertical, X, Plus } from 'lucide-react'
+import { GripVertical, X, Plus, Edit2, Check } from 'lucide-react'
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -37,6 +37,7 @@ interface EditNodesDialogProps {
   onDropToAvailable: () => void
   onRemoveNodeFromGroup: (groupName: string, nodeIndex: number) => void
   onRemoveGroup: (groupName: string) => void
+  onRenameGroup: (oldName: string, newName: string) => void
   handleCardDragStart: (event: any) => void
   handleCardDragEnd: (event: any) => void
   handleNodeDragEnd: (groupName: string) => (event: any) => void
@@ -69,18 +70,23 @@ export function EditNodesDialog({
   onDropToAvailable,
   onRemoveNodeFromGroup,
   onRemoveGroup,
+  onRenameGroup,
   handleCardDragStart,
   handleCardDragEnd,
   handleNodeDragEnd,
   activeGroupTitle,
   activeCard,
   onConfigureChainProxy,
-  cancelButtonText = '取消',
+  cancelButtonText: _cancelButtonText = '取消',
   saveButtonText = '确定'
 }: EditNodesDialogProps) {
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
+
+  // 代理组改名状态
+  const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
+  const [editingGroupValue, setEditingGroupValue] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -111,6 +117,45 @@ export function EditNodesDialog({
   // 快速选择预定义名称
   const handleQuickSelect = (name: string) => {
     setNewGroupName(name)
+  }
+
+  // 处理代理组改名
+  const handleRenameGroup = (oldName: string, newName: string) => {
+    if (!newName.trim() || newName.trim() === oldName) {
+      return
+    }
+
+    const trimmedName = newName.trim()
+
+    // 检查是否与现有组名重复
+    const existingGroup = proxyGroups.find(group => group.name === trimmedName && group.name !== oldName)
+    if (existingGroup) {
+      // 这里可以添加错误提示
+      return
+    }
+
+    onRenameGroup(oldName, trimmedName)
+    setEditingGroupName(null)
+    setEditingGroupValue('')
+  }
+
+  // 开始编辑代理组名称
+  const startEditingGroup = (groupName: string) => {
+    setEditingGroupName(groupName)
+    setEditingGroupValue(groupName)
+  }
+
+  // 取消编辑
+  const cancelEditingGroup = () => {
+    setEditingGroupName(null)
+    setEditingGroupValue('')
+  }
+
+  // 提交编辑
+  const submitEditingGroup = () => {
+    if (editingGroupName && editingGroupValue) {
+      handleRenameGroup(editingGroupName, editingGroupValue)
+    }
   }
 
   // 可排序的节点组件
@@ -196,6 +241,8 @@ export function EditNodesDialog({
       opacity: isDragging ? 0 : 1,
     }
 
+    const isEditing = editingGroupName === groupName
+
     return (
       <div
         ref={setNodeRef}
@@ -205,7 +252,51 @@ export function EditNodesDialog({
         className='flex items-center gap-2 cursor-move group/title'
       >
         <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
-        <CardTitle className='text-base truncate'>{groupName}</CardTitle>
+        {isEditing ? (
+          <div className='flex items-center gap-1 flex-1 min-w-0'>
+            <Input
+              value={editingGroupValue}
+              onChange={(e) => setEditingGroupValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  submitEditingGroup()
+                } else if (e.key === 'Escape') {
+                  cancelEditingGroup()
+                }
+              }}
+              className='h-6 text-base flex-1 min-w-0'
+              placeholder='输入新名称...'
+              autoFocus
+            />
+            <Button
+              size='sm'
+              className='h-6 w-6 p-0'
+              onClick={submitEditingGroup}
+              variant='ghost'
+            >
+              <Check className='h-3 w-3 text-green-600' />
+            </Button>
+          </div>
+        ) : (
+          <div className='flex items-center gap-1 flex-1 min-w-0'>
+            <CardTitle
+              className='text-base truncate cursor-text hover:text-foreground/80 flex-1 min-w-0'
+              onClick={() => startEditingGroup(groupName)}
+              title='点击编辑名称'
+            >
+              {groupName}
+            </CardTitle>
+            <Button
+              size='sm'
+              variant='ghost'
+              className='h-5 w-5 p-0 flex-shrink-0 opacity-0 group/title:hover:opacity-100 transition-opacity'
+              onClick={() => startEditingGroup(groupName)}
+              title='编辑名称'
+            >
+              <Edit2 className='h-3 w-3 text-muted-foreground hover:text-foreground' />
+            </Button>
+          </div>
+        )}
       </div>
     )
   }
@@ -216,6 +307,8 @@ export function EditNodesDialog({
   }
 
   const SortableCard = ({ group }: SortableCardProps) => {
+    const isEditing = editingGroupName === group.name
+
     const {
       attributes,
       listeners,
@@ -229,6 +322,7 @@ export function EditNodesDialog({
         type: 'group-card',
         groupName: group.name,
       },
+      disabled: isEditing, // 编辑状态下禁用拖拽
     })
 
     const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -262,10 +356,18 @@ export function EditNodesDialog({
         onDragLeave={onDragLeaveGroup}
         onDrop={() => onDrop(group.name)}
       >
-        <CardHeader className='pb-3' {...attributes} {...listeners}>
+        <CardHeader className='pb-3' {...(isEditing ? {} : attributes)} {...(isEditing ? {} : listeners)}>
           {/* 顶部居中拖动按钮 */}
-          <div className='flex justify-center -mt-2 mb-2 cursor-move touch-none'>
-            <div className='group/drag-handle hover:bg-accent rounded-md px-3 py-1 transition-colors'>
+          <div
+            className={`flex justify-center -mt-2 mb-2 ${
+              isEditing ? 'cursor-not-allowed opacity-50' : 'cursor-move touch-none'
+            }`}
+            {...(isEditing ? {} : attributes)}
+            {...(isEditing ? {} : listeners)}
+          >
+            <div className={`group/drag-handle hover:bg-accent rounded-md px-3 py-1 transition-colors ${
+              isEditing ? 'opacity-50' : ''
+            }`}>
               <GripVertical className='h-4 w-4 text-muted-foreground group-hover/drag-handle:text-foreground transition-colors' />
             </div>
           </div>
