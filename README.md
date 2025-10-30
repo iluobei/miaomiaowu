@@ -35,6 +35,10 @@ failed to initialize traffic repository: enable wal: unable to open database fil
 ```
 chmod -R 777 ./data ./subscribes ./rule_templates
 ```
+### docker没有持久化导致数据丢失
+#### 1. 在订阅管理上传本地的配置文件生成订阅
+#### 2. 在节点管理使用生成的订阅导入节点
+#### 3. 数据库数据无法恢复 
 
 ## 安装部署
 
