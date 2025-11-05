@@ -233,6 +233,8 @@ MIT License
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 - 🛠️ vless节点转v2ray时servername没有转换成sni
 ## 更新日志
+### v0.1.5 (2025-11-05)
+- 🛠️ 修复short-id为数字时getString返回空值
 ### v0.1.4 (2025-10-30)
 - 🌈 代理组支持新增和修改名称
 - 🌈 生成订阅支持上传自定义模板
