@@ -31,3 +31,4 @@ build
 
 internal/web/dist
 data/*
+.vscode

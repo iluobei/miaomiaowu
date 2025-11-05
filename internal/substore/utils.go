@@ -231,6 +231,37 @@ func GetString(m map[string]interface{}, key string) string {
 	return ""
 }
 
+// GetAnyString safely gets a string value from a map, handling various types
+func GetAnyString(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		switch v := val.(type) {
+		case string:
+			return v
+		case int:
+			return fmt.Sprintf("%d", v)
+		case int64:
+			return fmt.Sprintf("%d", v)
+		case float64:
+			// 如果是整数但以 float64 形式存储
+			if v == float64(int64(v)) {
+				return fmt.Sprintf("%d", int64(v))
+			}
+			return fmt.Sprintf("%g", v)
+		case bool:
+			if v {
+				return "true"
+			}
+			return "false"
+		case []byte:
+			return string(v)
+		default:
+			// 尝试转换为字符串
+			return fmt.Sprintf("%v", v)
+		}
+	}
+	return ""
+}
+
 // GetInt safely gets an int value from a map
 func GetInt(m map[string]interface{}, key string) int {
 	if val, ok := m[key]; ok {

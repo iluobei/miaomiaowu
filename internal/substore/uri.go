@@ -186,7 +186,7 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 		if pubKey := GetString(realityOpts, "public-key"); pubKey != "" {
 			params.Set("pbk", pubKey)
 		}
-		if shortID := GetString(realityOpts, "short-id"); shortID != "" {
+		if shortID := GetAnyString(realityOpts, "short-id"); shortID != "" {
 			params.Set("sid", shortID)
 		}
 		if spiderX := GetString(realityOpts, "_spider-x"); spiderX != "" {
