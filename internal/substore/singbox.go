@@ -642,6 +642,27 @@ func (p *SingboxProducer) tlsParser(proxy Proxy, parsed map[string]interface{}) 
 	if GetBool(proxy, "_record_fragment") {
 		tls["record_fragment"] = true
 	}
+	if certificate := GetString(proxy, "_certificate"); certificate != "" {
+		tls["certificate"] = certificate
+	}
+	if certificate_path := GetString(proxy, "_certificate_path"); certificate_path != "" {
+		tls["certificate_path"] = certificate_path
+	}
+	if certificate_public_key_sha256 := GetString(proxy, "_certificate_public_key_sha256"); certificate_public_key_sha256 != "" {
+		tls["certificate_public_key_sha256"] = certificate_public_key_sha256
+	}
+	if client_certificate := GetString(proxy, "_client_certificate"); client_certificate != "" {
+		tls["client_certificate"] = client_certificate
+	}
+	if client_certificate_path := GetString(proxy, "_client_certificate_path"); client_certificate_path != "" {
+		tls["client_certificate_path"] = client_certificate_path
+	}
+	if client_key := GetString(proxy, "_client_key"); client_key != "" {
+		tls["client_key"] = client_key
+	}
+	if client_key_path := GetString(proxy, "_client_key_path"); client_key_path != "" {
+		tls["client_key_path"] = client_key_path
+	}
 
 	// Only add tls if enabled
 	if tls["enabled"].(bool) {

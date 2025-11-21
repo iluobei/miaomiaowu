@@ -68,6 +68,11 @@ interface TLS {
   fragment?: boolean
   fragment_fallback_delay?: string
   record_fragment?: boolean
+  certificate_public_key_sha256?: string
+  client_certificate?: string
+  client_certificate_path?: string
+  client_key?: string
+  client_key_path ?: string
 }
 
 interface Transport {
@@ -529,6 +534,21 @@ const tlsParser = (proxy: Proxy, parsedProxy: ParsedProxy): void => {
   if (proxy['_fragment_fallback_delay'])
     parsedProxy.tls!.fragment_fallback_delay = proxy['_fragment_fallback_delay']
   if (proxy['_record_fragment']) parsedProxy.tls!.record_fragment = !!proxy['_record_fragment']
+  if (proxy['_certificate'])
+        parsedProxy.tls!.certificate = proxy['_certificate'];
+  if (proxy['_certificate_path'])
+      parsedProxy.tls!.certificate_path = proxy['_certificate_path'];
+  if (proxy['_certificate_public_key_sha256'])
+      parsedProxy.tls!.certificate_public_key_sha256 =
+          proxy['_certificate_public_key_sha256'];
+  if (proxy['_client_certificate'])
+      parsedProxy.tls!.client_certificate = proxy['_client_certificate'];
+  if (proxy['_client_certificate_path'])
+      parsedProxy.tls!.client_certificate_path =
+          proxy['_client_certificate_path'];
+  if (proxy['_client_key']) parsedProxy.tls!.client_key = proxy['_client_key'];
+  if (proxy['_client_key_path'])
+      parsedProxy.tls!.client_key_path = proxy['_client_key_path'];
   if (!parsedProxy.tls!.enabled) delete parsedProxy.tls
 }
 

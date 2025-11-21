@@ -1206,7 +1206,7 @@ function handleTransport(result: Result, proxy: Proxy, includeUnsupportedProxy?:
         } else {
             if (includeUnsupportedProxy && ['http'].includes(proxy.network || '')) {
                 toast(
-                    `Include Unsupported Proxy: nework ${proxy.network} -> tcp`,
+                    `Include Unsupported Proxy: network ${proxy.network} -> tcp`,
                 );
             } else {
                 throw new Error(`network ${proxy.network} is unsupported`);

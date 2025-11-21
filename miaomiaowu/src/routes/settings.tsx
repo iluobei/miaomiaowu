@@ -338,7 +338,7 @@ function SettingsPage() {
                           console.error('copy token failed', error)
                         }
                       }
-                      toast.error('复制失败，请手动复制')
+                      toast.error('复制失败(需要https)，请手动复制')
                     }}
                   >
                     复制 Token
