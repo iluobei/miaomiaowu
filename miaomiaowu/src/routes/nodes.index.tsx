@@ -20,10 +20,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
+import URI_Producer from '@/lib/substore/producers/uri'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -146,6 +147,16 @@ function NodesPage() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
   const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false)
   const [batchTag, setBatchTag] = useState<string>('')
+
+  // Clash 配置编辑状态
+  const [clashDialogOpen, setClashDialogOpen] = useState(false)
+  const [editingClashConfig, setEditingClashConfig] = useState<{ nodeId: number; config: string } | null>(null)
+  const [clashConfigError, setClashConfigError] = useState<string>('')
+  const [jsonErrorLines, setJsonErrorLines] = useState<number[]>([])
+
+  // URI 复制状态
+  const [uriDialogOpen, setUriDialogOpen] = useState(false)
+  const [uriContent, setUriContent] = useState<string>('')
 
   // 优化的回调函数
   const handleUserAgentChange = useCallback((value: string) => {
@@ -303,6 +314,25 @@ function NodesPage() {
     },
   })
 
+  // 更新节点 Clash 配置
+  const updateClashConfigMutation = useMutation({
+    mutationFn: async (payload: { nodeId: number; clashConfig: string }) => {
+      const response = await api.put(`/api/admin/nodes/${payload.nodeId}/config`, {
+        clash_config: payload.clashConfig
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('Clash 配置已更新')
+      setClashDialogOpen(false)
+      // 状态清理会在 onOpenChange 中自动处理
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Clash 配置更新失败')
+    },
+  })
+
   // 更新节点探针绑定
   const updateProbeBindingMutation = useMutation({
     mutationFn: async (payload: { nodeId: number; probeServer: string }) => {
@@ -321,6 +351,122 @@ function NodesPage() {
       toast.error(error.response?.data?.error || '探针绑定更新失败')
     },
   })
+
+  // 处理 Clash 配置编辑
+  const handleEditClashConfig = (node: ParsedNode) => {
+    if (!node.clash_config) return
+
+    // 格式化 JSON 以便编辑
+    try {
+      const parsed = JSON.parse(node.clash_config)
+      const formatted = JSON.stringify(parsed, null, 2)
+      setEditingClashConfig({
+        nodeId: node.id,
+        config: formatted
+      })
+    } catch {
+      // 如果解析失败，使用原始字符串
+      setEditingClashConfig({
+        nodeId: node.id,
+        config: node.clash_config
+      })
+    }
+    setClashConfigError('')
+    setJsonErrorLines([])
+    setClashDialogOpen(true)
+  }
+
+  // 验证并保存 Clash 配置
+  const handleSaveClashConfig = () => {
+    if (!editingClashConfig) return
+
+    try {
+      // 验证 JSON 格式
+      const parsedConfig = JSON.parse(editingClashConfig.config)
+
+      // 检查必需字段
+      if (!parsedConfig.name || !parsedConfig.type || !parsedConfig.server || !parsedConfig.port) {
+        setClashConfigError('配置缺少必需字段: name, type, server, port')
+        return
+      }
+
+      // 保存配置（压缩格式，不带空格和换行）
+      updateClashConfigMutation.mutate({
+        nodeId: editingClashConfig.nodeId,
+        clashConfig: JSON.stringify(parsedConfig)
+      })
+    } catch (error) {
+      setClashConfigError(`JSON 格式错误: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  // 处理配置文本变化，实时验证
+  const handleClashConfigChange = (value: string) => {
+    if (!editingClashConfig) return
+
+    setEditingClashConfig({
+      ...editingClashConfig,
+      config: value
+    })
+
+    // 实时验证 JSON 格式
+    try {
+      JSON.parse(value)
+      setClashConfigError('')
+      setJsonErrorLines([])
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      setClashConfigError(`JSON 格式错误: ${errorMsg}`)
+
+      // 尝试提取错误行号
+      // JSON.parse 错误信息格式通常是 "Unexpected token ... in JSON at position ..."
+      // 我们需要根据position计算行号
+      if (error instanceof SyntaxError && errorMsg.includes('position')) {
+        const match = errorMsg.match(/position (\d+)/)
+        if (match) {
+          const position = parseInt(match[1], 10)
+          const lines = value.substring(0, position).split('\n')
+          const errorLine = lines.length
+
+          // 只有当错误是 "Expected ',' or '}'" 时，才同时标记错误行和上一行
+          // 因为这种错误通常是上一行缺少逗号导致的
+          const isMissingCommaError = errorMsg.includes("Expected ',' or '}'")
+          const errorLines = isMissingCommaError && errorLine > 1
+            ? [errorLine - 1, errorLine]
+            : [errorLine]
+          setJsonErrorLines(errorLines)
+        }
+      } else {
+        setJsonErrorLines([])
+      }
+    }
+  }
+
+  // 复制 URI 到剪贴板
+  const handleCopyUri = async (node: ParsedNode) => {
+    if (!node.clash_config) return
+
+    try {
+      // 解析 Clash 配置
+      const clashConfig = JSON.parse(node.clash_config)
+
+      // 使用 URI producer 转换为 URI
+      const producer = URI_Producer()
+      const uri = producer.produce(clashConfig)
+
+      // 尝试复制到剪贴板
+      try {
+        await navigator.clipboard.writeText(uri)
+        toast.success('URI 已复制到剪贴板')
+      } catch (clipboardError) {
+        // 复制失败，显示手动复制对话框
+        setUriContent(uri)
+        setUriDialogOpen(true)
+      }
+    } catch (error) {
+      toast.error('生成 URI 失败: ' + (error instanceof Error ? error.message : String(error)))
+    }
+  }
 
   // 处理IP解析
   const handleResolveIp = async (node: TempNode) => {
@@ -1456,26 +1602,97 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             </TableCell>
                             <TableCell className='text-center'>
                               {node.clash ? (
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Button variant='ghost' size='icon' className='h-8 w-8'>
-                                      <Eye className='h-4 w-4' />
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className='max-w-2xl max-h-[80vh] overflow-auto'>
+                                <div className='flex gap-1 justify-center'>
+                                  <Dialog
+                                    open={clashDialogOpen && editingClashConfig?.nodeId === node.dbNode?.id}
+                                    onOpenChange={(open) => {
+                                      setClashDialogOpen(open)
+                                      if (!open) {
+                                        // Dialog关闭后清理状态
+                                        setTimeout(() => {
+                                          setEditingClashConfig(null)
+                                          setClashConfigError('')
+                                          setJsonErrorLines([])
+                                        }, 150) // 等待关闭动画完成
+                                      }
+                                    }}
+                                  >
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant='ghost'
+                                        size='icon'
+                                        className='h-8 w-8'
+                                        onClick={() => node.isSaved && handleEditClashConfig(node.dbNode!)}
+                                      >
+                                        <Eye className='h-4 w-4' />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className='max-w-2xl max-h-[80vh] flex flex-col'>
                                     <DialogHeader>
                                       <DialogTitle>Clash 配置详情</DialogTitle>
                                       <DialogDescription>
                                         {node.name || '未知'}
                                       </DialogDescription>
                                     </DialogHeader>
-                                    <div className='mt-4'>
-                                      <pre className='text-xs bg-muted p-4 rounded overflow-auto'>
-                                        {JSON.stringify(reorderProxyConfig(node.clash), null, 2)}
-                                      </pre>
+                                    <div className='mt-4 flex-1 flex flex-col gap-3 min-h-0'>
+                                      <div className='flex-1 flex border rounded overflow-hidden bg-muted'>
+                                        {/* 行号列 */}
+                                        <div className='flex flex-col bg-muted-foreground/10 text-muted-foreground text-xs font-mono select-none py-3 px-2 text-right'>
+                                          {editingClashConfig?.config.split('\n').map((_, i) => {
+                                            const lineNum = i + 1
+                                            const isErrorLine = jsonErrorLines.includes(lineNum)
+                                            return (
+                                              <div
+                                                key={i}
+                                                className={`leading-5 h-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
+                                              >
+                                                {lineNum}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                        {/* 文本编辑区 */}
+                                        <Textarea
+                                          value={editingClashConfig?.config || ''}
+                                          onChange={(e) => handleClashConfigChange(e.target.value)}
+                                          className='font-mono text-xs flex-1 min-h-[400px] resize-none border-0 rounded-none focus-visible:ring-0 leading-5'
+                                          placeholder='输入 JSON 配置...'
+                                        />
+                                      </div>
+                                      {clashConfigError && (
+                                        <div className='text-xs text-destructive bg-destructive/10 p-2 rounded'>
+                                          {clashConfigError}
+                                        </div>
+                                      )}
+                                      <div className='flex gap-2 justify-end'>
+                                        <Button
+                                          variant='outline'
+                                          size='sm'
+                                          onClick={() => setClashDialogOpen(false)}
+                                        >
+                                          取消
+                                        </Button>
+                                        <Button
+                                          size='sm'
+                                          onClick={handleSaveClashConfig}
+                                          disabled={!!clashConfigError || updateClashConfigMutation.isPending}
+                                        >
+                                          {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
+                                        </Button>
+                                      </div>
                                     </div>
                                   </DialogContent>
                                 </Dialog>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='h-8 w-8'
+                                  title='复制 URI'
+                                  onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
+                                >
+                                  <Copy className='h-4 w-4' />
+                                </Button>
+                              </div>
                               ) : (
                                 <span className='text-xs text-muted-foreground'>-</span>
                               )}
@@ -1582,6 +1799,43 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 暂无可用的探针服务器
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* URI 手动复制对话框 */}
+      <Dialog open={uriDialogOpen} onOpenChange={setUriDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>手动复制 URI</DialogTitle>
+            <DialogDescription>
+              自动复制失败，请手动复制下方的 URI
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-4'>
+            <div className='p-3 bg-muted rounded-md'>
+              <code className='text-xs break-all'>{uriContent}</code>
+            </div>
+            <div className='flex justify-end gap-2'>
+              <Button
+                variant='outline'
+                onClick={() => setUriDialogOpen(false)}
+              >
+                关闭
+              </Button>
+              <Button
+                onClick={() => {
+                  navigator.clipboard.writeText(uriContent).then(() => {
+                    toast.success('URI 已复制到剪贴板')
+                    setUriDialogOpen(false)
+                  }).catch(() => {
+                    toast.error('复制失败，请手动选择文本复制')
+                  })
+                }}
+              >
+                再试一次
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

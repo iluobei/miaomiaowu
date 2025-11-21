@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -54,7 +55,10 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/restore-server") && r.Method == http.MethodPut:
 		idSegment := strings.TrimSuffix(path, "/restore-server")
 		h.handleRestoreServer(w, r, idSegment)
-	case path != "" && path != "batch" && path != "fetch-subscription" && !strings.HasSuffix(path, "/probe-binding") && !strings.HasSuffix(path, "/server") && !strings.HasSuffix(path, "/restore-server") && (r.Method == http.MethodPut || r.Method == http.MethodPatch):
+	case strings.HasSuffix(path, "/config") && r.Method == http.MethodPut:
+		idSegment := strings.TrimSuffix(path, "/config")
+		h.handleUpdateConfig(w, r, idSegment)
+	case path != "" && path != "batch" && path != "fetch-subscription" && !strings.HasSuffix(path, "/probe-binding") && !strings.HasSuffix(path, "/server") && !strings.HasSuffix(path, "/restore-server") && !strings.HasSuffix(path, "/config") && (r.Method == http.MethodPut || r.Method == http.MethodPatch):
 		h.handleUpdate(w, r, path)
 	case path != "" && path != "batch" && path != "fetch-subscription" && r.Method == http.MethodDelete:
 		h.handleDelete(w, r, path)
@@ -407,6 +411,88 @@ func (h *nodesHandler) handleRestoreServer(w http.ResponseWriter, r *http.Reques
 	if h.subscribeDir != "" && updated.ClashConfig != "" {
 		nodeName := updated.NodeName
 		if err := syncNodeToYAMLFiles(h.subscribeDir, nodeName, nodeName, updated.ClashConfig); err != nil {
+			// Log error but don't fail the request
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"node": convertNode(updated),
+	})
+}
+
+func (h *nodesHandler) handleUpdateConfig(w http.ResponseWriter, r *http.Request, idSegment string) {
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("用户未认证"))
+		return
+	}
+
+	id, err := strconv.ParseInt(idSegment, 10, 64)
+	if err != nil || id <= 0 {
+		writeBadRequest(w, "无效的节点标识")
+		return
+	}
+
+	var req struct {
+		ClashConfig string `json:"clash_config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "请求格式不正确")
+		return
+	}
+
+	// Validate JSON format
+	var clashConfigMap map[string]interface{}
+	if err := json.Unmarshal([]byte(req.ClashConfig), &clashConfigMap); err != nil {
+		writeBadRequest(w, "Clash 配置格式不正确: "+err.Error())
+		return
+	}
+
+	// Validate required fields
+	requiredFields := []string{"name", "type", "server", "port"}
+	for _, field := range requiredFields {
+		if _, ok := clashConfigMap[field]; !ok {
+			writeBadRequest(w, fmt.Sprintf("配置缺少必需字段: %s", field))
+			return
+		}
+	}
+
+	// Get existing node
+	node, err := h.repo.GetNode(r.Context(), id, username)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, storage.ErrNodeNotFound) {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err)
+		return
+	}
+
+	oldNodeName := node.NodeName
+
+	// Update node's ClashConfig and ParsedConfig
+	node.ClashConfig = req.ClashConfig
+	node.ParsedConfig = req.ClashConfig
+
+	// Update node name from the config if changed
+	if nameValue, ok := clashConfigMap["name"]; ok {
+		if newName, ok := nameValue.(string); ok && newName != "" {
+			node.NodeName = newName
+		}
+	}
+
+	// Update node in database
+	updated, err := h.repo.UpdateNode(r.Context(), node)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Sync to YAML subscription files
+	if h.subscribeDir != "" && updated.ClashConfig != "" {
+		// If node name changed, update old name to new name in YAML files
+		newNodeName := updated.NodeName
+		if err := syncNodeToYAMLFiles(h.subscribeDir, oldNodeName, newNodeName, updated.ClashConfig); err != nil {
 			// Log error but don't fail the request
 		}
 	}
