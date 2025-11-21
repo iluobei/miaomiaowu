@@ -23,8 +23,24 @@ export class ClashConfigBuilder {
     this.buildProxyGroups()
     this.buildRules()
 
+    // 重新排序 config，确保 rule-providers 在最后
+    const orderedConfig: Record<string, unknown> = {}
+    const ruleProviders = this.config['rule-providers']
+
+    // 先添加除 rule-providers 外的所有字段
+    for (const [key, value] of Object.entries(this.config)) {
+      if (key !== 'rule-providers') {
+        orderedConfig[key] = value
+      }
+    }
+
+    // 最后添加 rule-providers
+    if (ruleProviders) {
+      orderedConfig['rule-providers'] = ruleProviders
+    }
+
     // Convert to YAML
-    return this.toYAML(this.config)
+    return this.toYAML(orderedConfig)
   }
 
   private convertProxies(): void {

@@ -351,8 +351,13 @@ export function EditNodesDialog({
 
     // 处理拖放到代理组，计算插入位置
     const handleDropWithPosition = (e: React.DragEvent) => {
+      // 检查是否有正在拖动的节点（_draggedNode）
+      // 如果没有，说明这是 @dnd-kit 的内部拖放事件，不处理
+      if (!_draggedNode) {
+        return
+      }
+
       e.preventDefault()
-      e.stopPropagation() // 防止事件冒泡
 
       // 获取代理组内容区域
       const cardContent = cardRef.current?.querySelector('[data-card-content]') as HTMLElement

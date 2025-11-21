@@ -74,9 +74,10 @@ const PROTOCOL_COLORS: Record<string, string> = {
   hysteria: 'bg-pink-500/10 text-pink-700 dark:text-pink-400',
   hysteria2: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
   tuic: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400',
+  anytls: 'bg-teal-500/10 text-teal-700 dark:text-teal-400',
 }
 
-const PROTOCOLS = ['vmess', 'vless', 'trojan', 'ss', 'socks5', 'hysteria', 'hysteria2', 'tuic']
+const PROTOCOLS = ['vmess', 'vless', 'trojan', 'ss', 'socks5', 'hysteria', 'hysteria2', 'tuic', 'anytls']
 
 // 检查是否是IP地址（IPv4或IPv6）
 function isIpAddress(hostname: string): boolean {
@@ -91,6 +92,30 @@ function isIpAddress(hostname: string): boolean {
   const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/
 
   return ipv4Regex.test(cleanHostname) || ipv6Regex.test(cleanHostname)
+}
+
+// 重新排序代理配置对象，确保 name, type, server, port 在最前面
+function reorderProxyConfig(config: ClashProxy): ClashProxy {
+  if (!config || typeof config !== 'object') return config
+
+  const ordered: any = {}
+  const priorityKeys = ['name', 'type', 'server', 'port']
+
+  // 先添加优先字段
+  for (const key of priorityKeys) {
+    if (key in config) {
+      ordered[key] = config[key]
+    }
+  }
+
+  // 再添加其他字段
+  for (const [key, value] of Object.entries(config)) {
+    if (!priorityKeys.includes(key)) {
+      ordered[key] = value
+    }
+  }
+
+  return ordered as ClashProxy
 }
 
 function NodesPage() {
@@ -858,7 +883,8 @@ function NodesPage() {
                   <Textarea
                     placeholder={`vmess://eyJwcyI6IuWPsOa5vualviIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoidXVpZCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0bHMiOiJ0bHMifQ==
 vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
-trojan://password@example.com:443?sni=example.com#Trojan节点`}
+trojan://password@example.com:443?sni=example.com#Trojan节点
+anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节点`}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     className='min-h-[200px] font-mono text-sm'
@@ -1445,7 +1471,7 @@ trojan://password@example.com:443?sni=example.com#Trojan节点`}
                                     </DialogHeader>
                                     <div className='mt-4'>
                                       <pre className='text-xs bg-muted p-4 rounded overflow-auto'>
-                                        {JSON.stringify(node.clash, null, 2)}
+                                        {JSON.stringify(reorderProxyConfig(node.clash), null, 2)}
                                       </pre>
                                     </div>
                                   </DialogContent>

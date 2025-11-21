@@ -340,6 +340,8 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
       authAndServer = main
       queryParams = parseQueryString(query)
     }
+    // 去掉尾部的 / (anytls URL 格式: anytls://password@server:port/?params)
+    authAndServer = authAndServer.replace(/\/$/, '')
 
     // 解析 password@server:port (支持 IPv6)
     const atIndex = authAndServer.lastIndexOf('@')
@@ -359,7 +361,9 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         // 但同时提取纯 IPv6 地址用于其他协议
         const ipv6Address = serverPart.substring(1, closeBracketIndex)
         const portPart = serverPart.substring(closeBracketIndex + 1)
-        port = parseInt(portPart.replace(':', '')) || 0
+        const parsedPort = parseInt(portPart.replace(':', '')) || 0
+        // 如果没有端口，根据协议设置默认端口
+        port = parsedPort || ((protocol === 'anytls' || protocol === 'trojan' || protocol === 'vless') ? 443 : 0)
 
         // 对于 Hysteria2，保留方括号；其他协议去掉方括号
         if (protocol === 'hysteria2' || protocol === 'hysteria') {
@@ -372,7 +376,13 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
       // IPv4 或域名
       const parts = serverPart.split(':')
       server = parts[0]
-      port = parseInt(parts[parts.length - 1]) || 0
+      // 如果有端口部分则解析，否则根据协议设置默认端口
+      if (parts.length > 1) {
+        port = parseInt(parts[1]) || 0
+      } else {
+        // 默认端口：anytls/trojan/vless 等 TLS 协议默认 443
+        port = (protocol === 'anytls' || protocol === 'trojan' || protocol === 'vless') ? 443 : 0
+      }
     }
 
     const node: ProxyNode = {
@@ -504,6 +514,31 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         node['congestion-controller'] = queryParams.congestion_control || 'bbr'
         node['udp-relay-mode'] = queryParams.udp_relay_mode || 'native'
         break
+
+      case 'anytls':
+        node.password = password
+        node.sni = queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server)
+        node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : undefined
+        node.skipCertVerify = queryParams.insecure === '1' || queryParams.allowInsecure === '1' || queryParams['skip-cert-verify'] === '1'
+        // client-fingerprint
+        if (queryParams.fp) {
+          node.fp = queryParams.fp
+        }
+        // UDP 支持
+        if (queryParams.udp === 'true' || queryParams.udp === '1') {
+          node.udp = true
+        }
+        // anytls 特有参数 - idle session 相关
+        if (queryParams.idleSessionCheckInterval) {
+          node['idle-session-check-interval'] = parseInt(queryParams.idleSessionCheckInterval)
+        }
+        if (queryParams.idleSessionTimeout) {
+          node['idle-session-timeout'] = parseInt(queryParams.idleSessionTimeout)
+        }
+        if (queryParams.minIdleSession) {
+          node['min-idle-session'] = parseInt(queryParams.minIdleSession)
+        }
+        break
     }
 
     return node
@@ -543,6 +578,8 @@ export function parseProxyUrl(url: string): ProxyNode | null {
     return parseGenericProtocol(url, 'hysteria2')
   } else if (url.startsWith('tuic://')) {
     return parseGenericProtocol(url, 'tuic')
+  } else if (url.startsWith('anytls://')) {
+    return parseGenericProtocol(url, 'anytls')
   }
 
   return null
@@ -624,8 +661,8 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
   //   if (node.version) {
   //     clash.version = node.version
   //   }
-  } else if (node.type === 'hysteria2' || node.type === 'hysteria') {
-    // Hysteria/Hysteria2 使用 password
+  } else if (node.type === 'hysteria2' || node.type === 'hysteria' || node.type === 'anytls') {
+    // Hysteria/Hysteria2/AnyTLS 使用 password
     if (node.password) {
       clash.password = node.password
     }
@@ -686,7 +723,7 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
   }
 
   // SNI 设置 - 特定协议需要输出 sni 字段
-  if (node.type === 'hysteria' || node.type === 'hysteria2' || node.type === 'trojan' || node.type === 'tuic') {
+  if (node.type === 'hysteria' || node.type === 'hysteria2' || node.type === 'trojan' || node.type === 'tuic' || node.type === 'anytls') {
     if (node.sni && node.sni !== node.server) {
       clash.sni = node.sni
     }
@@ -713,6 +750,19 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     if (node.alterId !== undefined) clash.alterId = node.alterId as number
     // VMess 默认添加 tfo: false（除非明确指定）
     if (clash.tfo === undefined) clash.tfo = false
+  }
+
+  // AnyTLS 专用字段
+  if (node.type === 'anytls') {
+    if (node['idle-session-check-interval'] !== undefined) {
+      clash['idle-session-check-interval'] = node['idle-session-check-interval']
+    }
+    if (node['idle-session-timeout'] !== undefined) {
+      clash['idle-session-timeout'] = node['idle-session-timeout']
+    }
+    if (node['min-idle-session'] !== undefined) {
+      clash['min-idle-session'] = node['min-idle-session']
+    }
   }
 
   // 复制其他属性（传输层配置等）

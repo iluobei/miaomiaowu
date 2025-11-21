@@ -688,92 +688,49 @@ export default function URI_Producer(): Producer {
                 }
                 break;
             case 'anytls':
-                result = vless({
-                    ...proxy,
-                    uuid: proxy.password,
-                    network: proxy.network || 'tcp',
-                }).replace('vless', 'anytls');
-                // 偷个懒
+                // 参考 hysteria2 的实现方式，构建 anytls URL
                 const anytlsParams: string[] = [];
-                Object.keys(proxy).forEach((key) => {
-                    if (
-                        ![
-                            'name',
-                            'type',
-                            'password',
-                            'server',
-                            'port',
-                            'tls',
-                        ].includes(key)
-                    ) {
-                        const i = key.replace(/-/, '_');
-                        if (['alpn'].includes(key)) {
-                            if (proxy[key]) {
-                                anytlsParams.push(
-                                    `${i}=${encodeURIComponent(
-                                        Array.isArray(proxy[key])
-                                            ? proxy[key][0]
-                                            : proxy[key],
-                                    )}`,
-                                );
-                            }
-                        } else if (['skip-cert-verify'].includes(key)) {
-                            if (proxy[key]) {
-                                anytlsParams.push(`insecure=1`);
-                            }
-                        } else if (['udp'].includes(key)) {
-                            if (proxy[key]) {
-                                anytlsParams.push(`udp=1`);
-                            }
-                        } else if (
-                            proxy[key] &&
-                            !/^_|client-fingerprint/i.test(key) &&
-                            ['number', 'string', 'boolean'].includes(
-                                typeof proxy[key],
-                            )
-                        ) {
-                            anytlsParams.push(
-                                `${i.replace(/-/g, '_')}=${encodeURIComponent(
-                                    proxy[key],
-                                )}`,
-                            );
-                        }
-                    }
-                });
-                // Parse existing query parameters from result
-                const urlParts = result.split('?');
-                const baseUrl = urlParts[0];
-                const existingParams: Record<string, string> = {};
 
-                if (urlParts.length > 1) {
-                    const queryString = urlParts[1].split('#')[0]; // Remove fragment if exists
-                    const pairs = queryString.split('&');
-                    pairs.forEach((pair) => {
-                        const [key, value] = pair.split('=');
-                        if (key) {
-                            existingParams[key] = value;
-                        }
-                    });
+                // skip-cert-verify
+                if (proxy['skip-cert-verify']) {
+                    anytlsParams.push('insecure=1');
                 }
 
-                // Merge anytlsParams with existing parameters
-                anytlsParams.forEach((param) => {
-                    const [key, value] = param.split('=');
-                    if (key) {
-                        existingParams[key] = value;
-                    }
-                });
+                // SNI
+                if (proxy.sni) {
+                    anytlsParams.push(`sni=${encodeURIComponent(proxy.sni)}`);
+                }
 
-                // Reconstruct query string
-                const newParams = Object.keys(existingParams)
-                    .map((key) => `${key}=${existingParams[key]}`)
-                    .join('&');
+                // client-fingerprint
+                if (proxy['client-fingerprint']) {
+                    anytlsParams.push(`fp=${encodeURIComponent(proxy['client-fingerprint'])}`);
+                }
 
-                // Get fragment part if exists
-                const fragmentMatch = result.match(/#(.*)$/);
-                const fragment = fragmentMatch ? `#${fragmentMatch[1]}` : '';
+                // ALPN
+                if (proxy.alpn && Array.isArray(proxy.alpn)) {
+                    anytlsParams.push(`alpn=${proxy.alpn.map(encodeURIComponent).join(',')}`);
+                }
 
-                result = `${baseUrl}?${newParams}${fragment}`;
+                // UDP
+                if (proxy.udp) {
+                    anytlsParams.push('udp=true');
+                }
+
+                // idle session 相关参数（anytls 特有）
+                if (proxy['idle-session-check-interval']) {
+                    anytlsParams.push(`idleSessionCheckInterval=${proxy['idle-session-check-interval']}`);
+                }
+                if (proxy['idle-session-timeout']) {
+                    anytlsParams.push(`idleSessionTimeout=${proxy['idle-session-timeout']}`);
+                }
+                if (proxy['min-idle-session']) {
+                    anytlsParams.push(`minIdleSession=${proxy['min-idle-session']}`);
+                }
+
+                // 构建 URL: anytls://password@server:port/?params#name
+                result = `anytls://${encodeURIComponent(proxy.password || '')}@${
+                    proxy.server
+                }:${proxy.port}${anytlsParams.length > 0 ? '/?' + anytlsParams.join('&') : ''}#${encodeURIComponent(proxy.name)}`;
                 break;
             case 'wireguard':
                 const wireguardParams: string[] = [];
