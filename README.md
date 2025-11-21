@@ -198,7 +198,8 @@ chmod +x mmw-linux-amd64
 # 双击运行或在命令行中执行
 .\mmw-windows-amd64.exe
 ```
-### 页面截图
+<details>
+<summary>### 页面截图</summary>
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/traffic_info.png)  
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/subscribe_url.png)  
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/probe_datasource.png)  
@@ -208,6 +209,7 @@ chmod +x mmw-linux-amd64
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/node_manage.png)  
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/user_manage.png)
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/system_settings.png)
+</details>
 ### 技术特点
 - 🚀 单二进制文件部署，无需外部依赖
 - 💾 使用 SQLite 数据库，免维护
@@ -233,6 +235,11 @@ MIT License
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 - 🛠️ vless节点转v2ray时servername没有转换成sni
 ## 更新日志
+### v0.1.6 (2025-11-22)
+- 🌈 节点配置支持编辑
+- 🌈 节点支持复制为URI格式
+- 🌈 支持AnyTls代理
+- 🛠️ fix:拖动节点时没有添加到鼠标释放的位置
 ### v0.1.5 (2025-11-05)
 - 🛠️ 修复short-id为数字时getString返回空值
 ### v0.1.4 (2025-10-30)
