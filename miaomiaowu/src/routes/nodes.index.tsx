@@ -1138,6 +1138,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 <div className='flex items-center justify-between'>
                   <div>
                     <CardTitle>节点列表 ({filteredNodes.length})</CardTitle>
+                    <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
                   </div>
                   <div className='flex gap-2'>
                     {selectedNodeIds.size > 0 && (
@@ -1627,7 +1628,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         <Eye className='h-4 w-4' />
                                       </Button>
                                     </DialogTrigger>
-                                    <DialogContent className='max-w-2xl max-h-[80vh] flex flex-col'>
+                                    <DialogContent className='max-w-4xl sm:max-w-4xl max-h-[80vh] flex flex-col'>
                                     <DialogHeader>
                                       <DialogTitle>Clash 配置详情</DialogTitle>
                                       <DialogDescription>

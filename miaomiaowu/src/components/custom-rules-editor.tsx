@@ -1,20 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+import { Collapsible } from '@/components/ui/collapsible'
 import type { CustomRule } from '@/lib/sublink/types'
 
 interface CustomRulesEditorProps {
@@ -22,38 +7,12 @@ interface CustomRulesEditorProps {
   onChange: (rules: CustomRule[]) => void
 }
 
-export function CustomRulesEditor({ rules, onChange }: CustomRulesEditorProps) {
+export function CustomRulesEditor(_props: CustomRulesEditorProps) {
   const [isOpen, setIsOpen] = useState(false)
-
-  const handleAddRule = () => {
-    onChange([
-      ...rules,
-      {
-        name: '',
-        site: '',
-        ip: '',
-        domain_suffix: '',
-        domain_keyword: '',
-        ip_cidr: '',
-        protocol: '',
-      },
-    ])
-    setIsOpen(true)
-  }
-
-  const handleRemoveRule = (index: number) => {
-    onChange(rules.filter((_, i) => i !== index))
-  }
-
-  const handleUpdateRule = (index: number, field: keyof CustomRule, value: string) => {
-    const newRules = [...rules]
-    newRules[index] = { ...newRules[index], [field]: value }
-    onChange(newRules)
-  }
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card>
+      {/* <Card>
         <CardHeader>
           <div className='flex items-center justify-between'>
             <div>
@@ -237,7 +196,7 @@ export function CustomRulesEditor({ rules, onChange }: CustomRulesEditorProps) {
             </div>
           </CardContent>
         </CollapsibleContent>
-      </Card>
+      </Card> */}
     </Collapsible>
   )
 }
