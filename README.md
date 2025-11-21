@@ -199,7 +199,7 @@ chmod +x mmw-linux-amd64
 .\mmw-windows-amd64.exe
 ```
 <details>
-<summary>### 页面截图</summary>
+<summary>页面截图</summary>
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/traffic_info.png)  
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/subscribe_url.png)  
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/probe_datasource.png)  
@@ -210,6 +210,7 @@ chmod +x mmw-linux-amd64
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/user_manage.png)
 ![image](https://github.com/Jimleerx/miaomiaowu/blob/main/screenshots/system_settings.png)
 </details>
+
 ### 技术特点
 - 🚀 单二进制文件部署，无需外部依赖
 - 💾 使用 SQLite 数据库，免维护
