@@ -904,7 +904,7 @@ function SubscribeFilesPage() {
     setDragOverGroup(null)
   }
 
-  const handleDrop = (toGroup: string) => {
+  const handleDrop = (toGroup: string, targetIndex?: number) => {
     if (!draggedNode) return
 
     const updatedGroups = [...proxyGroups]
@@ -962,7 +962,13 @@ function SubscribeFilesPage() {
           }
           // 检查节点是否已存在于目标组中
           if (!updatedGroups[toGroupIndex].proxies.includes(draggedNode.name)) {
-            updatedGroups[toGroupIndex].proxies.push(draggedNode.name)
+            if (targetIndex !== undefined) {
+              // 插入到指定位置
+              updatedGroups[toGroupIndex].proxies.splice(targetIndex, 0, draggedNode.name)
+            } else {
+              // 添加到末尾
+              updatedGroups[toGroupIndex].proxies.push(draggedNode.name)
+            }
           }
         }
       }

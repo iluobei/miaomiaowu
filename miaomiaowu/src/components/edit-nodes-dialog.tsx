@@ -33,7 +33,7 @@ interface EditNodesDialogProps {
   dragOverGroup: string | null
   onDragEnterGroup: (groupName: string) => void
   onDragLeaveGroup: () => void
-  onDrop: (toGroup: string) => void
+  onDrop: (toGroup: string, targetIndex?: number) => void
   onDropToAvailable: () => void
   onRemoveNodeFromGroup: (groupName: string, nodeIndex: number) => void
   onRemoveGroup: (groupName: string) => void
@@ -204,6 +204,7 @@ export function EditNodesDialog({
         ref={setNodeRef}
         style={style}
         className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item'
+        data-proxy-item
       >
         <div {...attributes} {...listeners} className='cursor-move touch-none'>
           <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
@@ -316,6 +317,7 @@ export function EditNodesDialog({
 
   const SortableCard = ({ group }: SortableCardProps) => {
     const isEditing = editingGroupName === group.name
+    const cardRef = React.useRef<HTMLDivElement>(null)
 
     const {
       attributes,
@@ -347,11 +349,51 @@ export function EditNodesDialog({
       opacity: isDragging ? 0.5 : 1,
     }
 
+    // 处理拖放到代理组，计算插入位置
+    const handleDropWithPosition = (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation() // 防止事件冒泡
+
+      // 获取代理组内容区域
+      const cardContent = cardRef.current?.querySelector('[data-card-content]') as HTMLElement
+      if (!cardContent) {
+        onDrop(group.name)
+        return
+      }
+
+      // 获取所有节点元素
+      const proxyElements = Array.from(cardContent.querySelectorAll('[data-proxy-item]'))
+
+      if (proxyElements.length === 0) {
+        // 如果没有节点，插入到开头
+        onDrop(group.name, 0)
+        return
+      }
+
+      // 计算应该插入的位置
+      const mouseY = e.clientY
+      let insertIndex = proxyElements.length // 默认插入到末尾
+
+      for (let i = 0; i < proxyElements.length; i++) {
+        const element = proxyElements[i] as HTMLElement
+        const rect = element.getBoundingClientRect()
+        const elementMiddle = rect.top + rect.height / 2
+
+        if (mouseY < elementMiddle) {
+          insertIndex = i
+          break
+        }
+      }
+
+      onDrop(group.name, insertIndex)
+    }
+
     return (
       <Card
         ref={(node) => {
           setNodeRef(node)
           setDropRef(node)
+          cardRef.current = node
         }}
         style={style}
         className={`flex flex-col transition-all ${
@@ -362,7 +404,7 @@ export function EditNodesDialog({
         onDragOver={(e) => e.preventDefault()}
         onDragEnter={() => onDragEnterGroup(group.name)}
         onDragLeave={onDragLeaveGroup}
-        onDrop={() => onDrop(group.name)}
+        onDrop={handleDropWithPosition}
       >
         <CardHeader className='pb-3' {...(isEditing ? {} : attributes)} {...(isEditing ? {} : listeners)}>
           {/* 顶部居中拖动按钮 */}
@@ -400,7 +442,7 @@ export function EditNodesDialog({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className='flex-1 space-y-1 min-h-[200px]'>
+        <CardContent className='flex-1 space-y-1 min-h-[200px]' data-card-content>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
