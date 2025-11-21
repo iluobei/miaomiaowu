@@ -429,6 +429,17 @@ func (h *nodesHandler) handleDelete(w http.ResponseWriter, r *http.Request, idSe
 		return
 	}
 
+	// Get node name before deletion for YAML sync
+	node, err := h.repo.GetNode(r.Context(), id, username)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, storage.ErrNodeNotFound) {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err)
+		return
+	}
+
 	if err := h.repo.DeleteNode(r.Context(), id, username); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, storage.ErrNodeNotFound) {
@@ -436,6 +447,13 @@ func (h *nodesHandler) handleDelete(w http.ResponseWriter, r *http.Request, idSe
 		}
 		writeError(w, status, err)
 		return
+	}
+
+	// Sync deletion to YAML files
+	if h.subscribeDir != "" && node.NodeName != "" {
+		if err := deleteNodeFromYAMLFiles(h.subscribeDir, node.NodeName); err != nil {
+			// Log error but don't fail the request
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

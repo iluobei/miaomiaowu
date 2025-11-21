@@ -533,3 +533,263 @@ func reorderTopLevelFields(docNode *yaml.Node) {
 	// Replace the content
 	docNode.Content = newContent
 }
+
+// deleteNodeFromYAMLFiles removes node from all YAML subscription files
+func deleteNodeFromYAMLFiles(subscribeDir, nodeName string) error {
+	if subscribeDir == "" {
+		return fmt.Errorf("subscribe directory is empty")
+	}
+
+	// Get all YAML files in subscribes directory
+	entries, err := os.ReadDir(subscribeDir)
+	if err != nil {
+		return fmt.Errorf("read subscribe directory: %w", err)
+	}
+
+	// Process each YAML file
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		// Skip non-YAML files and the .keep.yaml placeholder
+		if filepath.Ext(filename) != ".yaml" && filepath.Ext(filename) != ".yml" {
+			continue
+		}
+		if filename == ".keep.yaml" {
+			continue
+		}
+
+		filePath := filepath.Join(subscribeDir, filename)
+
+		// Read YAML file
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue // Skip files we can't read
+		}
+
+		// Parse YAML
+		var yamlContent map[string]any
+		if err := yaml.Unmarshal(data, &yamlContent); err != nil {
+			continue // Skip invalid YAML files
+		}
+
+		// Check if file has proxies field
+		proxies, ok := yamlContent["proxies"].([]any)
+		if !ok || len(proxies) == 0 {
+			continue
+		}
+
+		modified := false
+
+		// Remove matching nodes
+		newProxies := make([]any, 0, len(proxies))
+		for _, proxy := range proxies {
+			proxyMap, ok := proxy.(map[string]any)
+			if !ok {
+				newProxies = append(newProxies, proxy)
+				continue
+			}
+
+			proxyName, ok := proxyMap["name"].(string)
+			if !ok {
+				newProxies = append(newProxies, proxy)
+				continue
+			}
+
+			// If name matches, skip this proxy (delete it)
+			if proxyName == nodeName {
+				modified = true
+				continue
+			}
+
+			newProxies = append(newProxies, proxyMap)
+		}
+
+		// If nothing changed, skip this file
+		if !modified {
+			continue
+		}
+
+		// Update proxies in YAML content
+		yamlContent["proxies"] = newProxies
+
+		// Also remove from proxy-groups if they reference the node
+		if proxyGroups, ok := yamlContent["proxy-groups"].([]any); ok {
+			for _, group := range proxyGroups {
+				groupMap, ok := group.(map[string]any)
+				if !ok {
+					continue
+				}
+
+				// Remove from proxies list in group
+				if groupProxies, ok := groupMap["proxies"].([]any); ok {
+					updatedGroupProxies := make([]any, 0, len(groupProxies))
+					for _, groupProxy := range groupProxies {
+						proxyName, ok := groupProxy.(string)
+						if !ok {
+							updatedGroupProxies = append(updatedGroupProxies, groupProxy)
+							continue
+						}
+
+						// Skip if this is the node to delete
+						if proxyName != nodeName {
+							updatedGroupProxies = append(updatedGroupProxies, groupProxy)
+						}
+					}
+					groupMap["proxies"] = updatedGroupProxies
+				}
+			}
+		}
+
+		// Also remove from rules if they reference the node
+		if rules, ok := yamlContent["rules"].([]any); ok {
+			updatedRules := make([]any, 0, len(rules))
+			for _, rule := range rules {
+				ruleStr, ok := rule.(string)
+				if !ok {
+					updatedRules = append(updatedRules, rule)
+					continue
+				}
+
+				// Skip rules that reference this node
+				if !containsNodeName(ruleStr, nodeName) {
+					updatedRules = append(updatedRules, rule)
+				}
+			}
+			yamlContent["rules"] = updatedRules
+		}
+
+		// Re-read the file as yaml.Node to preserve structure
+		var rootNode yaml.Node
+		fileContent, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+		if err := yaml.Unmarshal(fileContent, &rootNode); err != nil {
+			continue
+		}
+
+		// Find and update the sections
+		if rootNode.Kind == yaml.DocumentNode && len(rootNode.Content) > 0 {
+			docNode := rootNode.Content[0]
+			if docNode.Kind == yaml.MappingNode {
+				// Update proxies section
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					keyNode := docNode.Content[i]
+					if keyNode.Value == "proxies" {
+						// Replace the proxies sequence
+						orderedProxiesSeq := &yaml.Node{
+							Kind: yaml.SequenceNode,
+						}
+						for _, proxy := range newProxies {
+							if proxyMap, ok := proxy.(map[string]any); ok {
+								orderedProxiesSeq.Content = append(orderedProxiesSeq.Content, reorderProxyFields(proxyMap))
+							}
+						}
+						docNode.Content[i+1] = orderedProxiesSeq
+						break
+					}
+				}
+
+				// Update proxy-groups to remove node references
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					keyNode := docNode.Content[i]
+					if keyNode.Value == "proxy-groups" {
+						removeNodeFromProxyGroupsNode(docNode.Content[i+1], nodeName)
+						break
+					}
+				}
+
+				// Update rules to remove node references
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					keyNode := docNode.Content[i]
+					if keyNode.Value == "rules" {
+						removeNodeFromRulesNode(docNode.Content[i+1], nodeName)
+						break
+					}
+				}
+
+				// Reorder top-level fields
+				reorderTopLevelFields(docNode)
+			}
+		}
+
+		// Encode to YAML
+		output, err := yaml.Marshal(&rootNode)
+		if err != nil {
+			continue // Skip files we can't marshal
+		}
+
+		if err := os.WriteFile(filePath, output, 0644); err != nil {
+			continue // Skip files we can't write
+		}
+	}
+
+	return nil
+}
+
+// removeNodeFromProxyGroupsNode removes node references from proxy-groups
+func removeNodeFromProxyGroupsNode(groupsNode *yaml.Node, nodeName string) {
+	if groupsNode.Kind != yaml.SequenceNode {
+		return
+	}
+
+	for _, groupNode := range groupsNode.Content {
+		if groupNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// Find the "proxies" key in this group
+		for i := 0; i < len(groupNode.Content); i += 2 {
+			if i+1 >= len(groupNode.Content) {
+				break
+			}
+			keyNode := groupNode.Content[i]
+			if keyNode.Value == "proxies" {
+				valueNode := groupNode.Content[i+1]
+				if valueNode.Kind == yaml.SequenceNode {
+					// Remove proxy nodes that match nodeName
+					newContent := make([]*yaml.Node, 0, len(valueNode.Content))
+					for _, proxyNode := range valueNode.Content {
+						if proxyNode.Kind == yaml.ScalarNode && proxyNode.Value != nodeName {
+							newContent = append(newContent, proxyNode)
+						}
+					}
+					valueNode.Content = newContent
+				}
+				break
+			}
+		}
+	}
+}
+
+// removeNodeFromRulesNode removes rules that reference the node
+func removeNodeFromRulesNode(rulesNode *yaml.Node, nodeName string) {
+	if rulesNode.Kind != yaml.SequenceNode {
+		return
+	}
+
+	// Filter out rules that reference the node
+	newContent := make([]*yaml.Node, 0, len(rulesNode.Content))
+	for _, ruleNode := range rulesNode.Content {
+		if ruleNode.Kind == yaml.ScalarNode {
+			if !containsNodeName(ruleNode.Value, nodeName) {
+				newContent = append(newContent, ruleNode)
+			}
+		} else {
+			newContent = append(newContent, ruleNode)
+		}
+	}
+	rulesNode.Content = newContent
+}
