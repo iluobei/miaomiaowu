@@ -12,11 +12,11 @@ type LoonProducer struct {
 }
 
 var loonIPVersions = map[string]string{
-	"dual":         "dual",
-	"ipv4":         "v4-only",
-	"ipv6":         "v6-only",
-	"ipv4-prefer":  "prefer-v4",
-	"ipv6-prefer":  "prefer-v6",
+	"dual":        "dual",
+	"ipv4":        "v4-only",
+	"ipv6":        "v6-only",
+	"ipv4-prefer": "prefer-v4",
+	"ipv6-prefer": "prefer-v6",
 }
 
 // NewLoonProducer creates a new Loon producer
@@ -157,6 +157,11 @@ func (p *LoonProducer) shadowsocks(proxy Proxy) (string, error) {
 	// shadow-tls
 	p.appendShadowTLS(result, proxy)
 
+	// sni
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
+	}
+
 	// tfo
 	if IsPresent(proxy, "tfo") {
 		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
@@ -201,6 +206,11 @@ func (p *LoonProducer) shadowsocksr(proxy Proxy) (string, error) {
 
 	// shadow-tls
 	p.appendShadowTLS(result, proxy)
+
+	// sni
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
+	}
 
 	// tfo
 	if IsPresent(proxy, "tfo") {
@@ -261,8 +271,8 @@ func (p *LoonProducer) trojan(proxy Proxy) (string, error) {
 	}
 
 	// sni
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "tls-fingerprint") {
 		result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
@@ -369,8 +379,8 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 	}
 
 	if isReality {
-		if IsPresent(proxy, "sni") {
-			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+		if IsPresent(proxy, "servername") {
+			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 		}
 		if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
 			if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
@@ -382,8 +392,8 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 		}
 	} else {
 		// sni
-		if IsPresent(proxy, "sni") {
-			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "sni")))
+		if IsPresent(proxy, "servername") {
+			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
 		}
 		if IsPresent(proxy, "tls-fingerprint") {
 			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
@@ -517,8 +527,8 @@ func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
 	}
 
 	if isReality {
-		if IsPresent(proxy, "sni") {
-			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+		if IsPresent(proxy, "servername") {
+			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 		}
 		if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
 			if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
@@ -530,8 +540,8 @@ func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
 		}
 	} else {
 		// sni
-		if IsPresent(proxy, "sni") {
-			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "sni")))
+		if IsPresent(proxy, "servername") {
+			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
 		}
 		if IsPresent(proxy, "tls-fingerprint") {
 			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
@@ -581,8 +591,8 @@ func (p *LoonProducer) http(proxy Proxy) (string, error) {
 	}
 
 	// sni
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 
 	// tls verification
@@ -624,8 +634,8 @@ func (p *LoonProducer) socks5(proxy Proxy) (string, error) {
 	}
 
 	// sni
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 
 	// tls verification
@@ -797,8 +807,8 @@ func (p *LoonProducer) hysteria2(proxy Proxy) (string, error) {
 	}
 
 	// sni
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "tls-fingerprint") {
 		result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
