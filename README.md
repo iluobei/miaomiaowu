@@ -235,7 +235,6 @@ MIT License
 
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
-- 🛠️ vless节点转v2ray时servername没有转换成sni
 ## 更新日志
 ### v0.1.6 (2025-11-22)
 - 🌈 节点配置支持编辑
