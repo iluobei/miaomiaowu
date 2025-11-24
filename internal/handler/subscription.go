@@ -397,6 +397,33 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	attachmentName := url.PathEscape("妙妙屋-" + displayName + ext)
 
+	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
+	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
+		var yamlData map[string]any
+		if err := yaml.Unmarshal(data, &yamlData); err == nil {
+			// 重新排序：将 rule-providers 放在最后
+			orderedData := make(map[string]any)
+			ruleProviders, hasRuleProviders := yamlData["rule-providers"]
+
+			// 先添加除 rule-providers 外的所有字段
+			for key, value := range yamlData {
+				if key != "rule-providers" {
+					orderedData[key] = value
+				}
+			}
+
+			// 最后添加 rule-providers
+			if hasRuleProviders {
+				orderedData["rule-providers"] = ruleProviders
+			}
+
+			// 重新序列化为 YAML
+			if reorderedData, err := yaml.Marshal(orderedData); err == nil {
+				data = reorderedData
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", contentType)
 	// 只有在有流量信息时才添加 subscription-userinfo 头
 	if hasTrafficInfo || externalTrafficLimit > 0 {

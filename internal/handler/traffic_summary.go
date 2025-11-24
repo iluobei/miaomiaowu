@@ -438,16 +438,6 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 		return 0, 0, 0, err
 	}
 
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("nezha v0 request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, 0, 0, fmt.Errorf("nezha v0 request failed with status %s", resp.Status)
-	}
-
 	type nezhaV0Server struct {
 		ID     json.Number `json:"id"`
 		Status struct {
@@ -460,50 +450,72 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 		Result []nezhaV0Server `json:"result"`
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-	decoder.UseNumber()
-
-	var payload nezhaV0Response
-	if err := decoder.Decode(&payload); err != nil {
-		return 0, 0, 0, fmt.Errorf("parse nezha v0 response: %w", err)
-	}
-
 	observed := make(map[string]struct {
 		NetIn  int64
 		NetOut int64
 	})
-	for _, entry := range payload.Result {
-		var id string
-		if v, err := entry.ID.Int64(); err == nil {
-			id = strconv.FormatInt(v, 10)
-		} else {
-			raw := strings.TrimSpace(entry.ID.String())
-			if raw != "" {
-				if strings.ContainsAny(raw, ".eE") {
-					if f, err := entry.ID.Float64(); err == nil {
-						id = strconv.FormatInt(int64(math.Round(f)), 10)
+
+	httpSuccess := false
+	resp, httpErr := h.client.Do(req)
+	if httpErr == nil {
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			decoder := json.NewDecoder(resp.Body)
+			decoder.UseNumber()
+
+			var payload nezhaV0Response
+			if err := decoder.Decode(&payload); err == nil && len(payload.Result) > 0 {
+				httpSuccess = true
+				for _, entry := range payload.Result {
+					var id string
+					if v, err := entry.ID.Int64(); err == nil {
+						id = strconv.FormatInt(v, 10)
 					} else {
-						id = raw
+						raw := strings.TrimSpace(entry.ID.String())
+						if raw != "" {
+							if strings.ContainsAny(raw, ".eE") {
+								if f, err := entry.ID.Float64(); err == nil {
+									id = strconv.FormatInt(int64(math.Round(f)), 10)
+								} else {
+									id = raw
+								}
+							} else {
+								id = raw
+							}
+						} else if f, err := entry.ID.Float64(); err == nil {
+							id = strconv.FormatInt(int64(math.Round(f)), 10)
+						}
 					}
-				} else {
-					id = raw
+
+					id = strings.TrimSpace(id)
+					if id == "" {
+						continue
+					}
+
+					netIn := jsonNumberToInt64(entry.Status.NetInTransfer)
+					netOut := jsonNumberToInt64(entry.Status.NetOutTransfer)
+					observed[id] = struct {
+						NetIn  int64
+						NetOut int64
+					}{NetIn: netIn, NetOut: netOut}
 				}
-			} else if f, err := entry.ID.Float64(); err == nil {
-				id = strconv.FormatInt(int64(math.Round(f)), 10)
 			}
 		}
+	}
 
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
+	// 如果 HTTP 接口失败或没有数据，尝试使用 WebSocket
+	if !httpSuccess {
+		wsObserved, wsErr := h.fetchNezhaV0TotalsViaWebSocket(ctx, base)
+		if wsErr != nil {
+			// WebSocket 也失败了，返回综合错误信息
+			if httpErr != nil {
+				return 0, 0, 0, fmt.Errorf("HTTP 接口失败: %w; WebSocket 接口也失败: %v", httpErr, wsErr)
+			}
+			return 0, 0, 0, fmt.Errorf("HTTP 接口未获取到数据; WebSocket 接口也失败: %v", wsErr)
 		}
-
-		netIn := jsonNumberToInt64(entry.Status.NetInTransfer)
-		netOut := jsonNumberToInt64(entry.Status.NetOutTransfer)
-		observed[id] = struct {
-			NetIn  int64
-			NetOut int64
-		}{NetIn: netIn, NetOut: netOut}
+		observed = wsObserved
+		log.Printf("[Nezha V0] Using WebSocket data as HTTP API failed or returned no data")
 	}
 
 	var totalLimit int64
@@ -902,6 +914,130 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 
 	log.Printf("[Traffic] Total external subscription traffic: limit=%d, used=%d", totalLimit, totalUsed)
 	return totalLimit, totalUsed
+}
+
+func (h *TrafficSummaryHandler) fetchNezhaV0TotalsViaWebSocket(ctx context.Context, base *url.URL) (map[string]struct {
+	NetIn  int64
+	NetOut int64
+}, error) {
+	// 转换 scheme 为 WebSocket
+	wsBase := *base // 复制以避免修改原始 URL
+	switch strings.ToLower(wsBase.Scheme) {
+	case "", "http":
+		wsBase.Scheme = "ws"
+	case "https":
+		wsBase.Scheme = "wss"
+	case "ws", "wss":
+		// keep as is
+	default:
+		wsBase.Scheme = "wss"
+	}
+
+	endpoint := &url.URL{Path: "/ws"}
+	target := wsBase.ResolveReference(endpoint)
+
+	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil, fmt.Errorf("无法连接到 WebSocket 接口: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return nil, fmt.Errorf("set websocket deadline: %w", err)
+	}
+
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return nil, fmt.Errorf("未在期望时间内收到服务器数据: %w", err)
+	}
+
+	message = bytes.TrimSpace(message)
+	if len(message) == 0 {
+		return nil, errors.New("empty probe websocket payload")
+	}
+
+	type nezhaServer struct {
+		ID     json.Number `json:"id"`
+		Status struct {
+			NetInTransfer  json.Number `json:"NetInTransfer"`
+			NetOutTransfer json.Number `json:"NetOutTransfer"`
+		} `json:"State"`
+	}
+
+	type nezhaSnapshot struct {
+		Servers []nezhaServer `json:"servers"`
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(message))
+	decoder.UseNumber()
+
+	var snapshot nezhaSnapshot
+
+	if message[0] == '[' {
+		var frames []nezhaSnapshot
+		if err := decoder.Decode(&frames); err != nil {
+			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
+		}
+		if len(frames) == 0 {
+			return nil, errors.New("探针未返回任何服务器数据")
+		}
+		snapshot = frames[len(frames)-1]
+	} else {
+		if err := decoder.Decode(&snapshot); err != nil {
+			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
+		}
+	}
+
+	if len(snapshot.Servers) == 0 {
+		return nil, errors.New("探针未返回任何服务器数据")
+	}
+
+	observed := make(map[string]struct {
+		NetIn  int64
+		NetOut int64
+	})
+
+	for _, entry := range snapshot.Servers {
+		var id string
+		if v, err := entry.ID.Int64(); err == nil {
+			id = strconv.FormatInt(v, 10)
+		} else {
+			raw := strings.TrimSpace(entry.ID.String())
+			if raw != "" {
+				if strings.ContainsAny(raw, ".eE") {
+					if f, err := entry.ID.Float64(); err == nil {
+						id = strconv.FormatInt(int64(math.Round(f)), 10)
+					} else {
+						id = raw
+					}
+				} else {
+					id = raw
+				}
+			} else if f, err := entry.ID.Float64(); err == nil {
+				id = strconv.FormatInt(int64(math.Round(f)), 10)
+			}
+		}
+
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+
+		netIn := jsonNumberToInt64(entry.Status.NetInTransfer)
+		netOut := jsonNumberToInt64(entry.Status.NetOutTransfer)
+		observed[id] = struct {
+			NetIn  int64
+			NetOut int64
+		}{NetIn: netIn, NetOut: netOut}
+	}
+
+	return observed, nil
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
