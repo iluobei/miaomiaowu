@@ -236,7 +236,9 @@ MIT License
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
-### v0.1.6 (2025-11-22)
+### v0.1.7 (2025-11-24)
+- 🛠️ fix:哪吒V0不同版本服务器地址兼容
+### v0.1.7 (2025-11-22)
 - 🌈 节点配置支持编辑
 - 🌈 节点支持复制为URI格式
 - 🌈 支持AnyTls代理
