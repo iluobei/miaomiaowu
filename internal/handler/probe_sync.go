@@ -357,15 +357,6 @@ func (h *probeSyncHandler) fetchNezhaV0Servers(ctx context.Context, address stri
 	}
 
 	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("服务器接口返回异常: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("服务器接口返回异常")
-	}
-
 	var serverResp struct {
 		Result []struct {
 			ID   json.Number `json:"id"`
@@ -373,11 +364,31 @@ func (h *probeSyncHandler) fetchNezhaV0Servers(ctx context.Context, address stri
 		} `json:"result"`
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-	decoder.UseNumber()
+	httpSuccess := false
+	if err == nil {
+		defer resp.Body.Close()
 
-	if err := decoder.Decode(&serverResp); err != nil {
-		return nil, fmt.Errorf("parse server response: %w", err)
+		if resp.StatusCode == http.StatusOK {
+			decoder := json.NewDecoder(resp.Body)
+			decoder.UseNumber()
+
+			if err := decoder.Decode(&serverResp); err == nil && len(serverResp.Result) > 0 {
+				httpSuccess = true
+			}
+		}
+	}
+
+	// 如果 HTTP 接口失败或没有数据，尝试使用 WebSocket
+	if !httpSuccess {
+		wsServers, wsErr := h.fetchNezhaV0ServersViaWebSocket(ctx, base)
+		if wsErr != nil {
+			// WebSocket 也失败了，返回综合错误信息
+			if err != nil {
+				return nil, fmt.Errorf("HTTP 接口失败: %w; WebSocket 接口也失败: %v", err, wsErr)
+			}
+			return nil, fmt.Errorf("HTTP 接口未获取到数据; WebSocket 接口也失败: %v", wsErr)
+		}
+		return wsServers, nil
 	}
 
 	if len(serverResp.Result) == 0 {
@@ -485,6 +496,120 @@ func (h *probeSyncHandler) fetchKomariServers(ctx context.Context, address strin
 			Name:             name,
 			TrafficMethod:    "both",
 			MonthlyTrafficGB: monthlyGB,
+		})
+	}
+
+	return servers, nil
+}
+
+func (h *probeSyncHandler) fetchNezhaV0ServersViaWebSocket(ctx context.Context, base *url.URL) ([]probeSyncServer, error) {
+	// 转换 scheme 为 WebSocket
+	switch strings.ToLower(base.Scheme) {
+	case "", "http":
+		base.Scheme = "ws"
+	case "https":
+		base.Scheme = "wss"
+	case "ws", "wss":
+		// keep as is
+	default:
+		base.Scheme = "wss"
+	}
+
+	endpoint := &url.URL{Path: "/ws"}
+	target := base.ResolveReference(endpoint)
+
+	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil, fmt.Errorf("无法连接到 WebSocket 接口: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return nil, fmt.Errorf("set websocket deadline: %w", err)
+	}
+
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return nil, fmt.Errorf("未在期望时间内收到服务器数据: %w", err)
+	}
+
+	message = bytes.TrimSpace(message)
+	if len(message) == 0 {
+		return nil, errors.New("empty probe websocket payload")
+	}
+
+	type nezhaServer struct {
+		ID   json.Number `json:"id"`
+		Name string      `json:"name"`
+	}
+
+	type nezhaSnapshot struct {
+		Servers []nezhaServer `json:"servers"`
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(message))
+	decoder.UseNumber()
+
+	var snapshot nezhaSnapshot
+
+	if message[0] == '[' {
+		var frames []nezhaSnapshot
+		if err := decoder.Decode(&frames); err != nil {
+			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
+		}
+		if len(frames) == 0 {
+			return nil, errors.New("探针未返回任何服务器数据")
+		}
+		snapshot = frames[len(frames)-1]
+	} else {
+		if err := decoder.Decode(&snapshot); err != nil {
+			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
+		}
+	}
+
+	if len(snapshot.Servers) == 0 {
+		return nil, errors.New("探针未返回任何服务器数据")
+	}
+
+	servers := make([]probeSyncServer, 0, len(snapshot.Servers))
+	for i, srv := range snapshot.Servers {
+		var id string
+		if v, err := srv.ID.Int64(); err == nil {
+			id = strconv.FormatInt(v, 10)
+		} else {
+			raw := strings.TrimSpace(srv.ID.String())
+			if raw != "" {
+				if strings.ContainsAny(raw, ".eE") {
+					if f, err := srv.ID.Float64(); err == nil {
+						id = strconv.FormatInt(int64(math.Round(f)), 10)
+					} else {
+						id = raw
+					}
+				} else {
+					id = raw
+				}
+			} else if f, err := srv.ID.Float64(); err == nil {
+				id = strconv.FormatInt(int64(math.Round(f)), 10)
+			}
+		}
+
+		id = strings.TrimSpace(id)
+		name := strings.TrimSpace(srv.Name)
+		if name == "" {
+			name = fmt.Sprintf("服务器 %d", i+1)
+		}
+
+		servers = append(servers, probeSyncServer{
+			ServerID:         id,
+			Name:             name,
+			TrafficMethod:    "both",
+			MonthlyTrafficGB: 0,
 		})
 	}
 
