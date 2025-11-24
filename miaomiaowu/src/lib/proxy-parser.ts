@@ -142,6 +142,64 @@ function parseVmess(url: string): ProxyNode | null {
 }
 
 /**
+ * 解析 ShadowsocksR 协议
+ * 格式: ssr://base64(server:port:protocol:method:obfs:base64(password)/?obfsparam=base64(obfs_param)&protoparam=base64(proto_param)&remarks=base64(name)&group=base64(group))
+ */
+function parseShadowsocksR(url: string): ProxyNode | null {
+  try {
+    const content = url.substring('ssr://'.length)
+    const decoded = base64Decode(content)
+    if (!decoded) return null
+
+    // 分离主体和参数部分
+    const parts = decoded.split('/?')
+    const mainPart = parts[0]
+    const paramsPart = parts.length > 1 ? parts[1] : ''
+
+    // 解析主体部分: server:port:protocol:method:obfs:base64(password)
+    const mainSegments = mainPart.split(':')
+    if (mainSegments.length < 6) return null
+
+    const server = mainSegments[0]
+    const port = parseInt(mainSegments[1]) || 0
+    const protocol = mainSegments[2]
+    const method = mainSegments[3]
+    const obfs = mainSegments[4]
+    const passwordBase64 = mainSegments.slice(5).join(':')
+    const password = base64Decode(passwordBase64)
+
+    // 解析参数部分
+    const params = parseQueryString(paramsPart)
+    const name = params.remarks ? base64Decode(params.remarks) : 'SSR Node'
+    const obfsParam = params.obfsparam ? base64Decode(params.obfsparam) : ''
+    const protoParam = params.protoparam ? base64Decode(params.protoparam) : ''
+
+    const node: ProxyNode = {
+      name,
+      type: 'ssr',
+      server,
+      port,
+      cipher: method,
+      password,
+      protocol,
+      obfs
+    }
+
+    if (obfsParam) {
+      node['obfs-param'] = obfsParam
+    }
+    if (protoParam) {
+      node['protocol-param'] = protoParam
+    }
+
+    return node
+  } catch (e) {
+    toast(`Parse ShadowsocksR error: ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  }
+}
+
+/**
  * 解析 Shadowsocks 协议
  * 格式: ss://base64(method:password)@server:port#name
  * 或: ss://base64(method:password@server:port)#name
@@ -560,6 +618,8 @@ export function parseProxyUrl(url: string): ProxyNode | null {
 
   if (url.startsWith('vmess://')) {
     return parseVmess(url)
+  } else if (url.startsWith('ssr://')) {
+    return parseShadowsocksR(url)
   } else if (url.startsWith('ss://')) {
     return parseShadowsocks(url)
   } else if (url.startsWith('socks://')) {

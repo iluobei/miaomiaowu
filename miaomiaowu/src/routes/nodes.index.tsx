@@ -352,23 +352,29 @@ function NodesPage() {
     },
   })
 
-  // 处理 Clash 配置编辑
-  const handleEditClashConfig = (node: ParsedNode) => {
-    if (!node.clash_config) return
+  // 处理 Clash 配置编辑（支持已保存节点和临时节点）
+  const handleEditClashConfig = (node: ParsedNode | TempNode) => {
+    // 对于已保存节点，使用 clash_config 字段
+    // 对于临时节点，使用 clash 对象
+    const clashConfig = 'clash_config' in node
+      ? node.clash_config
+      : (node.clash ? JSON.stringify(node.clash) : null)
+
+    if (!clashConfig) return
 
     // 格式化 JSON 以便编辑
     try {
-      const parsed = JSON.parse(node.clash_config)
+      const parsed = JSON.parse(clashConfig)
       const formatted = JSON.stringify(parsed, null, 2)
       setEditingClashConfig({
-        nodeId: node.id,
+        nodeId: 'id' in node && typeof node.id === 'number' ? node.id : -1, // 临时节点使用 -1
         config: formatted
       })
     } catch {
       // 如果解析失败，使用原始字符串
       setEditingClashConfig({
-        nodeId: node.id,
-        config: node.clash_config
+        nodeId: 'id' in node && typeof node.id === 'number' ? node.id : -1,
+        config: clashConfig
       })
     }
     setClashConfigError('')
@@ -1605,7 +1611,10 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               {node.clash ? (
                                 <div className='flex gap-1 justify-center'>
                                   <Dialog
-                                    open={clashDialogOpen && editingClashConfig?.nodeId === node.dbNode?.id}
+                                    open={clashDialogOpen && (
+                                      (node.isSaved && editingClashConfig?.nodeId === node.dbNode?.id) ||
+                                      (!node.isSaved && editingClashConfig?.nodeId === -1)
+                                    )}
                                     onOpenChange={(open) => {
                                       setClashDialogOpen(open)
                                       if (!open) {
@@ -1623,16 +1632,25 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         variant='ghost'
                                         size='icon'
                                         className='h-8 w-8'
-                                        onClick={() => node.isSaved && handleEditClashConfig(node.dbNode!)}
+                                        onClick={() => {
+                                          if (node.isSaved && node.dbNode) {
+                                            handleEditClashConfig(node.dbNode)
+                                          } else if (!node.isSaved) {
+                                            handleEditClashConfig(node)
+                                          }
+                                        }}
                                       >
                                         <Eye className='h-4 w-4' />
                                       </Button>
                                     </DialogTrigger>
                                     <DialogContent className='max-w-4xl sm:max-w-4xl max-h-[80vh] flex flex-col'>
                                     <DialogHeader>
-                                      <DialogTitle>Clash 配置详情</DialogTitle>
+                                      <DialogTitle>
+                                        Clash 配置详情{editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
+                                      </DialogTitle>
                                       <DialogDescription>
                                         {node.name || '未知'}
+                                        {editingClashConfig?.nodeId === -1 && ' - 保存节点后可编辑配置'}
                                       </DialogDescription>
                                     </DialogHeader>
                                     <div className='mt-4 flex-1 flex flex-col gap-3 min-h-0'>
@@ -1658,6 +1676,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                           onChange={(e) => handleClashConfigChange(e.target.value)}
                                           className='font-mono text-xs flex-1 min-h-[400px] resize-none border-0 rounded-none focus-visible:ring-0 leading-5'
                                           placeholder='输入 JSON 配置...'
+                                          readOnly={editingClashConfig?.nodeId === -1}
                                         />
                                       </div>
                                       {clashConfigError && (
@@ -1671,15 +1690,17 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                           size='sm'
                                           onClick={() => setClashDialogOpen(false)}
                                         >
-                                          取消
+                                          {editingClashConfig?.nodeId === -1 ? '关闭' : '取消'}
                                         </Button>
-                                        <Button
-                                          size='sm'
-                                          onClick={handleSaveClashConfig}
-                                          disabled={!!clashConfigError || updateClashConfigMutation.isPending}
-                                        >
-                                          {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
-                                        </Button>
+                                        {editingClashConfig?.nodeId !== -1 && (
+                                          <Button
+                                            size='sm'
+                                            onClick={handleSaveClashConfig}
+                                            disabled={!!clashConfigError || updateClashConfigMutation.isPending}
+                                          >
+                                            {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
+                                          </Button>
+                                        )}
                                       </div>
                                     </div>
                                   </DialogContent>
