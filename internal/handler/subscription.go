@@ -407,6 +407,17 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
 				rootMap := yamlNode.Content[0]
 
+				// 重新排序 proxy-groups 中每个代理组的字段
+				for i := 0; i < len(rootMap.Content); i += 2 {
+					if rootMap.Content[i].Value == "proxy-groups" {
+						proxyGroupsNode := rootMap.Content[i+1]
+						if proxyGroupsNode.Kind == yaml.SequenceNode {
+							reorderProxyGroups(proxyGroupsNode)
+						}
+						break
+					}
+				}
+
 				// 查找 rule-providers 的位置
 				ruleProvidersIdx := -1
 				for i := 0; i < len(rootMap.Content); i += 2 {
@@ -658,4 +669,77 @@ func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType st
 	default:
 		return nil, fmt.Errorf("unexpected result type from producer: %T, expected string or []byte", result)
 	}
+}
+
+// reorderProxyGroups reorders each proxy group's fields in the sequence node
+func reorderProxyGroups(seqNode *yaml.Node) {
+	if seqNode == nil || seqNode.Kind != yaml.SequenceNode {
+		return
+	}
+
+	// Process each proxy group in the sequence
+	for _, groupNode := range seqNode.Content {
+		if groupNode.Kind == yaml.MappingNode {
+			reorderProxyGroupFields(groupNode)
+		}
+	}
+}
+
+// reorderProxyGroupFields reorders proxy group configuration fields
+// Priority order: name, type, strategy, url, interval, tolerance, lazy, hidden, proxies
+func reorderProxyGroupFields(groupNode *yaml.Node) {
+	if groupNode == nil || groupNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Priority fields in desired order
+	priorityFields := []string{"name", "type", "strategy", "url", "interval", "tolerance", "lazy", "hidden", "proxies"}
+
+	// Create a map of existing fields
+	fieldMap := make(map[string]*yaml.Node)
+	remainingFields := []*yaml.Node{}
+
+	// Parse existing fields
+	for i := 0; i < len(groupNode.Content); i += 2 {
+		if i+1 >= len(groupNode.Content) {
+			break
+		}
+		keyNode := groupNode.Content[i]
+		valueNode := groupNode.Content[i+1]
+
+		// Check if this is a priority field
+		isPriority := false
+		for _, pf := range priorityFields {
+			if keyNode.Value == pf {
+				fieldMap[pf] = valueNode
+				isPriority = true
+				break
+			}
+		}
+
+		// If not a priority field, save both key and value for later
+		if !isPriority {
+			remainingFields = append(remainingFields, keyNode, valueNode)
+		}
+	}
+
+	// Rebuild the Content with ordered fields
+	newContent := []*yaml.Node{}
+
+	// Add priority fields first (in order)
+	for _, fieldName := range priorityFields {
+		if valueNode, exists := fieldMap[fieldName]; exists {
+			keyNode := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: fieldName,
+			}
+			newContent = append(newContent, keyNode, valueNode)
+		}
+	}
+
+	// Add remaining fields
+	newContent = append(newContent, remainingFields...)
+
+	// Replace the original content
+	groupNode.Content = newContent
 }

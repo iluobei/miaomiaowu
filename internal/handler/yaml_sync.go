@@ -474,16 +474,16 @@ func reorderTopLevelFields(docNode *yaml.Node) {
 		"allow-lan",
 		"mode",
 		"log-level",
+		"dns",
+		"proxies",
+		"proxy-groups",
+		"rules",
+		"rule-providers",
 		"geodata-mode",
 		"geo-auto-update",
 		"geodata-loader",
 		"geo-update-interval",
 		"geox-url",
-		"dns",
-		"proxies",
-		"proxy-groups",
-		"rule-providers",
-		"rules",
 	}
 
 	// Create a map to store all key-value pairs
