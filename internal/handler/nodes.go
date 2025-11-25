@@ -68,6 +68,8 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleClearAll(w, r)
 	case path == "batch-delete" && r.Method == http.MethodPost:
 		h.handleBatchDelete(w, r)
+	case path == "batch-rename" && r.Method == http.MethodPost:
+		h.handleBatchRename(w, r)
 	default:
 		allowed := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 		methodNotAllowed(w, allowed...)
@@ -620,6 +622,98 @@ func (h *nodesHandler) handleBatchDelete(w http.ResponseWriter, r *http.Request)
 		"status":  "deleted",
 		"deleted": deletedCount,
 		"total":   len(req.NodeIDs),
+	})
+}
+
+func (h *nodesHandler) handleBatchRename(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("用户未认证"))
+		return
+	}
+
+	var req struct {
+		Updates []struct {
+			NodeID  int64  `json:"node_id"`
+			NewName string `json:"new_name"`
+		} `json:"updates"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "请求格式不正确")
+		return
+	}
+
+	if len(req.Updates) == 0 {
+		writeBadRequest(w, "更新列表不能为空")
+		return
+	}
+
+	successCount := 0
+	failCount := 0
+	var updatedNodes []nodeDTO
+
+	for _, update := range req.Updates {
+		if update.NewName == "" {
+			failCount++
+			continue
+		}
+
+		// Get existing node
+		node, err := h.repo.GetNode(r.Context(), update.NodeID, username)
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		// Save old name for YAML sync
+		oldNodeName := node.NodeName
+
+		// Update node name
+		node.NodeName = update.NewName
+
+		// Update name in ClashConfig JSON
+		var clashConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &clashConfig); err == nil {
+			clashConfig["name"] = update.NewName
+			if updatedClash, err := json.Marshal(clashConfig); err == nil {
+				node.ClashConfig = string(updatedClash)
+			}
+		}
+
+		// Update name in ParsedConfig JSON
+		var parsedConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ParsedConfig), &parsedConfig); err == nil {
+			parsedConfig["name"] = update.NewName
+			if updatedParsed, err := json.Marshal(parsedConfig); err == nil {
+				node.ParsedConfig = string(updatedParsed)
+			}
+		}
+
+		// Save to database
+		updated, err := h.repo.UpdateNode(r.Context(), node)
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		// Sync to YAML files using the sync manager
+		if updated.ClashConfig != "" {
+			if err := h.yamlSyncManager.SyncNode(oldNodeName, update.NewName, updated.ClashConfig); err != nil {
+				// Log error but don't fail the request
+			}
+		}
+
+		successCount++
+		updatedNodes = append(updatedNodes, convertNode(updated))
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":  "renamed",
+		"success": successCount,
+		"failed":  failCount,
+		"total":   len(req.Updates),
+		"nodes":   updatedNodes,
 	})
 }
 

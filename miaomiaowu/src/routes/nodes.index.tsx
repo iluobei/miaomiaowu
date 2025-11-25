@@ -147,6 +147,10 @@ function NodesPage() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
   const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false)
   const [batchTag, setBatchTag] = useState<string>('')
+  const [batchRenameDialogOpen, setBatchRenameDialogOpen] = useState(false)
+  const [batchRenameText, setBatchRenameText] = useState<string>('')
+  const [findText, setFindText] = useState<string>('')
+  const [replaceText, setReplaceText] = useState<string>('')
 
   // Clash 配置编辑状态
   const [clashDialogOpen, setClashDialogOpen] = useState(false)
@@ -672,6 +676,26 @@ function NodesPage() {
     },
   })
 
+  // 批量修改节点名称
+  const batchRenameMutation = useMutation({
+    mutationFn: async (updates: Array<{ node_id: number; new_name: string }>) => {
+      const response = await api.post('/api/admin/nodes/batch-rename', { updates })
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success(`成功修改 ${data.success} 个节点名称`)
+      setBatchRenameDialogOpen(false)
+      setSelectedNodeIds(new Set())
+      setBatchRenameText('')
+      setFindText('')
+      setReplaceText('')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '批量修改名称失败')
+    },
+  })
+
   // 创建链式代理节点
   const createRelayNodeMutation = useMutation({
     mutationFn: async ({ sourceNode, targetNode }: { sourceNode: ParsedNode; targetNode: ParsedNode }) => {
@@ -1149,6 +1173,19 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   <div className='flex gap-2'>
                     {selectedNodeIds.size > 0 && (
                       <>
+                        <Button
+                          variant='default'
+                          size='sm'
+                          onClick={() => {
+                            // 获取选中节点的名称
+                            const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+                            const names = selectedNodes.map(n => n.node_name).join('\n')
+                            setBatchRenameText(names)
+                            setBatchRenameDialogOpen(true)
+                          }}
+                        >
+                          批量修改名称 ({selectedNodeIds.size})
+                        </Button>
                         <Button
                           variant='default'
                           size='sm'
@@ -2018,6 +2055,126 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 disabled={batchUpdateTagMutation.isPending || !batchTag.trim()}
               >
                 {batchUpdateTagMutation.isPending ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量修改名称对话框 */}
+      <Dialog open={batchRenameDialogOpen} onOpenChange={setBatchRenameDialogOpen}>
+        <DialogContent className='max-w-3xl max-h-[80vh] flex flex-col'>
+          <DialogHeader>
+            <DialogTitle>批量修改节点名称</DialogTitle>
+            <DialogDescription>
+              修改选中的 {selectedNodeIds.size} 个节点名称
+            </DialogDescription>
+          </DialogHeader>
+          <div className='flex-1 space-y-4 py-4 min-h-0 flex flex-col'>
+            {/* 搜索替换工具 */}
+            <div className='grid grid-cols-3 gap-2 grid-cols-[1fr_1fr_auto] items-end'>
+              <div className='space-y-2'>
+                <Label htmlFor='find-text' className='text-sm font-medium'>
+                  查找内容
+                </Label>
+                <Input
+                  id='find-text'
+                  placeholder='输入要查找的文本'
+                  value={findText}
+                  onChange={(e) => setFindText(e.target.value)}
+                  className='text-sm'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='replace-text' className='text-sm font-medium'>
+                  替换为
+                </Label>
+                <div className='flex gap-2'>
+                  <Input
+                    id='replace-text'
+                    placeholder='输入替换后的文本'
+                    value={replaceText}
+                    onChange={(e) => setReplaceText(e.target.value)}
+                    className='text-sm'
+                  />
+                </div>
+              </div>
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => {
+                  if (!findText) {
+                    toast.error('请输入要查找的内容')
+                    return
+                  }
+                  const replaced = batchRenameText.split('\n').map(line =>
+                    line.replace(new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replaceText)
+                  ).join('\n')
+                  setBatchRenameText(replaced)
+                  toast.success('替换完成')
+                }}
+                >
+                替换
+              </Button>
+            </div>
+
+            {/* 名称编辑区 */}
+            <div className='flex-1 space-y-2 min-h-0 flex flex-col'>
+              <Label htmlFor='batch-rename-text' className='text-sm font-medium'>
+                节点名称 (每行一个，共 {batchRenameText.split('\n').length} 行)
+              </Label>
+              <Textarea
+                id='batch-rename-text'
+                value={batchRenameText}
+                onChange={(e) => setBatchRenameText(e.target.value)}
+                className='font-mono text-sm flex-1 min-h-[300px] resize-none'
+                placeholder='每行一个节点名称'
+              />
+              {/* <p className='text-xs text-muted-foreground'>
+                支持多行编辑，使用上方的查找替换功能批量修改文本
+              </p> */}
+            </div>
+
+            {/* 操作按钮 */}
+            <div className='flex justify-end gap-2 pt-2'>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setBatchRenameDialogOpen(false)
+                  setBatchRenameText('')
+                  setFindText('')
+                  setReplaceText('')
+                }}
+                disabled={batchRenameMutation.isPending}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={() => {
+                  const newNames = batchRenameText.split('\n').map(line => line.trim()).filter(line => line)
+                  const nodeIds = Array.from(selectedNodeIds)
+
+                  if (newNames.length === 0) {
+                    toast.error('请输入节点名称')
+                    return
+                  }
+
+                  if (newNames.length !== nodeIds.length) {
+                    toast.error(`名称数量 (${newNames.length}) 与选中节点数量 (${nodeIds.length}) 不匹配`)
+                    return
+                  }
+
+                  // 构建更新请求
+                  const updates = nodeIds.map((nodeId, index) => ({
+                    node_id: nodeId,
+                    new_name: newNames[index]
+                  }))
+
+                  batchRenameMutation.mutate(updates)
+                }}
+                disabled={batchRenameMutation.isPending || !batchRenameText.trim()}
+              >
+                {batchRenameMutation.isPending ? '保存中...' : '确认修改'}
               </Button>
             </div>
           </div>
