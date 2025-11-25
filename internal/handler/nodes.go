@@ -17,8 +17,9 @@ import (
 )
 
 type nodesHandler struct {
-	repo         *storage.TrafficRepository
-	subscribeDir string
+	repo            *storage.TrafficRepository
+	subscribeDir    string
+	yamlSyncManager *YAMLSyncManager
 }
 
 // NewNodesHandler returns an admin-only handler that manages proxy nodes.
@@ -28,8 +29,9 @@ func NewNodesHandler(repo *storage.TrafficRepository, subscribeDir string) http.
 	}
 
 	return &nodesHandler{
-		repo:         repo,
-		subscribeDir: subscribeDir,
+		repo:            repo,
+		subscribeDir:    subscribeDir,
+		yamlSyncManager: NewYAMLSyncManager(subscribeDir),
 	}
 }
 
@@ -64,6 +66,8 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleDelete(w, r, path)
 	case path == "clear" && r.Method == http.MethodPost:
 		h.handleClearAll(w, r)
+	case path == "batch-delete" && r.Method == http.MethodPost:
+		h.handleBatchDelete(w, r)
 	default:
 		allowed := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 		methodNotAllowed(w, allowed...)
@@ -241,10 +245,10 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 		return
 	}
 
-	// Sync node changes to YAML files
-	if h.subscribeDir != "" && updated.ClashConfig != "" {
+	// Sync node changes to YAML files using the sync manager
+	if updated.ClashConfig != "" {
 		newNodeName := updated.NodeName
-		if err := syncNodeToYAMLFiles(h.subscribeDir, oldNodeName, newNodeName, updated.ClashConfig); err != nil {
+		if err := h.yamlSyncManager.SyncNode(oldNodeName, newNodeName, updated.ClashConfig); err != nil {
 			// Log error but don't fail the request
 			// The node update was successful, YAML sync is best-effort
 			// You could add logging here if needed
@@ -331,10 +335,10 @@ func (h *nodesHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Sync node changes to YAML files (server address update)
-	if h.subscribeDir != "" && updated.ClashConfig != "" {
+	// Sync node changes to YAML files (server address update) using the sync manager
+	if updated.ClashConfig != "" {
 		nodeName := updated.NodeName
-		if err := syncNodeToYAMLFiles(h.subscribeDir, nodeName, nodeName, updated.ClashConfig); err != nil {
+		if err := h.yamlSyncManager.SyncNode(nodeName, nodeName, updated.ClashConfig); err != nil {
 			// Log error but don't fail the request
 		}
 	}
@@ -407,10 +411,10 @@ func (h *nodesHandler) handleRestoreServer(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Sync node changes to YAML files (restore server address)
-	if h.subscribeDir != "" && updated.ClashConfig != "" {
+	// Sync node changes to YAML files (restore server address) using the sync manager
+	if updated.ClashConfig != "" {
 		nodeName := updated.NodeName
-		if err := syncNodeToYAMLFiles(h.subscribeDir, nodeName, nodeName, updated.ClashConfig); err != nil {
+		if err := h.yamlSyncManager.SyncNode(nodeName, nodeName, updated.ClashConfig); err != nil {
 			// Log error but don't fail the request
 		}
 	}
@@ -488,11 +492,11 @@ func (h *nodesHandler) handleUpdateConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Sync to YAML subscription files
-	if h.subscribeDir != "" && updated.ClashConfig != "" {
+	// Sync to YAML subscription files using the sync manager
+	if updated.ClashConfig != "" {
 		// If node name changed, update old name to new name in YAML files
 		newNodeName := updated.NodeName
-		if err := syncNodeToYAMLFiles(h.subscribeDir, oldNodeName, newNodeName, updated.ClashConfig); err != nil {
+		if err := h.yamlSyncManager.SyncNode(oldNodeName, newNodeName, updated.ClashConfig); err != nil {
 			// Log error but don't fail the request
 		}
 	}
@@ -535,9 +539,9 @@ func (h *nodesHandler) handleDelete(w http.ResponseWriter, r *http.Request, idSe
 		return
 	}
 
-	// Sync deletion to YAML files
-	if h.subscribeDir != "" && node.NodeName != "" {
-		if err := deleteNodeFromYAMLFiles(h.subscribeDir, node.NodeName); err != nil {
+	// Sync deletion to YAML files using the sync manager
+	if node.NodeName != "" {
+		if err := h.yamlSyncManager.DeleteNode(node.NodeName); err != nil {
 			// Log error but don't fail the request
 		}
 	}
@@ -558,6 +562,65 @@ func (h *nodesHandler) handleClearAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
+func (h *nodesHandler) handleBatchDelete(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("用户未认证"))
+		return
+	}
+
+	var req struct {
+		NodeIDs []int64 `json:"node_ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "请求格式不正确")
+		return
+	}
+
+	if len(req.NodeIDs) == 0 {
+		writeBadRequest(w, "节点ID列表不能为空")
+		return
+	}
+
+	// Get all node names before deletion for YAML sync
+	nodeNames := make([]string, 0, len(req.NodeIDs))
+	for _, id := range req.NodeIDs {
+		node, err := h.repo.GetNode(r.Context(), id, username)
+		if err != nil {
+			// Skip nodes that don't exist or can't be accessed
+			continue
+		}
+		if node.NodeName != "" {
+			nodeNames = append(nodeNames, node.NodeName)
+		}
+	}
+
+	// Delete nodes from database
+	deletedCount := 0
+	for _, id := range req.NodeIDs {
+		if err := h.repo.DeleteNode(r.Context(), id, username); err != nil {
+			// Continue with other deletions even if one fails
+			continue
+		}
+		deletedCount++
+	}
+
+	// Batch sync deletion to YAML files using the sync manager
+	// This is done in a single locked operation for efficiency
+	if len(nodeNames) > 0 {
+		if err := h.yamlSyncManager.BatchDeleteNodes(nodeNames); err != nil {
+			// Log error but don't fail the request
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":  "deleted",
+		"deleted": deletedCount,
+		"total":   len(req.NodeIDs),
+	})
 }
 
 type nodeRequest struct {

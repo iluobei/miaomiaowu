@@ -1176,16 +1176,21 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               <AlertDialogCancel>取消</AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={() => {
-                                  // 批量删除逻辑将在后面实现
+                                  // 使用批量删除 API
                                   const ids = Array.from(selectedNodeIds)
-                                  Promise.all(ids.map(id => api.delete(`/api/admin/nodes/${id}`)))
-                                    .then(() => {
+                                  api.post('/api/admin/nodes/batch-delete', { node_ids: ids })
+                                    .then((response) => {
                                       queryClient.invalidateQueries({ queryKey: ['nodes'] })
                                       setSelectedNodeIds(new Set())
-                                      toast.success(`成功删除 ${ids.length} 个节点`)
+                                      const { deleted, total } = response.data
+                                      if (deleted === total) {
+                                        toast.success(`成功删除 ${deleted} 个节点`)
+                                      } else {
+                                        toast.success(`成功删除 ${deleted}/${total} 个节点`)
+                                      }
                                     })
                                     .catch((error) => {
-                                      toast.error(error.response?.data?.error || '删除失败')
+                                      toast.error(error.response?.data?.error || '批量删除失败')
                                     })
                                 }}
                               >
