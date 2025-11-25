@@ -88,6 +88,28 @@ export function EditNodesDialog({
   const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
   const [editingGroupValue, setEditingGroupValue] = useState('')
 
+  // 保存滚动位置
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // 包装 handleNodeDragEnd 以保存和恢复滚动位置
+  const wrappedHandleNodeDragEnd = React.useCallback(
+    (groupName: string) => (event: any) => {
+      // 保存当前滚动位置
+      const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+
+      // 调用原始的 handleNodeDragEnd
+      handleNodeDragEnd(groupName)(event)
+
+      // 在下一帧恢复滚动位置
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollTop
+        }
+      })
+    },
+    [handleNodeDragEnd]
+  )
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -451,7 +473,7 @@ export function EditNodesDialog({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragEnd={handleNodeDragEnd(group.name)}
+            onDragEnd={wrappedHandleNodeDragEnd(group.name)}
           >
             <SortableContext
               items={(group.proxies || []).filter(p => p).map(p => `${group.name}-${p}`)}
@@ -514,7 +536,7 @@ export function EditNodesDialog({
         </DialogHeader>
         <div className='flex-1 flex gap-4 py-4 min-h-0'>
           {/* 左侧：代理组 - 使用 DND Kit 实现排序 */}
-          <div className='flex-1 overflow-y-auto pr-2'>
+          <div ref={scrollContainerRef} className='flex-1 overflow-y-auto pr-2'>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
