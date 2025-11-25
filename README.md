@@ -236,6 +236,10 @@ MIT License
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
+### v0.1.8 (2025-11-25)
+- 🌈 节点批量重命名[#15](https://github.com/Jimleerx/miaomiaowu/issues/15)
+- 🛠️ fix:节点删除后订阅里删不全，会留几个没有删掉[#17](https://github.com/Jimleerx/miaomiaowu/issues/17)
+- 🛠️ fix:(BUG) 某些情况下Vless节点的Short-id到订阅里会改变成指数[#18](https://github.com/Jimleerx/miaomiaowu/issues/18)
 ### v0.1.7 (2025-11-24)
 - 🛠️ fix:哪吒V0不同版本服务器地址兼容
 - 🛠️ fix:节点管理无法解析ssr类型
