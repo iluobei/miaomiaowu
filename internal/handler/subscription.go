@@ -399,26 +399,39 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
 	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
-		var yamlData map[string]any
-		if err := yaml.Unmarshal(data, &yamlData); err == nil {
-			// 重新排序：将 rule-providers 放在最后
-			orderedData := make(map[string]any)
-			ruleProviders, hasRuleProviders := yamlData["rule-providers"]
+		// 使用 yaml.Node 来保持原始类型信息（避免 563905e2 被解析为科学计数法）
+		var yamlNode yaml.Node
+		if err := yaml.Unmarshal(data, &yamlNode); err == nil {
+			// 检查是否有 rule-providers 需要重新排序
+			// yamlNode.Content[0] 是文档节点，yamlNode.Content[0].Content 是根映射的键值对
+			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
+				rootMap := yamlNode.Content[0]
 
-			// 先添加除 rule-providers 外的所有字段
-			for key, value := range yamlData {
-				if key != "rule-providers" {
-					orderedData[key] = value
+				// 查找 rule-providers 的位置
+				ruleProvidersIdx := -1
+				for i := 0; i < len(rootMap.Content); i += 2 {
+					if rootMap.Content[i].Value == "rule-providers" {
+						ruleProvidersIdx = i
+						break
+					}
+				}
+
+				// 如果找到 rule-providers 且不在最后，则移动到最后
+				if ruleProvidersIdx >= 0 && ruleProvidersIdx < len(rootMap.Content)-2 {
+					// 提取 rule-providers 的键和值
+					keyNode := rootMap.Content[ruleProvidersIdx]
+					valueNode := rootMap.Content[ruleProvidersIdx+1]
+
+					// 从原位置删除
+					rootMap.Content = append(rootMap.Content[:ruleProvidersIdx], rootMap.Content[ruleProvidersIdx+2:]...)
+
+					// 添加到最后
+					rootMap.Content = append(rootMap.Content, keyNode, valueNode)
 				}
 			}
 
-			// 最后添加 rule-providers
-			if hasRuleProviders {
-				orderedData["rule-providers"] = ruleProviders
-			}
-
 			// 重新序列化为 YAML
-			if reorderedData, err := yaml.Marshal(orderedData); err == nil {
+			if reorderedData, err := yaml.Marshal(&yamlNode); err == nil {
 				data = reorderedData
 			}
 		}
