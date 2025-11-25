@@ -16,6 +16,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// convertNilToEmptyStringInMap recursively converts nil values to empty strings in a map
+func convertNilToEmptyStringInMap(m map[string]any) {
+	for k, v := range m {
+		if v == nil {
+			m[k] = ""
+		} else if subMap, ok := v.(map[string]any); ok {
+			convertNilToEmptyStringInMap(subMap)
+		} else if slice, ok := v.([]any); ok {
+			for i, item := range slice {
+				if item == nil {
+					slice[i] = ""
+				} else if itemMap, ok := item.(map[string]any); ok {
+					convertNilToEmptyStringInMap(itemMap)
+				}
+			}
+		}
+	}
+}
+
 type nodesHandler struct {
 	repo            *storage.TrafficRepository
 	subscribeDir    string
@@ -841,6 +860,11 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	if len(clashConfig.Proxies) == 0 {
 		writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
 		return
+	}
+
+	// Convert nil values to empty strings in all proxies (e.g., for short-id field)
+	for _, proxy := range clashConfig.Proxies {
+		convertNilToEmptyStringInMap(proxy)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

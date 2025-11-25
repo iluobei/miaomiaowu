@@ -68,9 +68,18 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 func encodeValue(value any) *yaml.Node {
 	node := &yaml.Node{}
 
+	// Handle nil values - convert to empty string for fields like short-id
+	if value == nil {
+		node.Kind = yaml.ScalarNode
+		node.Tag = "!!str"
+		node.Value = ""
+		return node
+	}
+
 	switch v := value.(type) {
 	case string:
 		node.Kind = yaml.ScalarNode
+		node.Tag = "!!str"  // Explicitly mark as string to preserve empty strings
 		node.Value = v
 	case int:
 		node.Kind = yaml.ScalarNode
@@ -112,6 +121,25 @@ func encodeValue(value any) *yaml.Node {
 	return node
 }
 
+// convertNilToEmptyString recursively converts nil values to empty strings in a map
+func convertNilToEmptyString(m map[string]any) {
+	for k, v := range m {
+		if v == nil {
+			m[k] = ""
+		} else if subMap, ok := v.(map[string]any); ok {
+			convertNilToEmptyString(subMap)
+		} else if slice, ok := v.([]any); ok {
+			for i, item := range slice {
+				if item == nil {
+					slice[i] = ""
+				} else if itemMap, ok := item.(map[string]any); ok {
+					convertNilToEmptyString(itemMap)
+				}
+			}
+		}
+	}
+}
+
 // syncNodeToYAMLFiles updates node information in all YAML subscription files
 func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashConfigJSON string) error {
 	if subscribeDir == "" {
@@ -123,6 +151,9 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 	if err := json.Unmarshal([]byte(clashConfigJSON), &newClashConfig); err != nil {
 		return fmt.Errorf("parse new clash config: %w", err)
 	}
+
+	// Convert nil values to empty strings (e.g., for short-id field)
+	convertNilToEmptyString(newClashConfig)
 
 	// Get all YAML files in subscribes directory
 	entries, err := os.ReadDir(subscribeDir)

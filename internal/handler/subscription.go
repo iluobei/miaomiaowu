@@ -259,6 +259,15 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 							// The sync is best-effort
 						} else {
 							log.Printf("[Subscription] External subscriptions sync completed successfully")
+
+							// Re-read the subscription file after sync to get updated nodes
+							updatedData, err := os.ReadFile(resolvedPath)
+							if err != nil {
+								log.Printf("[Subscription] Failed to re-read subscription file after sync: %v", err)
+							} else {
+								data = updatedData
+								log.Printf("[Subscription] Re-read subscription file after sync, got %d bytes", len(data))
+							}
 						}
 					}
 				}

@@ -231,7 +231,7 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 
 		node := storage.Node{
 			Username:     username,
-			RawURL:       "", // External subscription nodes don't have raw URL
+			RawURL:       sub.URL, // Save external subscription URL for tracking
 			NodeName:     proxyName,
 			Protocol:     protocol,
 			ParsedConfig: string(parsedConfigBytes),
