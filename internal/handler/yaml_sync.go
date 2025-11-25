@@ -534,16 +534,17 @@ func reorderTopLevelFields(docNode *yaml.Node) {
 	docNode.Content = newContent
 }
 
-// deleteNodeFromYAMLFiles removes node from all YAML subscription files
-func deleteNodeFromYAMLFiles(subscribeDir, nodeName string) error {
+// deleteNodeFromYAMLFilesWithLog removes node from all YAML subscription files and returns affected files
+func deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName string) ([]string, error) {
+	affectedFiles := []string{}
 	if subscribeDir == "" {
-		return fmt.Errorf("subscribe directory is empty")
+		return affectedFiles, fmt.Errorf("subscribe directory is empty")
 	}
 
 	// Get all YAML files in subscribes directory
 	entries, err := os.ReadDir(subscribeDir)
 	if err != nil {
-		return fmt.Errorf("read subscribe directory: %w", err)
+		return affectedFiles, fmt.Errorf("read subscribe directory: %w", err)
 	}
 
 	// Process each YAML file
@@ -611,6 +612,9 @@ func deleteNodeFromYAMLFiles(subscribeDir, nodeName string) error {
 		if !modified {
 			continue
 		}
+
+		// Mark this file as affected
+		affectedFiles = append(affectedFiles, filename)
 
 		// Update proxies in YAML content
 		yamlContent["proxies"] = newProxies
@@ -736,7 +740,13 @@ func deleteNodeFromYAMLFiles(subscribeDir, nodeName string) error {
 		}
 	}
 
-	return nil
+	return affectedFiles, nil
+}
+
+// deleteNodeFromYAMLFiles removes node from all YAML subscription files (legacy wrapper for compatibility)
+func deleteNodeFromYAMLFiles(subscribeDir, nodeName string) error {
+	_, err := deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName)
+	return err
 }
 
 // removeNodeFromProxyGroupsNode removes node references from proxy-groups
