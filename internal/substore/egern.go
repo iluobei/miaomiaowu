@@ -34,32 +34,32 @@ func (p *EgernProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 
 	// Supported Shadowsocks ciphers for Egern
 	supportedSSCiphers := map[string]bool{
-		"chacha20-ietf-poly1305": true,
-		"chacha20-poly1305":      true,
-		"aes-256-gcm":            true,
-		"aes-128-gcm":            true,
-		"none":                   true,
-		"tbale":                  true,
-		"rc4":                    true,
-		"rc4-md5":                true,
-		"aes-128-cfb":            true,
-		"aes-192-cfb":            true,
-		"aes-256-cfb":            true,
-		"aes-128-ctr":            true,
-		"aes-192-ctr":            true,
-		"aes-256-ctr":            true,
-		"bf-cfb":                 true,
-		"camellia-128-cfb":       true,
-		"camellia-192-cfb":       true,
-		"camellia-256-cfb":       true,
-		"cast5-cfb":              true,
-		"des-cfb":                true,
-		"idea-cfb":               true,
-		"rc2-cfb":                true,
-		"seed-cfb":               true,
-		"salsa20":                true,
-		"chacha20":               true,
-		"chacha20-ietf":          true,
+		"chacha20-ietf-poly1305":  true,
+		"chacha20-poly1305":       true,
+		"aes-256-gcm":             true,
+		"aes-128-gcm":             true,
+		"none":                    true,
+		"tbale":                   true,
+		"rc4":                     true,
+		"rc4-md5":                 true,
+		"aes-128-cfb":             true,
+		"aes-192-cfb":             true,
+		"aes-256-cfb":             true,
+		"aes-128-ctr":             true,
+		"aes-192-ctr":             true,
+		"aes-256-ctr":             true,
+		"bf-cfb":                  true,
+		"camellia-128-cfb":        true,
+		"camellia-192-cfb":        true,
+		"camellia-256-cfb":        true,
+		"cast5-cfb":               true,
+		"des-cfb":                 true,
+		"idea-cfb":                true,
+		"rc2-cfb":                 true,
+		"seed-cfb":                true,
+		"salsa20":                 true,
+		"chacha20":                true,
+		"chacha20-ietf":           true,
 		"2022-blake3-aes-128-gcm": true,
 		"2022-blake3-aes-256-gcm": true,
 	}
@@ -455,8 +455,8 @@ func (p *EgernProducer) transformHysteria2(proxy, original Proxy) Proxy {
 		result["next_hop"] = GetString(proxy, "next_hop")
 	}
 
-	if IsPresent(proxy, "sni") {
-		result["sni"] = GetString(proxy, "sni")
+	if IsPresent(proxy, "servername") {
+		result["sni"] = GetString(proxy, "servername")
 	}
 
 	if IsPresent(proxy, "skip-cert-verify") {
@@ -499,8 +499,8 @@ func (p *EgernProducer) transformTUIC(proxy, _ Proxy) Proxy {
 		result["next_hop"] = GetString(proxy, "next_hop")
 	}
 
-	if IsPresent(proxy, "sni") {
-		result["sni"] = GetString(proxy, "sni")
+	if IsPresent(proxy, "servername") {
+		result["sni"] = GetString(proxy, "servername")
 	}
 
 	// Handle alpn
@@ -555,8 +555,8 @@ func (p *EgernProducer) transformTrojan(proxy, _ Proxy) Proxy {
 		result["next_hop"] = GetString(proxy, "next_hop")
 	}
 
-	if IsPresent(proxy, "sni") {
-		result["sni"] = GetString(proxy, "sni")
+	if IsPresent(proxy, "servername") {
+		result["sni"] = GetString(proxy, "servername")
 	}
 
 	if IsPresent(proxy, "skip-cert-verify") {
@@ -668,8 +668,8 @@ func (p *EgernProducer) buildVMessTransport(proxy Proxy, network string) map[str
 			}
 		}
 		if tls {
-			if IsPresent(proxy, "sni") {
-				wsConfig["sni"] = GetString(proxy, "sni")
+			if IsPresent(proxy, "servername") {
+				wsConfig["sni"] = GetString(proxy, "servername")
 			}
 			if IsPresent(proxy, "skip-cert-verify") {
 				wsConfig["skip_tls_verify"] = GetBool(proxy, "skip-cert-verify")
@@ -748,8 +748,8 @@ func (p *EgernProducer) buildVMessTransport(proxy Proxy, network string) map[str
 	case "tcp", "":
 		if tls {
 			tlsConfig := make(map[string]interface{})
-			if IsPresent(proxy, "sni") {
-				tlsConfig["sni"] = GetString(proxy, "sni")
+			if IsPresent(proxy, "servername") {
+				tlsConfig["sni"] = GetString(proxy, "servername")
 			}
 			if IsPresent(proxy, "skip-cert-verify") {
 				tlsConfig["skip_tls_verify"] = GetBool(proxy, "skip-cert-verify")
@@ -826,8 +826,8 @@ func (p *EgernProducer) buildVLessTransport(proxy Proxy, network string, flow *s
 			}
 		}
 		if tls {
-			if IsPresent(proxy, "sni") {
-				wsConfig["sni"] = GetString(proxy, "sni")
+			if IsPresent(proxy, "servername") {
+				wsConfig["sni"] = GetString(proxy, "servername")
 			}
 			if IsPresent(proxy, "skip-cert-verify") {
 				wsConfig["skip_tls_verify"] = GetBool(proxy, "skip-cert-verify")
@@ -877,8 +877,8 @@ func (p *EgernProducer) buildVLessTransport(proxy Proxy, network string, flow *s
 
 		tcpConfig := make(map[string]interface{})
 		if tls {
-			if IsPresent(proxy, "sni") {
-				tcpConfig["sni"] = GetString(proxy, "sni")
+			if IsPresent(proxy, "servername") {
+				tcpConfig["sni"] = GetString(proxy, "servername")
 			}
 			if IsPresent(proxy, "skip-cert-verify") {
 				tcpConfig["skip_tls_verify"] = GetBool(proxy, "skip-cert-verify")

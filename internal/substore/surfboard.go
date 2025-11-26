@@ -88,26 +88,26 @@ func (p *SurfboardProducer) shadowsocks(proxy Proxy) (string, error) {
 	// Validate cipher
 	cipher := GetString(proxy, "cipher")
 	supportedCiphers := map[string]bool{
-		"aes-128-gcm":              true,
-		"aes-192-gcm":              true,
-		"aes-256-gcm":              true,
-		"chacha20-ietf-poly1305":   true,
-		"xchacha20-ietf-poly1305":  true,
-		"rc4":                      true,
-		"rc4-md5":                  true,
-		"aes-128-cfb":              true,
-		"aes-192-cfb":              true,
-		"aes-256-cfb":              true,
-		"aes-128-ctr":              true,
-		"aes-192-ctr":              true,
-		"aes-256-ctr":              true,
-		"bf-cfb":                   true,
-		"camellia-128-cfb":         true,
-		"camellia-192-cfb":         true,
-		"camellia-256-cfb":         true,
-		"salsa20":                  true,
-		"chacha20":                 true,
-		"chacha20-ietf":            true,
+		"aes-128-gcm":             true,
+		"aes-192-gcm":             true,
+		"aes-256-gcm":             true,
+		"chacha20-ietf-poly1305":  true,
+		"xchacha20-ietf-poly1305": true,
+		"rc4":                     true,
+		"rc4-md5":                 true,
+		"aes-128-cfb":             true,
+		"aes-192-cfb":             true,
+		"aes-256-cfb":             true,
+		"aes-128-ctr":             true,
+		"aes-192-ctr":             true,
+		"aes-256-ctr":             true,
+		"bf-cfb":                  true,
+		"camellia-128-cfb":        true,
+		"camellia-192-cfb":        true,
+		"camellia-256-cfb":        true,
+		"salsa20":                 true,
+		"chacha20":                true,
+		"chacha20-ietf":           true,
 	}
 
 	if !supportedCiphers[cipher] {
@@ -172,8 +172,8 @@ func (p *SurfboardProducer) trojan(proxy Proxy) (string, error) {
 	}
 
 	// TLS verification
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "skip-cert-verify") {
 		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
@@ -224,8 +224,8 @@ func (p *SurfboardProducer) vmess(proxy Proxy) (string, error) {
 	}
 
 	// TLS verification
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servernamesni") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "skip-cert-verify") {
 		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
@@ -263,8 +263,8 @@ func (p *SurfboardProducer) http(proxy Proxy) (string, error) {
 	}
 
 	// TLS verification
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "skip-cert-verify") {
 		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
@@ -302,8 +302,8 @@ func (p *SurfboardProducer) socks5(proxy Proxy) (string, error) {
 	}
 
 	// TLS verification
-	if IsPresent(proxy, "sni") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "sni")))
+	if IsPresent(proxy, "servername") {
+		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
 	}
 	if IsPresent(proxy, "skip-cert-verify") {
 		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))

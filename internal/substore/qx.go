@@ -169,7 +169,7 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}
@@ -308,7 +308,7 @@ func (p *QXProducer) trojan(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}
@@ -425,7 +425,7 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}
@@ -550,7 +550,7 @@ func (p *QXProducer) vless(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}
@@ -617,7 +617,7 @@ func (p *QXProducer) http(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}
@@ -684,7 +684,7 @@ func (p *QXProducer) socks5(proxy Proxy) (string, error) {
 		if IsPresent(proxy, "skip-cert-verify") {
 			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 		}
-		if val := GetString(proxy, "sni"); val != "" {
+		if val := GetString(proxy, "servername"); val != "" {
 			result.Append(fmt.Sprintf(",tls-host=%s", val))
 		}
 	}

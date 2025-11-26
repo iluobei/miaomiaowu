@@ -379,7 +379,7 @@ func (p *URIProducer) encodeHysteria2(proxy Proxy) (string, error) {
 	params := url.Values{}
 
 	// SNI
-	if sni := GetString(proxy, "sni"); sni != "" {
+	if sni := GetString(proxy, "servername"); sni != "" {
 		params.Set("sni", sni)
 	}
 
@@ -423,7 +423,7 @@ func (p *URIProducer) encodeHysteria(proxy Proxy) (string, error) {
 	// Peer/SNI
 	if peer := GetString(proxy, "peer"); peer != "" {
 		params.Set("peer", peer)
-	} else if sni := GetString(proxy, "sni"); sni != "" {
+	} else if sni := GetString(proxy, "servername"); sni != "" {
 		params.Set("peer", sni)
 	}
 
@@ -466,7 +466,7 @@ func (p *URIProducer) encodeTUIC(proxy Proxy) (string, error) {
 	params := url.Values{}
 
 	// SNI
-	if sni := GetString(proxy, "sni"); sni != "" {
+	if sni := GetString(proxy, "servername"); sni != "" {
 		params.Set("sni", sni)
 	}
 
