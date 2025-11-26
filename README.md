@@ -237,10 +237,10 @@ MIT License
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
 ### v0.1.9 (2025-11-26)
-🛠️ fix:调整代理组的节点顺序时不再重新加载整个代理组列表跳回顶部
-🛠️ fix:外部订阅节点信息变更一次后丢失外部订阅关联
-🛠️ fix:short-id为""时，订阅种显示为空
-🛠️ fix:(BUG) 代理组的属性顺序错误[#19](https://github.com/Jimleerx/miaomiaowu/issues/19)
+🛠️ fix:调整代理组的节点顺序时不再重新加载整个代理组列表跳回顶部  
+🛠️ fix:外部订阅节点信息变更一次后丢失外部订阅关联  
+🛠️ fix:short-id为""时，订阅种显示为空  
+🛠️ fix:(BUG) 代理组的属性顺序错误[#19](https://github.com/Jimleerx/miaomiaowu/issues/19)  
 ### v0.1.8 (2025-11-25)
 - 🌈 节点批量重命名[#15](https://github.com/Jimleerx/miaomiaowu/issues/15)
 - 🛠️ fix:节点删除后订阅里删不全，会留几个没有删掉[#17](https://github.com/Jimleerx/miaomiaowu/issues/17)
