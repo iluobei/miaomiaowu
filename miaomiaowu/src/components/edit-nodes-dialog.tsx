@@ -35,8 +35,8 @@ interface EditNodesDialogProps {
   isSaving?: boolean
   showAllNodes?: boolean
   onShowAllNodesChange?: (show: boolean) => void
-  draggedNode: { name: string; fromGroup: string | null; fromIndex: number } | null
-  onDragStart: (nodeName: string, fromGroup: string | null, fromIndex: number) => void
+  draggedNode: { name: string; fromGroup: string | null; fromIndex: number; filteredNodes?: string[] } | null
+  onDragStart: (nodeName: string, fromGroup: string | null, fromIndex: number, filteredNodes?: string[]) => void
   onDragEnd: () => void
   dragOverGroup: string | null
   onDragEnterGroup: (groupName: string) => void
@@ -54,7 +54,6 @@ interface EditNodesDialogProps {
   onConfigureChainProxy?: () => void
   cancelButtonText?: string
   saveButtonText?: string
-  onFilteredNodesChange?: (filteredNodes: string[]) => void
 }
 
 export function EditNodesDialog({
@@ -88,8 +87,7 @@ export function EditNodesDialog({
   activeCard,
   onConfigureChainProxy,
   cancelButtonText: _cancelButtonText = '取消',
-  saveButtonText = '确定',
-  onFilteredNodesChange
+  saveButtonText = '确定'
 }: EditNodesDialogProps) {
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
@@ -148,13 +146,6 @@ export function EditNodesDialog({
 
     return filtered
   }, [availableNodes, nodeNameFilter, nodeTagFilter, nodeTagMap])
-
-  // 通知父组件筛选后的节点列表
-  React.useEffect(() => {
-    if (onFilteredNodesChange) {
-      onFilteredNodesChange(filteredAvailableNodes)
-    }
-  }, [filteredAvailableNodes, onFilteredNodesChange])
 
   // 包装 handleNodeDragEnd 以保存和恢复滚动位置
   const wrappedHandleNodeDragEnd = React.useCallback(
@@ -767,7 +758,7 @@ export function EditNodesDialog({
               <CardHeader className='pb-3 flex-shrink-0'>
                 <div
                   draggable
-                  onDragStart={() => onDragStart('__AVAILABLE_NODES__', 'available', -1)}
+                  onDragStart={() => onDragStart('__AVAILABLE_NODES__', 'available', -1, filteredAvailableNodes)}
                   onDragEnd={onDragEnd}
                   className='flex items-center gap-2 cursor-move rounded-md px-2 py-1 hover:bg-accent transition-colors'
                 >

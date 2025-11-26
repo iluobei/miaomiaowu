@@ -8,6 +8,7 @@ import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
+import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -129,12 +130,69 @@ function SubscriptionGeneratorPage() {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [proxyGroups, setProxyGroups] = useState<ProxyGroup[]>([])
   const [allProxies, setAllProxies] = useState<string[]>([])
-  const [draggedItem, setDraggedItem] = useState<{ proxy: string; sourceGroup: string | null; sourceIndex: number } | null>(null)
-  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
-  const [activeGroupTitle, setActiveGroupTitle] = useState<string | null>(null)
   const [activeCard, setActiveCard] = useState<{ name: string; type: string; proxies: string[] } | null>(null)
   const [showAllNodes, setShowAllNodes] = useState(true)
   const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 使用拖拽 hook (generator 需要过滤特殊节点)
+  const {
+    draggedNode: draggedItem,
+    activeGroupTitle,
+    setActiveGroupTitle,
+    handleDragStart: handleDragStartBase,
+    handleDragEnd: handleDragEndBase,
+    handleDragEnterGroup: handleDragEnterGroupBase,
+    handleDragLeaveGroup: handleDragLeaveGroupBase,
+    handleDrop: handleDropBase,
+    handleDropToAvailable: handleDropToAvailableBase
+  } = useNodeDragDrop({
+    proxyGroups,
+    onProxyGroupsChange: setProxyGroups,
+    specialNodesToFilter: ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
+  })
+
+  // 自定义 dragOverGroup 状态（用于防抖）
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
+
+  // 适配器函数：将 generator 的参数名适配到 hook
+  const handleDragStart = (proxy: string, sourceGroup: string | null, sourceIndex: number, filteredNodes?: string[]) => {
+    handleDragStartBase(proxy, sourceGroup, sourceIndex, filteredNodes)
+  }
+
+  const handleDrop = (targetGroupName: string, targetIndex?: number) => {
+    handleDropBase(targetGroupName, targetIndex)
+  }
+
+  const handleDropToAvailable = () => {
+    handleDropToAvailableBase()
+  }
+
+  const handleDragEnd = () => {
+    handleDragEndBase()
+    setDragOverGroup(null)
+  }
+
+  // 带防抖的拖拽进入/离开处理
+  const handleDragEnterGroup = (groupName: string) => {
+    // 清除之前的定时器
+    if (dragTimeoutRef.current) {
+      clearTimeout(dragTimeoutRef.current)
+    }
+    // 立即设置高亮状态
+    setDragOverGroup(groupName)
+    handleDragEnterGroupBase(groupName)
+  }
+
+  const handleDragLeaveGroup = () => {
+    // 使用防抖延迟清除高亮，避免在节点交界处抖动
+    if (dragTimeoutRef.current) {
+      clearTimeout(dragTimeoutRef.current)
+    }
+    dragTimeoutRef.current = setTimeout(() => {
+      setDragOverGroup(null)
+    }, 50)
+    handleDragLeaveGroupBase()
+  }
 
   // 缺失节点替换对话框状态
   const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
@@ -501,10 +559,11 @@ function SubscriptionGeneratorPage() {
         proxies: group.proxies || []
       })) as ProxyGroup[]
 
-      // 获取所有可用的代理节点，添加默认的特殊节点
-      const proxies = parsedConfig.proxies?.map((p: any) => p.name) || []
+      // 获取用户选中的节点，添加默认的特殊节点
+      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      const nodeNames = selectedNodes.map(n => n.node_name)
       const specialNodes = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
-      const availableNodes = [...specialNodes, ...proxies]
+      const availableNodes = [...specialNodes, ...nodeNames]
 
       setProxyGroups(groups)
       setAllProxies(availableNodes)
@@ -762,16 +821,6 @@ function SubscriptionGeneratorPage() {
     }
   }
 
-  // 拖拽处理函数
-  const handleDragStart = (proxy: string, sourceGroup: string | null, sourceIndex: number) => {
-    setDraggedItem({ proxy, sourceGroup, sourceIndex })
-  }
-
-  const handleDragEnd = () => {
-    setDraggedItem(null)
-    setDragOverGroup(null)
-  }
-
   // DND Kit 卡片排序处理函数
   // DND Kit 辅助函数 - 解析放置目标
   const resolveTargetGroup = (overItem: any) => {
@@ -796,7 +845,7 @@ function SubscriptionGeneratorPage() {
 
     if (activeId.startsWith('group-title-')) {
       const groupName = activeId.replace('group-title-', '')
-      setDraggedItem({ proxy: groupName, sourceGroup: null, sourceIndex: -1 })
+      handleDragStart(groupName, null, -1)
       setActiveGroupTitle(groupName)
     } else {
       // 拖动整个卡片
@@ -888,126 +937,6 @@ function SubscriptionGeneratorPage() {
         }
       })
     })
-  }
-
-  const handleDragEnterGroup = (groupName: string) => {
-    // 清除之前的定时器
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current)
-    }
-    // 立即设置高亮状态
-    setDragOverGroup(groupName)
-  }
-
-  const handleDragLeaveGroup = () => {
-    // 使用防抖延迟清除高亮，避免在节点交界处抖动
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current)
-    }
-    dragTimeoutRef.current = setTimeout(() => {
-      setDragOverGroup(null)
-    }, 50)
-  }
-
-  const handleDrop = (targetGroupName: string, targetIndex?: number) => {
-    if (!draggedItem) return
-
-    const updatedGroups = [...proxyGroups]
-
-    // 特殊处理：添加到所有代理组
-    if (targetGroupName === 'all-groups') {
-      const specialNodes = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
-      // 如果拖动的是"可用节点"标题，添加所有可用节点到所有代理组
-      if (draggedItem.proxy === '__AVAILABLE_NODES__') {
-        updatedGroups.forEach(group => {
-          availableProxies.forEach(proxyName => {
-            // 过滤掉特殊节点
-            if (!group.proxies.includes(proxyName) && !specialNodes.includes(proxyName)) {
-              group.proxies.push(proxyName)
-            }
-          })
-        })
-      } else {
-        // 否则，将单个节点添加到所有代理组（排除节点自己同名的组）
-        updatedGroups.forEach(group => {
-          // 防止代理组添加到自己内部
-          if (draggedItem.proxy !== group.name && !group.proxies.includes(draggedItem.proxy)) {
-            group.proxies.push(draggedItem.proxy)
-          }
-        })
-      }
-      setProxyGroups(updatedGroups)
-      handleDragEnd()
-      return
-    }
-
-    const toGroupIndex = updatedGroups.findIndex(g => g.name === targetGroupName)
-
-    if (toGroupIndex === -1) {
-      handleDragEnd()
-      return
-    }
-
-    // 如果从代理组拖动，从源组中移除
-    if (draggedItem.sourceGroup && draggedItem.sourceGroup !== null && draggedItem.proxy !== '__AVAILABLE_NODES__') {
-      const fromGroupIndex = updatedGroups.findIndex(g => g.name === draggedItem.sourceGroup)
-      if (fromGroupIndex !== -1) {
-        updatedGroups[fromGroupIndex].proxies = updatedGroups[fromGroupIndex].proxies.filter(
-          (_, idx) => idx !== draggedItem.sourceIndex
-        )
-      }
-    }
-
-    // 添加到目标组
-    // 特殊处理：如果拖动的是"可用节点"标题，添加当前显示的所有可用节点
-    if (draggedItem.proxy === '__AVAILABLE_NODES__') {
-      const specialNodes = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
-      availableProxies.forEach(proxyName => {
-        // 过滤掉特殊节点
-        if (!updatedGroups[toGroupIndex].proxies.includes(proxyName) && !specialNodes.includes(proxyName)) {
-          updatedGroups[toGroupIndex].proxies.push(proxyName)
-        }
-      })
-    } else {
-      // 防止代理组添加到自己内部
-      if (draggedItem.proxy === targetGroupName) {
-        handleDragEnd()
-        return
-      }
-      // 检查节点是否已存在于目标组中
-      if (!updatedGroups[toGroupIndex].proxies.includes(draggedItem.proxy)) {
-        if (targetIndex !== undefined) {
-          // 插入到指定位置
-          updatedGroups[toGroupIndex].proxies.splice(targetIndex, 0, draggedItem.proxy)
-        } else {
-          // 添加到末尾
-          updatedGroups[toGroupIndex].proxies.push(draggedItem.proxy)
-        }
-      }
-    }
-
-    setProxyGroups(updatedGroups)
-    handleDragEnd()
-  }
-
-  const handleDropToAvailable = () => {
-    if (!draggedItem || !draggedItem.sourceGroup) return
-
-    // 从源组中移除
-    setProxyGroups(groups =>
-      groups.map(group => {
-        if (group.name === draggedItem.sourceGroup) {
-          return {
-            ...group,
-            proxies: group.proxies.filter((_, idx) => idx !== draggedItem.sourceIndex)
-          }
-        }
-        return group
-      })
-    )
-
-    setDraggedItem(null)
-    setDragOverGroup(null)
   }
 
   // 删除节点
@@ -1592,12 +1521,13 @@ function SubscriptionGeneratorPage() {
         title="手动分组节点"
         proxyGroups={proxyGroups}
         availableNodes={availableProxies}
+        allNodes={savedNodes.filter(n => selectedNodeIds.has(n.id))}
         onProxyGroupsChange={setProxyGroups}
         onSave={handleApplyGrouping}
         onConfigureChainProxy={handleConfigureChainProxy}
         showAllNodes={showAllNodes}
         onShowAllNodesChange={setShowAllNodes}
-        draggedNode={draggedItem ? { name: draggedItem.proxy, fromGroup: draggedItem.sourceGroup, fromIndex: draggedItem.sourceIndex } : null}
+        draggedNode={draggedItem}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         dragOverGroup={dragOverGroup}
