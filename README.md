@@ -236,6 +236,8 @@ MIT License
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
+### v0.1.9 (2025-11-26)
+
 ### v0.1.8 (2025-11-25)
 - 🌈 节点批量重命名[#15](https://github.com/Jimleerx/miaomiaowu/issues/15)
 - 🛠️ fix:节点删除后订阅里删不全，会留几个没有删掉[#17](https://github.com/Jimleerx/miaomiaowu/issues/17)
