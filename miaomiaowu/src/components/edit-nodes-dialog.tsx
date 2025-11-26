@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { GripVertical, X, Plus, Edit2, Check } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { GripVertical, X, Plus, Edit2, Check, Search } from 'lucide-react'
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
 
 interface ProxyGroup {
@@ -15,7 +16,14 @@ interface ProxyGroup {
   proxies: string[]
 }
 
+interface Node {
+  node_name: string
+  tag?: string
+  [key: string]: any
+}
+
 interface EditNodesDialogProps {
+  allNodes?: Node[]
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
@@ -46,9 +54,11 @@ interface EditNodesDialogProps {
   onConfigureChainProxy?: () => void
   cancelButtonText?: string
   saveButtonText?: string
+  onFilteredNodesChange?: (filteredNodes: string[]) => void
 }
 
 export function EditNodesDialog({
+  allNodes = [],
   open,
   onOpenChange,
   title,
@@ -78,7 +88,8 @@ export function EditNodesDialog({
   activeCard,
   onConfigureChainProxy,
   cancelButtonText: _cancelButtonText = '取消',
-  saveButtonText = '确定'
+  saveButtonText = '确定',
+  onFilteredNodesChange
 }: EditNodesDialogProps) {
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
@@ -88,8 +99,62 @@ export function EditNodesDialog({
   const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
   const [editingGroupValue, setEditingGroupValue] = useState('')
 
+  // 节点筛选状态
+  const [nodeNameFilter, setNodeNameFilter] = useState('')
+  const [nodeTagFilter, setNodeTagFilter] = useState<string>('')
+
   // 保存滚动位置
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+
+  // 提取唯一标签列表
+  const uniqueTags = useMemo(() => {
+    const tags = new Set<string>()
+    allNodes.forEach(node => {
+      if (node.tag && node.tag.trim()) {
+        tags.add(node.tag.trim())
+      }
+    })
+    return Array.from(tags).sort()
+  }, [allNodes])
+
+  // 创建节点名称到标签的映射
+  const nodeTagMap = useMemo(() => {
+    const map = new Map<string, string>()
+    allNodes.forEach(node => {
+      map.set(node.node_name, node.tag || '')
+    })
+    return map
+  }, [allNodes])
+
+  // 筛选可用节点
+  const filteredAvailableNodes = useMemo(() => {
+    let filtered = availableNodes
+
+    // 按名称筛选
+    if (nodeNameFilter.trim()) {
+      const filterLower = nodeNameFilter.toLowerCase().trim()
+      filtered = filtered.filter(nodeName =>
+        nodeName.toLowerCase().includes(filterLower)
+      )
+    }
+
+    // 按标签筛选
+    if (nodeTagFilter && nodeTagFilter !== 'all') {
+      filtered = filtered.filter(nodeName => {
+        const tag = nodeTagMap.get(nodeName) || ''
+        return tag === nodeTagFilter
+      })
+    }
+
+    return filtered
+  }, [availableNodes, nodeNameFilter, nodeTagFilter, nodeTagMap])
+
+  // 通知父组件筛选后的节点列表
+  React.useEffect(() => {
+    if (onFilteredNodesChange) {
+      onFilteredNodesChange(filteredAvailableNodes)
+    }
+  }, [filteredAvailableNodes, onFilteredNodesChange])
 
   // 包装 handleNodeDragEnd 以保存和恢复滚动位置
   const wrappedHandleNodeDragEnd = React.useCallback(
@@ -654,6 +719,40 @@ export function EditNodesDialog({
               </div>
             )}
 
+            {/* 筛选控件 */}
+            <div className='flex-shrink-0 mb-4 flex gap-2 items-center'>
+              {/* 名称筛选 */}
+              <div className='relative flex-1'>
+                <Search className='absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+                <Input
+                  placeholder='按名称筛选...'
+                  value={nodeNameFilter}
+                  onChange={(e) => setNodeNameFilter(e.target.value)}
+                  className='pl-8 h-9 text-sm'
+                />
+              </div>
+
+              {/* 标签筛选 */}
+              {uniqueTags.length > 0 && (
+                <Select
+                  value={nodeTagFilter}
+                  onValueChange={setNodeTagFilter}
+                >
+                  <SelectTrigger className='h-9 text-sm w-[120px]'>
+                    <SelectValue placeholder='所有标签' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>所有标签</SelectItem>
+                    {uniqueTags.map(tag => (
+                      <SelectItem key={tag} value={tag}>
+                        {tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
             <Card
               className={`flex flex-col flex-1 transition-all duration-75 ${
                 dragOverGroup === 'available'
@@ -676,13 +775,13 @@ export function EditNodesDialog({
                   <div>
                     <CardTitle className='text-base'>可用节点</CardTitle>
                     <CardDescription className='text-xs'>
-                      {availableNodes.length} 个节点
+                      {filteredAvailableNodes.length} / {availableNodes.length} 个节点
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className='flex-1 overflow-y-auto space-y-1 min-h-0'>
-                {availableNodes.map((proxy, idx) => (
+                {filteredAvailableNodes.map((proxy, idx) => (
                   <div
                     key={`available-${proxy}-${idx}`}
                     draggable

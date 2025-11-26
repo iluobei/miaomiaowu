@@ -102,6 +102,7 @@ function SubscribeFilesPage() {
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
   const [activeGroupTitle, setActiveGroupTitle] = useState<string | null>(null)
   const [activeCard, setActiveCard] = useState<{ name: string; type: string; proxies: string[] } | null>(null)
+  const [filteredAvailableNodes, setFilteredAvailableNodes] = useState<string[]>([])  // 筛选后的可用节点
 
   // DND Kit 状态 - 用于卡片排序
   const sensors = useSensors(
@@ -911,10 +912,10 @@ function SubscribeFilesPage() {
 
     // 特殊处理：添加到所有代理组
     if (toGroup === 'all-groups') {
-      // 如果拖动的是"可用节点"标题，添加所有可用节点到所有代理组
+      // 如果拖动的是"可用节点"标题，添加筛选后的可用节点到所有代理组
       if (draggedNode.name === '__AVAILABLE_NODES__') {
         updatedGroups.forEach(group => {
-          availableNodes.forEach(nodeName => {
+          filteredAvailableNodes.forEach(nodeName => {
             if (!group.proxies.includes(nodeName)) {
               group.proxies.push(nodeName)
             }
@@ -947,9 +948,9 @@ function SubscribeFilesPage() {
     if (toGroup !== 'available') {
       const toGroupIndex = updatedGroups.findIndex(g => g.name === toGroup)
       if (toGroupIndex !== -1) {
-        // 特殊处理：如果拖动的是"可用节点"标题，添加所有可用节点
+        // 特殊处理：如果拖动的是"可用节点"标题，添加筛选后的可用节点
         if (draggedNode.name === '__AVAILABLE_NODES__') {
-          availableNodes.forEach(nodeName => {
+          filteredAvailableNodes.forEach(nodeName => {
             if (!updatedGroups[toGroupIndex].proxies.includes(nodeName)) {
               updatedGroups[toGroupIndex].proxies.push(nodeName)
             }
@@ -1618,6 +1619,7 @@ function SubscribeFilesPage() {
         title={`编辑节点 - ${editingNodesFile?.name}`}
         proxyGroups={proxyGroups}
         availableNodes={availableNodes}
+        allNodes={nodesQuery.data?.nodes || []}
         onProxyGroupsChange={setProxyGroups}
         onSave={handleSaveNodes}
         isSaving={saveConfigMutation.isPending}
@@ -1640,6 +1642,7 @@ function SubscribeFilesPage() {
         activeGroupTitle={activeGroupTitle}
         activeCard={activeCard}
         saveButtonText='应用并保存'
+        onFilteredNodesChange={setFilteredAvailableNodes}
       />
 
       {/* 缺失节点替换对话框 */}
