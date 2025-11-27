@@ -88,13 +88,7 @@ func NewApplyCustomRulesHandler(repo *storage.TrafficRepository) http.Handler {
 
 // applyCustomRulesToYaml applies enabled custom rules to the YAML data
 func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository, yamlData []byte) ([]byte, error) {
-	// Parse YAML data
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(yamlData, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	// Get enabled custom rules
+	// Get enabled custom rules first
 	rules, err := repo.ListEnabledCustomRules(ctx, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get custom rules: %w", err)
@@ -102,6 +96,18 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 
 	if len(rules) == 0 {
 		return yamlData, nil
+	}
+
+	// Parse YAML data as yaml.Node to preserve types
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// Also parse as map for easier manipulation
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(yamlData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
 	// Apply each rule based on its type
@@ -240,8 +246,15 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 		}
 	}
 
-	// Marshal back to YAML with proper field ordering
-	modifiedData, err := marshalWithFieldOrder(config)
+	// Update the rootNode with modified config values
+	if len(rootNode.Content) > 0 {
+		updateYAMLNodeFromMap(rootNode.Content[0], config)
+		// Apply field ordering
+		reorderYAMLFields(rootNode.Content[0])
+	}
+
+	// Marshal back to bytes
+	modifiedData, err := yaml.Marshal(&rootNode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal modified YAML: %w", err)
 	}
@@ -249,27 +262,165 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 	return modifiedData, nil
 }
 
-// marshalWithFieldOrder marshals the config to YAML with fields in the correct order
-func marshalWithFieldOrder(config map[string]interface{}) ([]byte, error) {
-	// First marshal to get a proper YAML structure
-	tempData, err := yaml.Marshal(config)
-	if err != nil {
-		return nil, err
+// updateYAMLNodeFromMap updates yaml.Node fields from map values while preserving node styles
+func updateYAMLNodeFromMap(docNode *yaml.Node, config map[string]interface{}) {
+	if docNode.Kind != yaml.MappingNode {
+		return
 	}
 
-	// Parse into yaml.Node to manipulate field order
-	var rootNode yaml.Node
-	if err := yaml.Unmarshal(tempData, &rootNode); err != nil {
-		return nil, err
+	// Build a map of existing fields
+	existingFields := make(map[string]*yaml.Node) // fieldName -> valueNode
+	for i := 0; i < len(docNode.Content); i += 2 {
+		if i+1 >= len(docNode.Content) {
+			break
+		}
+		keyNode := docNode.Content[i]
+		valueNode := docNode.Content[i+1]
+		existingFields[keyNode.Value] = valueNode
 	}
 
-	// Apply field ordering
-	if len(rootNode.Content) > 0 {
-		reorderYAMLFields(rootNode.Content[0])
+	// Update existing fields and add new ones
+	for key, value := range config {
+		if valueNode, exists := existingFields[key]; exists {
+			// Update existing value node
+			updateYAMLValueNode(valueNode, value)
+		} else {
+			// Add new field at the end
+			keyNode := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: key,
+			}
+			valueNode := encodeYAMLValue(value)
+			docNode.Content = append(docNode.Content, keyNode, valueNode)
+			existingFields[key] = valueNode
+		}
+	}
+}
+
+// updateYAMLValueNode updates a yaml.Node's value from an interface{} while preserving style
+func updateYAMLValueNode(node *yaml.Node, newValue interface{}) {
+	if node == nil {
+		return
 	}
 
-	// Marshal back to bytes
-	return yaml.Marshal(&rootNode)
+	switch v := newValue.(type) {
+	case string:
+		if node.Kind == yaml.ScalarNode {
+			node.Value = v
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.Value = v
+		}
+	case int:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%d", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%d", v))
+		}
+	case int64:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%d", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%d", v))
+		}
+	case float64:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%v", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%v", v))
+		}
+	case bool:
+		if node.Kind == yaml.ScalarNode {
+			if v {
+				node.Value = "true"
+			} else {
+				node.Value = "false"
+			}
+		} else {
+			node.Kind = yaml.ScalarNode
+			if v {
+				node.Value = "true"
+			} else {
+				node.Value = "false"
+			}
+		}
+	case []interface{}:
+		// Rebuild array
+		node.Kind = yaml.SequenceNode
+		node.Content = nil
+		for _, item := range v {
+			node.Content = append(node.Content, encodeYAMLValue(item))
+		}
+	case map[string]interface{}:
+		// Rebuild or update map
+		if node.Kind == yaml.MappingNode {
+			updateYAMLNodeFromMap(node, v)
+		} else {
+			node.Kind = yaml.MappingNode
+			node.Content = nil
+			for k, val := range v {
+				keyNode := &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Value: k,
+				}
+				valueNode := encodeYAMLValue(val)
+				node.Content = append(node.Content, keyNode, valueNode)
+			}
+		}
+	}
+}
+
+// encodeYAMLValue converts a Go value to a yaml.Node
+func encodeYAMLValue(value interface{}) *yaml.Node {
+	node := &yaml.Node{}
+
+	switch v := value.(type) {
+	case string:
+		node.Kind = yaml.ScalarNode
+		if v == "" {
+			node.Tag = "!!str"
+		}
+		node.Value = v
+	case int:
+		node.Kind = yaml.ScalarNode
+		node.SetString(fmt.Sprintf("%d", v))
+	case int64:
+		node.Kind = yaml.ScalarNode
+		node.SetString(fmt.Sprintf("%d", v))
+	case float64:
+		node.Kind = yaml.ScalarNode
+		node.SetString(fmt.Sprintf("%v", v))
+	case bool:
+		node.Kind = yaml.ScalarNode
+		if v {
+			node.Value = "true"
+		} else {
+			node.Value = "false"
+		}
+	case []interface{}:
+		node.Kind = yaml.SequenceNode
+		for _, item := range v {
+			node.Content = append(node.Content, encodeYAMLValue(item))
+		}
+	case map[string]interface{}:
+		node.Kind = yaml.MappingNode
+		for k, val := range v {
+			keyNode := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: k,
+			}
+			node.Content = append(node.Content, keyNode)
+			node.Content = append(node.Content, encodeYAMLValue(val))
+		}
+	default:
+		node.Kind = yaml.ScalarNode
+		node.SetString(fmt.Sprintf("%v", v))
+	}
+
+	return node
 }
 
 // reorderYAMLFields reorders YAML fields according to priorityFields

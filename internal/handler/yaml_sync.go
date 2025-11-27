@@ -14,6 +14,12 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 	// Priority fields that should appear first
 	priorityFields := []string{"name", "type", "server", "port"}
 
+	// Create maps to store fields
+	fieldMap := make(map[string]any)
+	for k, v := range config {
+		fieldMap[k] = v
+	}
+
 	// Create a yaml.Node with mapping kind
 	node := &yaml.Node{
 		Kind: yaml.MappingNode,
@@ -21,7 +27,7 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 
 	// Add priority fields first
 	for _, key := range priorityFields {
-		if value, ok := config[key]; ok {
+		if value, ok := fieldMap[key]; ok {
 			// Add key node
 			keyNode := &yaml.Node{
 				Kind:  yaml.ScalarNode,
@@ -36,7 +42,7 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 	}
 
 	// Add remaining fields
-	for key, value := range config {
+	for key, value := range fieldMap {
 		// Skip priority fields (already added)
 		isPriority := false
 		for _, pf := range priorityFields {
@@ -62,6 +68,156 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 	}
 
 	return node
+}
+
+// updateProxyNodeFields updates an existing proxy node with new field values while preserving original node styles
+func updateProxyNodeFields(proxyNode *yaml.Node, newConfig map[string]any) {
+	if proxyNode == nil || proxyNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Build a map of existing field key nodes
+	existingFields := make(map[string]*yaml.Node) // fieldName -> valueNode
+	for i := 0; i < len(proxyNode.Content); i += 2 {
+		if i+1 >= len(proxyNode.Content) {
+			break
+		}
+		keyNode := proxyNode.Content[i]
+		valueNode := proxyNode.Content[i+1]
+		existingFields[keyNode.Value] = valueNode
+	}
+
+	// Update existing value nodes with new values, preserving their style
+	for key, newValue := range newConfig {
+		if valueNode, exists := existingFields[key]; exists {
+			// Update the existing value node's value, preserving its Kind and Style
+			updateValueNode(valueNode, newValue)
+		}
+	}
+}
+
+// reorderProxyNodeFields reorders fields in a proxy node to put priority fields first
+func reorderProxyNodeFields(proxyNode *yaml.Node) {
+	if proxyNode == nil || proxyNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	priorityFields := []string{"name", "type", "server", "port"}
+
+	// Build a map of all fields
+	fieldMap := make(map[string][2]*yaml.Node) // fieldName -> [keyNode, valueNode]
+	remainingFields := [][2]*yaml.Node{}
+
+	for i := 0; i < len(proxyNode.Content); i += 2 {
+		if i+1 >= len(proxyNode.Content) {
+			break
+		}
+		keyNode := proxyNode.Content[i]
+		valueNode := proxyNode.Content[i+1]
+
+		// Check if this is a priority field
+		isPriority := false
+		for _, pf := range priorityFields {
+			if keyNode.Value == pf {
+				fieldMap[pf] = [2]*yaml.Node{keyNode, valueNode}
+				isPriority = true
+				break
+			}
+		}
+
+		if !isPriority {
+			remainingFields = append(remainingFields, [2]*yaml.Node{keyNode, valueNode})
+		}
+	}
+
+	// Rebuild content with priority fields first
+	newContent := []*yaml.Node{}
+
+	// Add priority fields in order
+	for _, fieldName := range priorityFields {
+		if nodes, exists := fieldMap[fieldName]; exists {
+			newContent = append(newContent, nodes[0], nodes[1])
+		}
+	}
+
+	// Add remaining fields
+	for _, nodes := range remainingFields {
+		newContent = append(newContent, nodes[0], nodes[1])
+	}
+
+	proxyNode.Content = newContent
+}
+
+// updateValueNode updates a yaml.Node's value while trying to preserve its original type/style
+func updateValueNode(node *yaml.Node, newValue any) {
+	if node == nil {
+		return
+	}
+
+	switch v := newValue.(type) {
+	case string:
+		// Preserve the node's kind and tag if it's already a scalar
+		if node.Kind == yaml.ScalarNode {
+			node.Value = v
+			// Keep existing Tag unless it's empty and the value needs explicit typing
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.Value = v
+		}
+	case int:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%d", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%d", v))
+		}
+	case int64:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%d", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%d", v))
+		}
+	case float64:
+		if node.Kind == yaml.ScalarNode {
+			node.SetString(fmt.Sprintf("%v", v))
+		} else {
+			node.Kind = yaml.ScalarNode
+			node.SetString(fmt.Sprintf("%v", v))
+		}
+	case bool:
+		if node.Kind == yaml.ScalarNode {
+			if v {
+				node.Value = "true"
+			} else {
+				node.Value = "false"
+			}
+		} else {
+			node.Kind = yaml.ScalarNode
+			if v {
+				node.Value = "true"
+			} else {
+				node.Value = "false"
+			}
+		}
+	case map[string]any:
+		// For nested objects, recursively update
+		if node.Kind == yaml.MappingNode {
+			updateProxyNodeFields(node, v)
+		}
+		// Otherwise, we'd need to rebuild the entire structure
+	case []any:
+		// For arrays, we need to rebuild
+		if node.Kind != yaml.SequenceNode {
+			node.Kind = yaml.SequenceNode
+			node.Content = nil
+		}
+		// Clear and rebuild content
+		node.Content = nil
+		for _, item := range v {
+			node.Content = append(node.Content, encodeValue(item))
+		}
+	}
 }
 
 // encodeValue converts a Go value to a yaml.Node
@@ -301,15 +457,11 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 
 		// Re-read the file as yaml.Node to preserve structure
 		var rootNode yaml.Node
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			continue
-		}
-		if err := yaml.Unmarshal(fileContent, &rootNode); err != nil {
+		if err := yaml.Unmarshal(data, &rootNode); err != nil {
 			continue
 		}
 
-		// Find and update the proxies section with ordered fields
+		// Find and update the proxies section, preserving original node styles
 		if rootNode.Kind == yaml.DocumentNode && len(rootNode.Content) > 0 {
 			docNode := rootNode.Content[0]
 			if docNode.Kind == yaml.MappingNode {
@@ -320,16 +472,40 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 					}
 					keyNode := docNode.Content[i]
 					if keyNode.Value == "proxies" {
-						// Replace the proxies sequence with ordered version
-						orderedProxiesSeq := &yaml.Node{
-							Kind: yaml.SequenceNode,
-						}
-						for _, proxy := range newProxies {
-							if proxyMap, ok := proxy.(map[string]any); ok {
-								orderedProxiesSeq.Content = append(orderedProxiesSeq.Content, reorderProxyFields(proxyMap))
+						proxiesNode := docNode.Content[i+1]
+						if proxiesNode.Kind == yaml.SequenceNode {
+							// Update proxies in-place to preserve node styles
+							for j, proxyNode := range proxiesNode.Content {
+								if proxyNode.Kind != yaml.MappingNode {
+									continue
+								}
+
+								// Find the name field in this proxy node
+								var proxyName string
+								for k := 0; k < len(proxyNode.Content); k += 2 {
+									if k+1 >= len(proxyNode.Content) {
+										break
+									}
+									if proxyNode.Content[k].Value == "name" {
+										proxyName = proxyNode.Content[k+1].Value
+										break
+									}
+								}
+
+								// If this proxy matches the one being updated
+								if proxyName == oldNodeName {
+									if nameChanged {
+										// Replace entire proxy node with new config
+										proxiesNode.Content[j] = reorderProxyFields(newClashConfig)
+									} else {
+										// Update fields in-place, preserving original node styles
+										updateProxyNodeFields(proxyNode, newClashConfig)
+										// Reorder fields to put priority fields first
+										reorderProxyNodeFields(proxyNode)
+									}
+								}
 							}
 						}
-						docNode.Content[i+1] = orderedProxiesSeq
 						break
 					}
 				}
@@ -701,11 +877,7 @@ func deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName string) ([]string, er
 
 		// Re-read the file as yaml.Node to preserve structure
 		var rootNode yaml.Node
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			continue
-		}
-		if err := yaml.Unmarshal(fileContent, &rootNode); err != nil {
+		if err := yaml.Unmarshal(data, &rootNode); err != nil {
 			continue
 		}
 
@@ -713,23 +885,42 @@ func deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName string) ([]string, er
 		if rootNode.Kind == yaml.DocumentNode && len(rootNode.Content) > 0 {
 			docNode := rootNode.Content[0]
 			if docNode.Kind == yaml.MappingNode {
-				// Update proxies section
+				// Update proxies section - remove nodes with matching name
 				for i := 0; i < len(docNode.Content); i += 2 {
 					if i+1 >= len(docNode.Content) {
 						break
 					}
 					keyNode := docNode.Content[i]
 					if keyNode.Value == "proxies" {
-						// Replace the proxies sequence
-						orderedProxiesSeq := &yaml.Node{
-							Kind: yaml.SequenceNode,
-						}
-						for _, proxy := range newProxies {
-							if proxyMap, ok := proxy.(map[string]any); ok {
-								orderedProxiesSeq.Content = append(orderedProxiesSeq.Content, reorderProxyFields(proxyMap))
+						proxiesNode := docNode.Content[i+1]
+						if proxiesNode.Kind == yaml.SequenceNode {
+							// Filter out proxies with matching name, preserving others
+							newContent := []*yaml.Node{}
+							for _, proxyNode := range proxiesNode.Content {
+								if proxyNode.Kind != yaml.MappingNode {
+									newContent = append(newContent, proxyNode)
+									continue
+								}
+
+								// Find the name field in this proxy node
+								var proxyName string
+								for k := 0; k < len(proxyNode.Content); k += 2 {
+									if k+1 >= len(proxyNode.Content) {
+										break
+									}
+									if proxyNode.Content[k].Value == "name" {
+										proxyName = proxyNode.Content[k+1].Value
+										break
+									}
+								}
+
+								// Keep proxy if name doesn't match
+								if proxyName != nodeName {
+									newContent = append(newContent, proxyNode)
+								}
 							}
+							proxiesNode.Content = newContent
 						}
-						docNode.Content[i+1] = orderedProxiesSeq
 						break
 					}
 				}
