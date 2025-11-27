@@ -418,7 +418,9 @@ function SubscribeFilesPage() {
     try {
       const parsed = parseYAML(nodesConfigQuery.data.content) as any
       if (parsed && parsed['proxy-groups']) {
+        // 保留代理组的所有原始属性
         const groups = parsed['proxy-groups'].map((group: any) => ({
+          ...group, // 保留所有原始属性
           name: group.name || '',
           type: group.type || '',
           proxies: Array.isArray(group.proxies) ? group.proxies : [],
@@ -729,10 +731,10 @@ function SubscribeFilesPage() {
 
       // 更新代理组
       if (parsed && parsed['proxy-groups']) {
+        // 保留代理组的所有原始属性，只更新 proxies
         parsed['proxy-groups'] = proxyGroups.map(group => ({
-          name: group.name,
-          type: group.type,
-          proxies: group.proxies,
+          ...group, // 保留所有原始属性（如 url, interval, strategy 等）
+          proxies: group.proxies, // 更新 proxies
         }))
       }
 
@@ -1017,7 +1019,9 @@ function SubscribeFilesPage() {
           try {
             const parsed = parseYAML(nodesConfigQuery.data.content) as any
             if (parsed && parsed['proxy-groups']) {
+              // 保留代理组的所有原始属性
               const groups = parsed['proxy-groups'].map((group: any) => ({
+                ...group, // 保留所有原始属性
                 name: group.name || '',
                 type: group.type || '',
                 proxies: Array.isArray(group.proxies) ? group.proxies : [],
