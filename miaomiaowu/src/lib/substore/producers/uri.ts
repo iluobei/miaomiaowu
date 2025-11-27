@@ -239,6 +239,12 @@ export default function URI_Producer(): Producer {
         delete proxy.id;
         delete proxy.resolved;
         delete proxy['no-resolve'];
+
+        // 将 servername 转换为 sni
+        if (proxy.servername && !proxy.sni) {
+            proxy.sni = proxy.servername;
+        }
+
         for (const key in proxy) {
             if (proxy[key] == null) {
                 delete proxy[key];
