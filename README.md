@@ -236,6 +236,9 @@ MIT License
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
+### v0.2.0 (2025-11-27)
+- 🌈 可用节点支持名称与标签筛选[#21](https://github.com/Jimleerx/miaomiaowu/issues/21)
+- 🛠️ fix:订阅管理节点操作后，负载均衡相关参数消失[#22](https://github.com/Jimleerx/miaomiaowu/issues/22) 
 ### v0.1.9 (2025-11-26)
 - 🛠️ fix:调整代理组的节点顺序时不再重新加载整个代理组列表跳回顶部  
 - 🛠️ fix:外部订阅节点信息变更一次后丢失外部订阅关联  
