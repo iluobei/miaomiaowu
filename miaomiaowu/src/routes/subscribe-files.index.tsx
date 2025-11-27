@@ -784,7 +784,7 @@ function SubscribeFilesPage() {
 
     if (activeId.startsWith('group-title-')) {
       const groupName = activeId.replace('group-title-', '')
-      setDraggedNode({ name: groupName, fromGroup: null, fromIndex: -1 })
+      handleDragStart(groupName, null, -1)
       setActiveGroupTitle(groupName)
     } else {
       // 拖动整个卡片

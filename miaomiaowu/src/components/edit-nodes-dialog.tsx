@@ -325,20 +325,20 @@ export function EditNodesDialog({
 
     const style: React.CSSProperties = {
       transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-      opacity: isDragging ? 0 : 1,
+      opacity: isDragging ? 0.5 : 1,
     }
 
     const isEditing = editingGroupName === groupName
 
     return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        className='flex items-center gap-2 cursor-move group/title'
-      >
-        <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
+      <div ref={setNodeRef} style={style} className='flex items-center gap-2 group/title'>
+        <div
+          {...attributes}
+          {...listeners}
+          className='cursor-move'
+        >
+          <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
+        </div>
         {isEditing ? (
           <div className='flex items-center gap-1 flex-1 min-w-0'>
             <Input
@@ -489,7 +489,7 @@ export function EditNodesDialog({
         onDragLeave={onDragLeaveGroup}
         onDrop={handleDropWithPosition}
       >
-        <CardHeader className='pb-3' {...(isEditing ? {} : attributes)} {...(isEditing ? {} : listeners)}>
+        <CardHeader className='pb-3'>
           {/* 顶部居中拖动按钮 */}
           <div
             className={`flex justify-center -mt-2 mb-2 ${
