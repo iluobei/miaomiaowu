@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Wand2 } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import {
@@ -139,7 +140,7 @@ function SubscribeFilesPage() {
   // 缺失节点替换对话框状态
   const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
   const [missingNodes, setMissingNodes] = useState<string[]>([])
-  const [replacementChoice, setReplacementChoice] = useState<'PROXY' | 'DIRECT'>('DIRECT')
+  const [replacementChoice, setReplacementChoice] = useState<string>('DIRECT')
   const [pendingConfigAfterSave, setPendingConfigAfterSave] = useState('')
 
   // 导入表单
@@ -1572,21 +1573,46 @@ function SubscribeFilesPage() {
             {/* 替换选项 */}
             <div className='space-y-2'>
               <Label>选择替换为：</Label>
-              <div className='flex gap-2'>
+              <div className='grid grid-cols-3 gap-2'>
                 <Button
                   variant={replacementChoice === 'DIRECT' ? 'default' : 'outline'}
                   onClick={() => setReplacementChoice('DIRECT')}
-                  className='flex-1'
+                  className='w-full'
                 >
                   DIRECT
                 </Button>
                 <Button
                   variant={replacementChoice === 'PROXY' ? 'default' : 'outline'}
                   onClick={() => setReplacementChoice('PROXY')}
-                  className='flex-1'
+                  className='w-full'
                 >
                   PROXY
                 </Button>
+                <Button
+                  variant={replacementChoice === 'REJECT' ? 'default' : 'outline'}
+                  onClick={() => setReplacementChoice('REJECT')}
+                  className='w-full'
+                >
+                  REJECT
+                </Button>
+                {(() => {
+                  try {
+                    const parsedConfig = parseYAML(pendingConfigAfterSave) as any
+                    const proxyGroupNames = parsedConfig['proxy-groups']?.map((g: any) => g.name) || []
+                    return proxyGroupNames.map((name: string) => (
+                      <Button
+                        key={name}
+                        variant={replacementChoice === name ? 'default' : 'outline'}
+                        onClick={() => setReplacementChoice(name)}
+                        className='w-full'
+                      >
+                        {name}
+                      </Button>
+                    ))
+                  } catch {
+                    return null
+                  }
+                })()}
               </div>
               <p className='text-xs text-muted-foreground'>
                 将把上述缺失的节点替换为 <span className='font-semibold'>{replacementChoice}</span>
