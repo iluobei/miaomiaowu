@@ -68,7 +68,7 @@ func reorderProxyFields(config map[string]any) *yaml.Node {
 func encodeValue(value any) *yaml.Node {
 	node := &yaml.Node{}
 
-	// Handle nil values - convert to empty string for fields like short-id
+	// 处理历史BUG把short-id: "" 保存成short-id: null, 导致short-id输出为 <nil>
 	if value == nil {
 		node.Kind = yaml.ScalarNode
 		node.Tag = "!!str"
@@ -79,7 +79,10 @@ func encodeValue(value any) *yaml.Node {
 	switch v := value.(type) {
 	case string:
 		node.Kind = yaml.ScalarNode
-		node.Tag = "!!str"  // Explicitly mark as string to preserve empty strings
+		// 仅对空值设置!!str标签, 防止给数值类型加上双引号
+		if v == "" {
+			node.Tag = "!!str"
+		}
 		node.Value = v
 	case int:
 		node.Kind = yaml.ScalarNode
