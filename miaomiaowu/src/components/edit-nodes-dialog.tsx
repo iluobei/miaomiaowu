@@ -197,6 +197,38 @@ export function EditNodesDialog({
     setNewGroupName(name)
   }
 
+  // 包装删除节点函数，保存和恢复滚动位置
+  const wrappedRemoveNodeFromGroup = React.useCallback(
+    (groupName: string, nodeIndex: number) => {
+      const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+
+      onRemoveNodeFromGroup(groupName, nodeIndex)
+
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollTop
+        }
+      })
+    },
+    [onRemoveNodeFromGroup]
+  )
+
+  // 包装删除代理组函数，保存和恢复滚动位置
+  const wrappedRemoveGroup = React.useCallback(
+    (groupName: string) => {
+      const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+
+      onRemoveGroup(groupName)
+
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollTop
+        }
+      })
+    },
+    [onRemoveGroup]
+  )
+
   // 处理代理组改名
   const handleRenameGroup = (oldName: string, newName: string) => {
     const trimmedName = newName.trim()
@@ -294,7 +326,7 @@ export function EditNodesDialog({
           className='h-6 w-6 p-0 flex-shrink-0'
           onClick={(e) => {
             e.stopPropagation()
-            onRemoveNodeFromGroup(groupName, index)
+            wrappedRemoveNodeFromGroup(groupName, index)
           }}
         >
           <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
@@ -518,7 +550,7 @@ export function EditNodesDialog({
               className='h-6 w-6 p-0 flex-shrink-0'
               onClick={(e) => {
                 e.stopPropagation()
-                onRemoveGroup(group.name)
+                wrappedRemoveGroup(group.name)
               }}
             >
               <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
