@@ -236,6 +236,14 @@ MIT License
 - 问题反馈：[GitHub Issues](https://github.com/Jimleerx/miaomiaowu/issues)
 - 功能建议：[GitHub Discussions](https://github.com/Jimleerx/miaomiaowu/discussions)
 ## 更新日志
+<details>
+<summary>更新日志</summary>
+
+### v0.2.1 (2025-11-28)
+- 🌈 规则引用了不存在的代理组时支持替换为任意代理组
+- 🛠️ fix:节点列表快速复制节点为uri格式时缺少sni参数
+- 🛠️ fix:【BUG】端口配置莫名出现双引号[#22](https://github.com/Jimleerx/miaomiaowu/issues/22)
+- 🛠️ fix:处理yaml时没有保持原始格式[#22](https://github.com/Jimleerx/miaomiaowu/issues/22)
 ### v0.2.0 (2025-11-27)
 - 🌈 可用节点支持名称与标签筛选[#21](https://github.com/Jimleerx/miaomiaowu/issues/21)
 - 🛠️ fix:订阅管理节点操作后，负载均衡相关参数消失[#22](https://github.com/Jimleerx/miaomiaowu/issues/22) 
@@ -327,3 +335,5 @@ MIT License
 - 流量监控与订阅管理
 - 用户权限管理
 - 首次启动初始化向导
+
+</details>
