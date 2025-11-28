@@ -11,6 +11,12 @@ BUILD_DIR="build"
 FRONTEND_DIR="miaomiaowu"
 OUTPUT_DIR="${BUILD_DIR}/release"
 
+# 0. 同步版本号
+echo ""
+echo "[0/3] 同步版本号..."
+bash scripts/sync-version.sh
+echo "版本号同步完成 ✓"
+
 # 清理旧的构建目录
 if [ -d "$BUILD_DIR" ]; then
     echo "清理旧的构建文件..."

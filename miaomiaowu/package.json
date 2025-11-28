@@ -1,7 +1,7 @@
 {
   "name": "miaomiaowu",
   "private": false,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "knip": "knip"
+    "knip": "knip",
+    "sync-version": "bash ../scripts/sync-version.sh",
+    "version": "npm run sync-version && git add -A"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
