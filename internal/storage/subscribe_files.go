@@ -20,7 +20,7 @@ func (r *TrafficRepository) ListSubscribeFiles(ctx context.Context) ([]Subscribe
 		return nil, errors.New("traffic repository not initialized")
 	}
 
-	rows, err := r.db.QueryContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), created_at, updated_at FROM subscribe_files ORDER BY created_at DESC`)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), COALESCE(auto_sync_custom_rules, 0), created_at, updated_at FROM subscribe_files ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list subscribe files: %w", err)
 	}
@@ -29,9 +29,11 @@ func (r *TrafficRepository) ListSubscribeFiles(ctx context.Context) ([]Subscribe
 	var files []SubscribeFile
 	for rows.Next() {
 		var file SubscribeFile
-		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &file.CreatedAt, &file.UpdatedAt); err != nil {
+		var autoSync int
+		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscribe file: %w", err)
 		}
+		file.AutoSyncCustomRules = autoSync != 0
 		files = append(files, file)
 	}
 
@@ -53,13 +55,15 @@ func (r *TrafficRepository) GetSubscribeFileByID(ctx context.Context, id int64) 
 		return file, errors.New("subscribe file id is required")
 	}
 
-	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), created_at, updated_at FROM subscribe_files WHERE id = ? LIMIT 1`, id)
-	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &file.CreatedAt, &file.UpdatedAt); err != nil {
+	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), COALESCE(auto_sync_custom_rules, 0), created_at, updated_at FROM subscribe_files WHERE id = ? LIMIT 1`, id)
+	var autoSync int
+	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return file, ErrSubscribeFileNotFound
 		}
 		return file, fmt.Errorf("get subscribe file: %w", err)
 	}
+	file.AutoSyncCustomRules = autoSync != 0
 
 	return file, nil
 }
@@ -76,13 +80,15 @@ func (r *TrafficRepository) GetSubscribeFileByName(ctx context.Context, name str
 		return file, errors.New("subscribe file name is required")
 	}
 
-	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), created_at, updated_at FROM subscribe_files WHERE name = ? LIMIT 1`, name)
-	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &file.CreatedAt, &file.UpdatedAt); err != nil {
+	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), COALESCE(auto_sync_custom_rules, 0), created_at, updated_at FROM subscribe_files WHERE name = ? LIMIT 1`, name)
+	var autoSync int
+	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return file, ErrSubscribeFileNotFound
 		}
 		return file, fmt.Errorf("get subscribe file by name: %w", err)
 	}
+	file.AutoSyncCustomRules = autoSync != 0
 
 	return file, nil
 }
@@ -99,13 +105,15 @@ func (r *TrafficRepository) GetSubscribeFileByFilename(ctx context.Context, file
 		return file, errors.New("subscribe file filename is required")
 	}
 
-	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), created_at, updated_at FROM subscribe_files WHERE filename = ? LIMIT 1`, filename)
-	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &file.CreatedAt, &file.UpdatedAt); err != nil {
+	row := r.db.QueryRowContext(ctx, `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), COALESCE(auto_sync_custom_rules, 0), created_at, updated_at FROM subscribe_files WHERE filename = ? LIMIT 1`, filename)
+	var autoSync int
+	if err := row.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return file, ErrSubscribeFileNotFound
 		}
 		return file, fmt.Errorf("get subscribe file by filename: %w", err)
 	}
+	file.AutoSyncCustomRules = autoSync != 0
 
 	return file, nil
 }
@@ -198,8 +206,12 @@ func (r *TrafficRepository) UpdateSubscribeFile(ctx context.Context, file Subscr
 		return SubscribeFile{}, errors.New("subscribe file filename is required")
 	}
 
-	res, err := r.db.ExecContext(ctx, `UPDATE subscribe_files SET name = ?, description = ?, url = ?, type = ?, filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		file.Name, file.Description, file.URL, file.Type, file.Filename, file.ID)
+	var autoSyncInt int
+	if file.AutoSyncCustomRules {
+		autoSyncInt = 1
+	}
+	res, err := r.db.ExecContext(ctx, `UPDATE subscribe_files SET name = ?, description = ?, url = ?, type = ?, filename = ?, auto_sync_custom_rules = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		file.Name, file.Description, file.URL, file.Type, file.Filename, autoSyncInt, file.ID)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return SubscribeFile{}, ErrSubscribeFileExists

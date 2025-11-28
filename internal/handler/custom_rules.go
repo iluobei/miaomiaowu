@@ -1,9 +1,14 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -230,6 +235,9 @@ func handleCreateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(response)
+
+	// Trigger auto-sync for subscribe files with auto-sync enabled
+	go triggerAutoSync(repo, rule.ID)
 }
 
 func handleUpdateCustomRule(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, id int64) {
@@ -293,6 +301,9 @@ func handleUpdateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(response)
+
+	// Trigger auto-sync for subscribe files with auto-sync enabled
+	go triggerAutoSync(repo, rule.ID)
 }
 
 func handleDeleteCustomRule(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, id int64) {
@@ -306,4 +317,54 @@ func handleDeleteCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// triggerAutoSync triggers automatic synchronization of custom rules to subscribe files with auto-sync enabled
+func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) {
+	ctx := context.Background()
+
+	// Get all subscribe files with auto-sync enabled
+	files, err := repo.GetSubscribeFilesWithAutoSync(ctx)
+	if err != nil {
+		log.Printf("[AutoSync] Failed to get subscribe files with auto-sync: %v", err)
+		return
+	}
+
+	if len(files) == 0 {
+		return
+	}
+
+	log.Printf("[AutoSync] Syncing custom rule %d to %d subscribe files", ruleID, len(files))
+
+	// Sync to each file
+	for _, file := range files {
+		if err := syncCustomRulesToFile(ctx, repo, file); err != nil {
+			log.Printf("[AutoSync] Failed to sync to file %s (ID: %d): %v", file.Filename, file.ID, err)
+		} else {
+			log.Printf("[AutoSync] Successfully synced to file %s (ID: %d)", file.Filename, file.ID)
+		}
+	}
+}
+
+// syncCustomRulesToFile synchronizes all custom rules to a specific subscribe file
+func syncCustomRulesToFile(ctx context.Context, repo *storage.TrafficRepository, file storage.SubscribeFile) error {
+	// Read the subscribe file
+	filePath := filepath.Join("subscribes", file.Filename)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+
+	// Apply custom rules using the smart algorithm
+	modified, err := applyCustomRulesToYamlSmart(ctx, repo, data, file.ID)
+	if err != nil {
+		return fmt.Errorf("apply custom rules: %w", err)
+	}
+
+	// Write back to file
+	if err := os.WriteFile(filePath, modified, 0644); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+
+	return nil
 }

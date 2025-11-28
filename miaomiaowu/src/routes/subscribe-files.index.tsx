@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Wand2 } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import {
@@ -52,6 +53,7 @@ type SubscribeFile = {
   description: string
   type: 'create' | 'import' | 'upload'
   filename: string
+  auto_sync_custom_rules: boolean
   created_at: string
   updated_at: string
   latest_version?: number
@@ -375,6 +377,22 @@ function SubscribeFilesPage() {
     },
   })
 
+  const toggleAutoSyncMutation = useMutation({
+    mutationFn: async (payload: { id: number; enabled: boolean }) => {
+      const response = await api.patch(`/api/admin/subscribe-files/${payload.id}`, {
+        auto_sync_custom_rules: payload.enabled,
+      })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
+      toast.success('自动同步设置已更新')
+    },
+    onError: (error) => {
+      handleServerError(error)
+    },
+  })
+
   // 当文件内容加载完成时，更新编辑器
   useEffect(() => {
     if (!fileContentQuery.data) return
@@ -525,6 +543,10 @@ function SubscribeFilesPage() {
       return
     }
     saveConfigMutation.mutate({ filename: editingConfigFile.filename, content: configContent })
+  }
+
+  const handleToggleAutoSync = (id: number, enabled: boolean) => {
+    toggleAutoSyncMutation.mutate({ id, enabled })
   }
 
   const handleApplyCustomRules = () => {
@@ -1221,6 +1243,7 @@ function SubscribeFilesPage() {
                       <TableHead>文件名</TableHead>
                       <TableHead>最后更新</TableHead>
                       <TableHead className='text-center'>版本</TableHead>
+                      <TableHead className='text-center'>自动同步规则</TableHead>
                       <TableHead className='text-center'>操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1248,6 +1271,12 @@ function SubscribeFilesPage() {
                           ) : (
                             <span className='text-sm text-muted-foreground'>-</span>
                           )}
+                        </TableCell>
+                        <TableCell className='text-center'>
+                          <Switch
+                            checked={file.auto_sync_custom_rules || false}
+                            onCheckedChange={(checked) => handleToggleAutoSync(file.id, checked)}
+                          />
                         </TableCell>
                         <TableCell className='text-center'>
                           <div className='flex items-center justify-center gap-2'>

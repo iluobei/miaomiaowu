@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -363,6 +364,11 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	if req.Type != "" {
 		existing.Type = req.Type
 	}
+	// Update auto_sync_custom_rules if provided
+	wasAutoSyncEnabled := existing.AutoSyncCustomRules
+	if req.AutoSyncCustomRules != nil {
+		existing.AutoSyncCustomRules = *req.AutoSyncCustomRules
+	}
 
 	// 处理文件名更新
 	oldFilename := existing.Filename
@@ -416,6 +422,17 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 			}
 		}
 		// 如果旧文件不存在，只更新数据库记录，不报错
+	}
+
+	// If auto_sync was just enabled (changed from false to true), trigger immediate sync
+	if !wasAutoSyncEnabled && updated.AutoSyncCustomRules {
+		go func() {
+			if err := syncCustomRulesToFile(context.Background(), h.repo, updated); err != nil {
+				log.Printf("[AutoSync] Failed to sync custom rules to file %s (ID: %d) after enabling auto-sync: %v", updated.Filename, updated.ID, err)
+			} else {
+				log.Printf("[AutoSync] Successfully synced custom rules to file %s (ID: %d) after enabling auto-sync", updated.Filename, updated.ID)
+			}
+		}()
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
@@ -489,33 +506,36 @@ func parseFilenameFromContentDisposition(header string) string {
 }
 
 type subscribeFileRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	URL         string `json:"url"`
-	Type        string `json:"type"`
-	Filename    string `json:"filename"`
+	Name                string `json:"name"`
+	Description         string `json:"description"`
+	URL                 string `json:"url"`
+	Type                string `json:"type"`
+	Filename            string `json:"filename"`
+	AutoSyncCustomRules *bool  `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
 }
 
 type subscribeFileDTO struct {
-	ID            int64     `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	Type          string    `json:"type"`
-	Filename      string    `json:"filename"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	LatestVersion int64     `json:"latest_version,omitempty"`
+	ID                  int64     `json:"id"`
+	Name                string    `json:"name"`
+	Description         string    `json:"description"`
+	Type                string    `json:"type"`
+	Filename            string    `json:"filename"`
+	AutoSyncCustomRules bool      `json:"auto_sync_custom_rules"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	LatestVersion       int64     `json:"latest_version,omitempty"`
 }
 
 func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 	return subscribeFileDTO{
-		ID:          file.ID,
-		Name:        file.Name,
-		Description: file.Description,
-		Type:        file.Type,
-		Filename:    file.Filename,
-		CreatedAt:   file.CreatedAt,
-		UpdatedAt:   file.UpdatedAt,
+		ID:                  file.ID,
+		Name:                file.Name,
+		Description:         file.Description,
+		Type:                file.Type,
+		Filename:            file.Filename,
+		AutoSyncCustomRules: file.AutoSyncCustomRules,
+		CreatedAt:           file.CreatedAt,
+		UpdatedAt:           file.UpdatedAt,
 	}
 }
 

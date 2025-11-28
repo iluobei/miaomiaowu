@@ -74,6 +74,6 @@ func setCORSHeaders(w http.ResponseWriter, origin string, allowAll bool) {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 	}
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization, MM-Authorization, Content-Type")
 }

@@ -222,15 +222,16 @@ type Node struct {
 
 // SubscribeFile represents a subscription file configuration.
 type SubscribeFile struct {
-	ID            int64
-	Name          string
-	Description   string
-	URL           string
-	Type          string
-	Filename      string
-	FileShortCode string // 3-character code for file identification in composite short links
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                   int64
+	Name                 string
+	Description          string
+	URL                  string
+	Type                 string
+	Filename             string
+	FileShortCode        string // 3-character code for file identification in composite short links
+	AutoSyncCustomRules  bool   // Whether to automatically sync custom rules to this file
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // UserSettings represents user-specific configuration.
@@ -274,6 +275,18 @@ type CustomRule struct {
 	Enabled   bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// CustomRuleApplication tracks what content was applied by custom rules to subscribe files
+type CustomRuleApplication struct {
+	ID              int64
+	SubscribeFileID int64
+	CustomRuleID    int64
+	RuleType        string // "dns", "rules", "rule-providers"
+	RuleMode        string // "replace", "prepend"
+	AppliedContent  string // JSON-serialized content that was applied
+	ContentHash     string // SHA256 hash of the content for quick comparison
+	AppliedAt       time.Time
 }
 
 var (
@@ -713,6 +726,34 @@ CREATE INDEX IF NOT EXISTS idx_custom_rules_enabled ON custom_rules(enabled);
 
 	if _, err := r.db.Exec(customRulesSchema); err != nil {
 		return fmt.Errorf("migrate custom_rules: %w", err)
+	}
+
+	// Add auto_sync_custom_rules column to subscribe_files table
+	if err := r.ensureSubscribeFileColumn("auto_sync_custom_rules", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Create custom_rule_applications table for tracking applied content
+	const customRuleApplicationsSchema = `
+CREATE TABLE IF NOT EXISTS custom_rule_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscribe_file_id INTEGER NOT NULL,
+    custom_rule_id INTEGER NOT NULL,
+    rule_type TEXT NOT NULL,
+    rule_mode TEXT NOT NULL,
+    applied_content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subscribe_file_id) REFERENCES subscribe_files(id) ON DELETE CASCADE,
+    FOREIGN KEY (custom_rule_id) REFERENCES custom_rules(id) ON DELETE CASCADE,
+    UNIQUE(subscribe_file_id, custom_rule_id, rule_type)
+);
+CREATE INDEX IF NOT EXISTS idx_custom_rule_applications_file ON custom_rule_applications(subscribe_file_id);
+CREATE INDEX IF NOT EXISTS idx_custom_rule_applications_rule ON custom_rule_applications(custom_rule_id);
+`
+
+	if _, err := r.db.Exec(customRuleApplicationsSchema); err != nil {
+		return fmt.Errorf("migrate custom_rule_applications: %w", err)
 	}
 
 	return nil
@@ -2570,7 +2611,7 @@ func (r *TrafficRepository) GetUserSubscriptions(ctx context.Context, username s
 	}
 
 	const stmt = `
-		SELECT s.id, s.name, COALESCE(s.description, ''), COALESCE(s.url, ''), s.type, s.filename, COALESCE(s.file_short_code, ''), s.created_at, s.updated_at
+		SELECT s.id, s.name, COALESCE(s.description, ''), COALESCE(s.url, ''), s.type, s.filename, COALESCE(s.file_short_code, ''), COALESCE(s.auto_sync_custom_rules, 0), s.created_at, s.updated_at
 		FROM subscribe_files s
 		INNER JOIN user_subscriptions us ON s.id = us.subscription_id
 		WHERE us.username = ?
@@ -2585,9 +2626,11 @@ func (r *TrafficRepository) GetUserSubscriptions(ctx context.Context, username s
 	var subscriptions []SubscribeFile
 	for rows.Next() {
 		var sub SubscribeFile
-		if err := rows.Scan(&sub.ID, &sub.Name, &sub.Description, &sub.URL, &sub.Type, &sub.Filename, &sub.FileShortCode, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+		var autoSync int
+		if err := rows.Scan(&sub.ID, &sub.Name, &sub.Description, &sub.URL, &sub.Type, &sub.Filename, &sub.FileShortCode, &autoSync, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
 		}
+		sub.AutoSyncCustomRules = autoSync != 0
 		subscriptions = append(subscriptions, sub)
 	}
 
@@ -3151,5 +3194,135 @@ func (r *TrafficRepository) ListEnabledCustomRules(ctx context.Context, ruleType
 	}
 
 	return rules, nil
+}
+
+// GetCustomRuleApplications retrieves all custom rule applications for a subscribe file.
+func (r *TrafficRepository) GetCustomRuleApplications(ctx context.Context, fileID int64) ([]CustomRuleApplication, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	if fileID <= 0 {
+		return nil, errors.New("subscribe file id is required")
+	}
+
+	const query = `SELECT id, subscribe_file_id, custom_rule_id, rule_type, rule_mode, applied_content, content_hash, applied_at
+		FROM custom_rule_applications
+		WHERE subscribe_file_id = ?
+		ORDER BY applied_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("get custom rule applications: %w", err)
+	}
+	defer rows.Close()
+
+	var applications []CustomRuleApplication
+	for rows.Next() {
+		var app CustomRuleApplication
+		if err := rows.Scan(&app.ID, &app.SubscribeFileID, &app.CustomRuleID, &app.RuleType, &app.RuleMode, &app.AppliedContent, &app.ContentHash, &app.AppliedAt); err != nil {
+			return nil, fmt.Errorf("scan custom rule application: %w", err)
+		}
+		applications = append(applications, app)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate custom rule applications: %w", err)
+	}
+
+	return applications, nil
+}
+
+// UpsertCustomRuleApplication inserts or updates a custom rule application record.
+func (r *TrafficRepository) UpsertCustomRuleApplication(ctx context.Context, app *CustomRuleApplication) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	if app.SubscribeFileID <= 0 {
+		return errors.New("subscribe file id is required")
+	}
+	if app.CustomRuleID <= 0 {
+		return errors.New("custom rule id is required")
+	}
+	if app.RuleType == "" {
+		return errors.New("rule type is required")
+	}
+
+	const stmt = `INSERT INTO custom_rule_applications (subscribe_file_id, custom_rule_id, rule_type, rule_mode, applied_content, content_hash, applied_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(subscribe_file_id, custom_rule_id, rule_type)
+		DO UPDATE SET
+			rule_mode = excluded.rule_mode,
+			applied_content = excluded.applied_content,
+			content_hash = excluded.content_hash,
+			applied_at = CURRENT_TIMESTAMP`
+
+	_, err := r.db.ExecContext(ctx, stmt, app.SubscribeFileID, app.CustomRuleID, app.RuleType, app.RuleMode, app.AppliedContent, app.ContentHash)
+	if err != nil {
+		return fmt.Errorf("upsert custom rule application: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteCustomRuleApplication deletes a custom rule application record.
+func (r *TrafficRepository) DeleteCustomRuleApplication(ctx context.Context, fileID, ruleID int64, ruleType string) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	if fileID <= 0 {
+		return errors.New("subscribe file id is required")
+	}
+	if ruleID <= 0 {
+		return errors.New("custom rule id is required")
+	}
+	if ruleType == "" {
+		return errors.New("rule type is required")
+	}
+
+	const stmt = `DELETE FROM custom_rule_applications WHERE subscribe_file_id = ? AND custom_rule_id = ? AND rule_type = ?`
+	_, err := r.db.ExecContext(ctx, stmt, fileID, ruleID, ruleType)
+	if err != nil {
+		return fmt.Errorf("delete custom rule application: %w", err)
+	}
+
+	return nil
+}
+
+// GetSubscribeFilesWithAutoSync returns all subscribe files that have auto-sync enabled.
+func (r *TrafficRepository) GetSubscribeFilesWithAutoSync(ctx context.Context) ([]SubscribeFile, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	const query = `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), auto_sync_custom_rules, created_at, updated_at
+		FROM subscribe_files
+		WHERE auto_sync_custom_rules = 1
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get subscribe files with auto sync: %w", err)
+	}
+	defer rows.Close()
+
+	var files []SubscribeFile
+	for rows.Next() {
+		var file SubscribeFile
+		var autoSync int
+		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan subscribe file: %w", err)
+		}
+		file.AutoSyncCustomRules = autoSync != 0
+		files = append(files, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate subscribe files: %w", err)
+	}
+
+	return files, nil
 }
 

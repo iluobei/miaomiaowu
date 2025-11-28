@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -579,4 +580,256 @@ func reorderProxiesArrayFields(proxiesNode *yaml.Node) {
 
 		proxyNode.Content = newProxyContent
 	}
+}
+
+// applyCustomRulesToYamlSmart applies custom rules with intelligent deduplication
+// This function is used for auto-sync to avoid duplicate content in prepend mode
+func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepository, yamlData []byte, subscribeFileID int64) ([]byte, error) {
+	// Get enabled custom rules
+	rules, err := repo.ListEnabledCustomRules(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get custom rules: %w", err)
+	}
+
+	if len(rules) == 0 {
+		return yamlData, nil
+	}
+
+	// Get historical application records
+	applications, err := repo.GetCustomRuleApplications(ctx, subscribeFileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get custom rule applications: %w", err)
+	}
+
+	// Build a map of historical applications for quick lookup
+	historyMap := make(map[string]*storage.CustomRuleApplication)
+	for i := range applications {
+		key := fmt.Sprintf("%d-%s", applications[i].CustomRuleID, applications[i].RuleType)
+		historyMap[key] = &applications[i]
+	}
+
+	// Parse YAML
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(yamlData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// Apply each rule with deduplication
+	for _, rule := range rules {
+		key := fmt.Sprintf("%d-%s", rule.ID, rule.Type)
+		prevApp := historyMap[key]
+
+		// Calculate content hash for change detection
+		contentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(rule.Content)))
+
+		// If content hasn't changed and mode is replace, skip
+		if prevApp != nil && prevApp.ContentHash == contentHash && rule.Mode == "replace" {
+			continue
+		}
+
+		switch rule.Type {
+		case "dns":
+			if err := applyDNSRule(config, rule, prevApp); err != nil {
+				continue
+			}
+
+		case "rules":
+			appliedContent, err := applyRulesRule(config, rule, prevApp)
+			if err != nil {
+				continue
+			}
+			// Record what was applied
+			if err := recordApplication(ctx, repo, subscribeFileID, rule, appliedContent, contentHash); err != nil {
+				continue
+			}
+
+		case "rule-providers":
+			appliedContent, err := applyRuleProvidersRule(config, rule, prevApp)
+			if err != nil {
+				continue
+			}
+			// Record what was applied
+			if err := recordApplication(ctx, repo, subscribeFileID, rule, appliedContent, contentHash); err != nil {
+				continue
+			}
+		}
+	}
+
+	// Marshal back to YAML with node-based approach for proper formatting
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(yamlData, &rootNode); err == nil && len(rootNode.Content) > 0 {
+		updateYAMLNodeFromMap(rootNode.Content[0], config)
+		reorderYAMLFields(rootNode.Content[0])
+		return yaml.Marshal(&rootNode)
+	}
+
+	// Fallback to simple marshal
+	return yaml.Marshal(config)
+}
+
+// applyDNSRule applies DNS custom rule
+func applyDNSRule(config map[string]interface{}, rule storage.CustomRule, prevApp *storage.CustomRuleApplication) error {
+	var parsedContent map[string]interface{}
+	if err := yaml.Unmarshal([]byte(rule.Content), &parsedContent); err != nil {
+		return err
+	}
+
+	if dnsValue, hasDnsKey := parsedContent["dns"]; hasDnsKey {
+		config["dns"] = dnsValue
+	} else {
+		config["dns"] = parsedContent
+	}
+
+	return nil
+}
+
+// applyRulesRule applies rules custom rule with deduplication
+func applyRulesRule(config map[string]interface{}, rule storage.CustomRule, prevApp *storage.CustomRuleApplication) (string, error) {
+	// Parse rule content
+	var newRules []interface{}
+
+	// Try to parse as map first (with "rules:" key)
+	var parsedAsMap map[string]interface{}
+	if err := yaml.Unmarshal([]byte(rule.Content), &parsedAsMap); err == nil {
+		if rulesValue, hasRulesKey := parsedAsMap["rules"]; hasRulesKey {
+			if rulesArray, ok := rulesValue.([]interface{}); ok {
+				newRules = rulesArray
+			}
+		}
+	}
+
+	// Try to parse as YAML array
+	if len(newRules) == 0 {
+		if err := yaml.Unmarshal([]byte(rule.Content), &newRules); err != nil {
+			// Parse as plain text
+			lines := strings.Split(rule.Content, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line != "" && !strings.HasPrefix(line, "#") {
+					newRules = append(newRules, line)
+				}
+			}
+		}
+	}
+
+	if len(newRules) == 0 {
+		return "", errors.New("no rules parsed")
+	}
+
+	// Get existing rules
+	existingRules, ok := config["rules"].([]interface{})
+	if !ok {
+		existingRules = []interface{}{}
+	}
+
+	if rule.Mode == "replace" {
+		config["rules"] = newRules
+	} else if rule.Mode == "prepend" {
+		// Remove historical content if exists
+		if prevApp != nil && prevApp.AppliedContent != "" {
+			var historicalRules []interface{}
+			if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalRules); err == nil {
+				existingRules = removeRulesFromList(existingRules, historicalRules)
+			}
+		}
+		// Prepend new rules
+		config["rules"] = append(newRules, existingRules...)
+	}
+
+	// Serialize applied content for tracking
+	appliedJSON, _ := json.Marshal(newRules)
+	return string(appliedJSON), nil
+}
+
+// applyRuleProvidersRule applies rule-providers custom rule with deduplication
+func applyRuleProvidersRule(config map[string]interface{}, rule storage.CustomRule, prevApp *storage.CustomRuleApplication) (string, error) {
+	var parsedContent map[string]interface{}
+	if err := yaml.Unmarshal([]byte(rule.Content), &parsedContent); err != nil {
+		return "", err
+	}
+
+	// Extract the providers map
+	var providersMap map[string]interface{}
+	if providersValue, hasProvidersKey := parsedContent["rule-providers"]; hasProvidersKey {
+		var ok bool
+		providersMap, ok = providersValue.(map[string]interface{})
+		if !ok {
+			return "", errors.New("invalid rule-providers format")
+		}
+	} else {
+		providersMap = parsedContent
+	}
+
+	if len(providersMap) == 0 {
+		return "", errors.New("no providers parsed")
+	}
+
+	// Get existing rule-providers
+	existingProviders, ok := config["rule-providers"].(map[string]interface{})
+	if !ok {
+		existingProviders = make(map[string]interface{})
+	}
+
+	if rule.Mode == "replace" {
+		config["rule-providers"] = providersMap
+	} else if rule.Mode == "prepend" {
+		// Remove historical providers if exists
+		if prevApp != nil && prevApp.AppliedContent != "" {
+			var historicalProviders map[string]interface{}
+			if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalProviders); err == nil {
+				for key := range historicalProviders {
+					delete(existingProviders, key)
+				}
+			}
+		}
+		// Merge new providers (new providers take precedence)
+		for k, v := range providersMap {
+			existingProviders[k] = v
+		}
+		config["rule-providers"] = existingProviders
+	}
+
+	// Serialize applied content for tracking
+	appliedJSON, _ := json.Marshal(providersMap)
+	return string(appliedJSON), nil
+}
+
+// removeRulesFromList removes rules from the list
+func removeRulesFromList(existing []interface{}, toRemove []interface{}) []interface{} {
+	// Build a set of rules to remove for O(n) lookup
+	removeSet := make(map[string]bool)
+	for _, rule := range toRemove {
+		if ruleStr, ok := rule.(string); ok {
+			removeSet[ruleStr] = true
+		}
+	}
+
+	// Filter out rules that are in the remove set
+	var filtered []interface{}
+	for _, rule := range existing {
+		if ruleStr, ok := rule.(string); ok {
+			if !removeSet[ruleStr] {
+				filtered = append(filtered, rule)
+			}
+		} else {
+			// Keep non-string rules as-is
+			filtered = append(filtered, rule)
+		}
+	}
+
+	return filtered
+}
+
+// recordApplication records what was applied for future deduplication
+func recordApplication(ctx context.Context, repo *storage.TrafficRepository, fileID int64, rule storage.CustomRule, appliedContent string, contentHash string) error {
+	app := &storage.CustomRuleApplication{
+		SubscribeFileID: fileID,
+		CustomRuleID:    rule.ID,
+		RuleType:        rule.Type,
+		RuleMode:        rule.Mode,
+		AppliedContent:  appliedContent,
+		ContentHash:     contentHash,
+	}
+
+	return repo.UpsertCustomRuleApplication(ctx, app)
 }
