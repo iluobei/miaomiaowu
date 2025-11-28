@@ -11,27 +11,27 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VERSION=$(node -p "require('${PROJECT_ROOT}/miaomiaowu/package.json').version")
 
 if [ -z "$VERSION" ]; then
-    echo "Error: Failed to read version from package.json"
+    echo "版本号读取失败: Failed to read version from package.json"
     exit 1
 fi
 
-echo "Syncing version: $VERSION"
+echo "更新版本号: $VERSION"
 
 # 更新 main.go
 sed -i "s/const version = \".*\"/const version = \"$VERSION\"/" "${PROJECT_ROOT}/cmd/server/main.go"
-echo "✓ Updated cmd/server/main.go"
+echo "✓ 更新成功 cmd/server/main.go"
 
 # 更新 install.sh
 sed -i "s/VERSION=\"v.*\"/VERSION=\"v$VERSION\"/" "${PROJECT_ROOT}/install.sh"
-echo "✓ Updated install.sh"
+echo "✓ 更新成功 install.sh"
 
 # 更新 quick-install.sh
 sed -i "s/VERSION=\"v.*\"/VERSION=\"v$VERSION\"/" "${PROJECT_ROOT}/quick-install.sh"
-echo "✓ Updated quick-install.sh"
+echo "✓ 更新成功 quick-install.sh"
 
 # 更新 use-version-check.ts
 sed -i "s/const CURRENT_VERSION = '.*'/const CURRENT_VERSION = '$VERSION'/" "${PROJECT_ROOT}/miaomiaowu/src/hooks/use-version-check.ts"
-echo "✓ Updated miaomiaowu/src/hooks/use-version-check.ts"
+echo "✓ 更新成功 miaomiaowu/src/hooks/use-version-check.ts"
 
 echo ""
-echo "Version sync completed: $VERSION"
+echo "版本号同步完成: $VERSION"
