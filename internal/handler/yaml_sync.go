@@ -159,7 +159,11 @@ func updateValueNode(node *yaml.Node, newValue any) {
 		// Preserve the node's kind and tag if it's already a scalar
 		if node.Kind == yaml.ScalarNode {
 			node.Value = v
-			// Keep existing Tag unless it's empty and the value needs explicit typing
+			// Clear !!str tag if the value looks like a number, to prevent quoting
+			// Only keep !!str tag for empty strings
+			if v != "" && node.Tag == "!!str" {
+				node.Tag = ""
+			}
 		} else {
 			node.Kind = yaml.ScalarNode
 			node.Value = v

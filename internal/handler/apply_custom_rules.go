@@ -307,6 +307,10 @@ func updateYAMLValueNode(node *yaml.Node, newValue interface{}) {
 	case string:
 		if node.Kind == yaml.ScalarNode {
 			node.Value = v
+			// Clear !!str tag if the value is not empty, to prevent unnecessary quoting
+			if v != "" && node.Tag == "!!str" {
+				node.Tag = ""
+			}
 		} else {
 			node.Kind = yaml.ScalarNode
 			node.Value = v
