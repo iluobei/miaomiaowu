@@ -121,6 +121,22 @@ function SettingsPage() {
     },
   })
 
+  const resetShortLinkMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/api/user/short-link')
+      return response.data as { message: string }
+    },
+    onSuccess: () => {
+      // Invalidate subscriptions to refresh short URLs
+      queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
+      toast.success('所有订阅的短链接已重置')
+    },
+    onError: (error) => {
+      handleServerError(error)
+      toast.error('重置短链接失败')
+    },
+  })
+
   const passwordForm = useForm<PasswordFormValues>({
     defaultValues: {
       current_password: '',
@@ -350,6 +366,22 @@ function SettingsPage() {
                     onClick={() => resetTokenMutation.mutate()}
                   >
                     {resetTokenMutation.isPending ? '重置中…' : '重置 Token'}
+                  </Button>
+                </div>
+
+                <div className='space-y-2 pt-4 border-t'>
+                  <Label>订阅短链接</Label>
+                  <p className='text-xs text-muted-foreground'>
+                    重置所有订阅的短链接。短链接在订阅链接页面显示。
+                  </p>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={resetShortLinkMutation.isPending}
+                    onClick={() => resetShortLinkMutation.mutate()}
+                    className='w-full'
+                  >
+                    {resetShortLinkMutation.isPending ? '重置中…' : '重置所有订阅短链接'}
                   </Button>
                 </div>
               </CardContent>

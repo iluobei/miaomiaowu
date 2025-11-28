@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -109,8 +110,28 @@ func main() {
 	mux.Handle("/api/subscriptions", auth.RequireToken(tokenStore, handler.NewSubscriptionListHandler(repo)))
 	mux.Handle("/api/dns/resolve", auth.RequireToken(tokenStore, handler.NewDNSHandler()))
 	mux.Handle("/api/subscribe-files", auth.RequireToken(tokenStore, handler.NewSubscribeFilesListHandler(repo)))
+
+	// Create subscription handler (shared between endpoint and short links)
+	subscriptionHandler := handler.NewSubscriptionHandlerConcrete(repo, subscribeDir)
 	mux.Handle("/api/clash/subscribe", handler.NewSubscriptionEndpoint(tokenStore, repo, subscribeDir))
-	mux.Handle("/", web.Handler())
+
+	// Short link reset endpoint (authenticated)
+	mux.Handle("/api/user/short-link", auth.RequireToken(tokenStore, handler.NewShortLinkResetHandler(repo)))
+
+	// Combined handler for short links and web app
+	// This catches any 6-character paths like /AbC123 and routes them to short link handler
+	// All other paths go to the web handler
+	shortLinkHandler := handler.NewShortLinkHandler(repo, subscriptionHandler)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.Trim(r.URL.Path, "/")
+		// Check if this looks like a short link (exactly 6 characters, alphanumeric)
+		if len(path) == 6 && isAlphanumeric(path) {
+			shortLinkHandler.ServeHTTP(w, r)
+			return
+		}
+		// Otherwise, pass to web handler
+		web.Handler().ServeHTTP(w, r)
+	})
 
 	allowedOrigins := getAllowedOrigins()
 	handlerWithCORS := withCORS(mux, allowedOrigins)
@@ -140,6 +161,16 @@ func getAddr() string {
 		port = "8080"
 	}
 	return ":" + port
+}
+
+// isAlphanumeric checks if a string contains only alphanumeric characters
+func isAlphanumeric(s string) bool {
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }
 
 func waitForShutdown(srv *http.Server, stopCollector context.CancelFunc) {

@@ -75,6 +75,7 @@ type SubscribeFile = {
   description: string
   type: string
   filename: string
+  file_short_code?: string
   created_at: string
   updated_at: string
   latest_version?: number
@@ -124,13 +125,14 @@ function SubscriptionPage() {
     queryKey: ['user-subscriptions'],
     queryFn: async () => {
       const response = await api.get('/api/subscriptions')
-      return response.data as { subscriptions: SubscribeFile[] }
+      return response.data as { subscriptions: SubscribeFile[]; user_short_code: string }
     },
     enabled: Boolean(auth.accessToken),
     staleTime: 60 * 1000,
   })
 
   const subscribeFiles = subscribeFilesData?.subscriptions ?? []
+  const userShortCode = subscribeFilesData?.user_short_code ?? ''
 
   const dateFormatter = useMemo(
     () =>
@@ -148,8 +150,19 @@ function SubscriptionPage() {
       ? `${window.location.protocol}//${window.location.host}`
       : 'http://localhost:8080')
 
-  const buildSubscriptionURL = (filename: string, clientType?: string) => {
-    // Build URL with filename and user token for authentication
+  const buildSubscriptionURL = (filename: string, fileShortCode: string | undefined, clientType?: string) => {
+    // If file short code and user short code are available, use composite short link (6 characters: 3 + 3)
+    if (fileShortCode && userShortCode) {
+      const compositeCode = fileShortCode + userShortCode
+      const url = new URL(`/${compositeCode}`, baseURL)
+      if (clientType) {
+        url.searchParams.set('t', clientType)
+      }
+      // No token parameter needed - authentication is embedded in the composite short link
+      return url.toString()
+    }
+
+    // Otherwise, use full URL with filename and user token for authentication
     const url = new URL('/api/clash/subscribe', baseURL)
     url.searchParams.set('filename', filename)
     if (clientType) {
@@ -199,7 +212,7 @@ function SubscriptionPage() {
 
           {subscribeFiles.map((file) => {
             const Icon = ICON_MAP[file.name] ?? QrCode
-            const subscribeURL = buildSubscriptionURL(file.filename)
+            const subscribeURL = buildSubscriptionURL(file.filename, file.file_short_code)
             // 使用当前显示的URL，如果没有则使用默认URL
             const displayURL = displayURLs[file.id] || subscribeURL
             const clashURL = `clash://install-config?url=${encodeURIComponent(subscribeURL)}`
@@ -261,7 +274,7 @@ function SubscriptionPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align='end' className='w-56'>
                           {CLIENT_TYPES.map((client) => {
-                            const clientURL = buildSubscriptionURL(file.filename, client.type)
+                            const clientURL = buildSubscriptionURL(file.filename, file.file_short_code, client.type)
                             return (
                               <DropdownMenuItem
                                 key={client.type}

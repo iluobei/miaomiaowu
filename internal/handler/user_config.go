@@ -17,6 +17,7 @@ type userConfigRequest struct {
 	SyncTraffic        bool   `json:"sync_traffic"`
 	EnableProbeBinding bool   `json:"enable_probe_binding"`
 	CustomRulesEnabled bool   `json:"custom_rules_enabled"`
+	EnableShortLink    bool   `json:"enable_short_link"`
 }
 
 type userConfigResponse struct {
@@ -26,6 +27,7 @@ type userConfigResponse struct {
 	SyncTraffic        bool   `json:"sync_traffic"`
 	EnableProbeBinding bool   `json:"enable_probe_binding"`
 	CustomRulesEnabled bool   `json:"custom_rules_enabled"`
+	EnableShortLink    bool   `json:"enable_short_link"`
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -63,6 +65,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				SyncTraffic:        false,
 				EnableProbeBinding: false,
 				CustomRulesEnabled: false,
+				EnableShortLink:    false,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -80,6 +83,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,
 		CustomRulesEnabled: settings.CustomRulesEnabled,
+		EnableShortLink:    settings.EnableShortLink,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -118,6 +122,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		SyncTraffic:        payload.SyncTraffic,
 		EnableProbeBinding: payload.EnableProbeBinding,
 		CustomRulesEnabled: payload.CustomRulesEnabled,
+		EnableShortLink:    payload.EnableShortLink,
 	}
 
 	if err := repo.UpsertUserSettings(r.Context(), settings); err != nil {
@@ -132,6 +137,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,
 		CustomRulesEnabled: settings.CustomRulesEnabled,
+		EnableShortLink:    settings.EnableShortLink,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -44,6 +44,17 @@ func NewSubscriptionHandler(repo *storage.TrafficRepository, baseDir string) htt
 	return newSubscriptionHandler(summary, repo, baseDir, subscriptionDefaultType)
 }
 
+// NewSubscriptionHandlerConcrete creates a subscription handler and returns the concrete type.
+// This is used when other handlers need direct access to the SubscriptionHandler.
+func NewSubscriptionHandlerConcrete(repo *storage.TrafficRepository, baseDir string) *SubscriptionHandler {
+	if repo == nil {
+		panic("subscription handler requires repository")
+	}
+
+	summary := NewTrafficSummaryHandler(repo)
+	return newSubscriptionHandler(summary, repo, baseDir, subscriptionDefaultType)
+}
+
 // NewSubscriptionEndpoint returns a handler that serves subscription files, allowing either session tokens or user tokens via query parameter.
 func NewSubscriptionEndpoint(tokens *auth.TokenStore, repo *storage.TrafficRepository, baseDir string) http.Handler {
 	if tokens == nil {
@@ -96,6 +107,14 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 		return r, true
 	}
 
+	// Check for username parameter (from composite short link - already authenticated by short link handler)
+	queryUsername := strings.TrimSpace(r.URL.Query().Get("username"))
+	if queryUsername != "" {
+		ctx := auth.ContextWithUsername(r.Context(), queryUsername)
+		return r.WithContext(ctx), true
+	}
+
+	// Check for token parameter (legacy/direct access)
 	queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
 	if queryToken != "" && s.repo != nil {
 		username, err := s.repo.ValidateUserToken(r.Context(), queryToken)
@@ -109,6 +128,7 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	// Check for header token (session-based access)
 	headerToken := strings.TrimSpace(r.Header.Get(auth.AuthHeader))
 	username, ok := s.tokens.Lookup(headerToken)
 	if ok {

@@ -406,12 +406,20 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 			}
 		}
 
+		// Get user short code for the current user
+		userShortCode, err := repo.GetUserShortCode(r.Context(), username)
+		if err != nil {
+			// If user short code doesn't exist, it will be generated on next token access
+			userShortCode = ""
+		}
+
 		type item struct {
 			ID            int64     `json:"id"`
 			Name          string    `json:"name"`
 			Description   string    `json:"description"`
 			Filename      string    `json:"filename"`
 			Type          string    `json:"type"`
+			FileShortCode string    `json:"file_short_code,omitempty"`
 			UpdatedAt     time.Time `json:"updated_at"`
 			LatestVersion int64     `json:"latest_version,omitempty"`
 		}
@@ -430,11 +438,15 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 				Description:   file.Description,
 				Filename:      file.Filename,
 				Type:          file.Type,
+				FileShortCode: file.FileShortCode,
 				UpdatedAt:     file.UpdatedAt,
 				LatestVersion: latestVersion,
 			})
 		}
 
-		respondJSON(w, http.StatusOK, map[string]any{"subscriptions": payload})
+		respondJSON(w, http.StatusOK, map[string]any{
+			"subscriptions":   payload,
+			"user_short_code": userShortCode,
+		})
 	})
 }

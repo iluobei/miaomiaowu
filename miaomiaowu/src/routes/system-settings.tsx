@@ -37,6 +37,7 @@ function SystemSettingsPage() {
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
   const [customRulesEnabled, setCustomRulesEnabled] = useState(false)
+  const [enableShortLink, setEnableShortLink] = useState(false)
 
   const { data: userConfig, isLoading: loadingConfig } = useQuery({
     queryKey: ['user-config'],
@@ -49,6 +50,7 @@ function SystemSettingsPage() {
         sync_traffic: boolean
         enable_probe_binding: boolean
         custom_rules_enabled: boolean
+        enable_short_link: boolean
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -63,6 +65,7 @@ function SystemSettingsPage() {
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
       setCustomRulesEnabled(userConfig.custom_rules_enabled || false)
+      setEnableShortLink(userConfig.enable_short_link || false)
     }
   }, [userConfig])
 
@@ -74,6 +77,7 @@ function SystemSettingsPage() {
       sync_traffic: boolean
       enable_probe_binding: boolean
       custom_rules_enabled: boolean
+      enable_short_link: boolean
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -85,6 +89,7 @@ function SystemSettingsPage() {
       setSyncTraffic(variables.sync_traffic)
       setEnableProbeBinding(variables.enable_probe_binding)
       setCustomRulesEnabled(variables.custom_rules_enabled)
+      setEnableShortLink(variables.enable_short_link)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -130,6 +135,7 @@ function SystemSettingsPage() {
                       sync_traffic: checked,
                       enable_probe_binding: enableProbeBinding,
                       custom_rules_enabled: customRulesEnabled,
+                      enable_short_link: enableShortLink,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -155,6 +161,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
                       custom_rules_enabled: customRulesEnabled,
+                      enable_short_link: enableShortLink,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -177,6 +184,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             custom_rules_enabled: customRulesEnabled,
+                            enable_short_link: enableShortLink,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -220,6 +228,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             custom_rules_enabled: customRulesEnabled,
+                            enable_short_link: enableShortLink,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -263,6 +272,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: checked,
                       custom_rules_enabled: customRulesEnabled,
+                      enable_short_link: enableShortLink,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -311,6 +321,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
                       custom_rules_enabled: checked,
+                      enable_short_link: enableShortLink,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -328,6 +339,57 @@ function SystemSettingsPage() {
                     • DNS 规则会替换默认的 DNS 配置
                     <br />
                     • 普通规则和规则集可选择"替换"或"添加至头部"模式
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 短链接设置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>短链接设置</CardTitle>
+              <CardDescription>配置订阅链接的短链接功能</CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div className='flex items-center justify-between space-x-2 pt-2'>
+                <div className='flex-1 space-y-1'>
+                  <Label htmlFor='enable-short-link' className='cursor-pointer'>
+                    启用短链接
+                  </Label>
+                  <p className='text-sm text-muted-foreground'>
+                    开启后，订阅链接页面将显示4位字符的短链接，访问时会自动重定向到完整订阅链接
+                  </p>
+                </div>
+                <Switch
+                  id='enable-short-link'
+                  checked={enableShortLink}
+                  onCheckedChange={(checked) => {
+                    updateConfigMutation.mutate({
+                      force_sync_external: forceSyncExternal,
+                      match_rule: matchRule,
+                      cache_expire_minutes: cacheExpireMinutes,
+                      sync_traffic: syncTraffic,
+                      enable_probe_binding: enableProbeBinding,
+                      custom_rules_enabled: customRulesEnabled,
+                      enable_short_link: checked,
+                    })
+                  }}
+                  disabled={loadingConfig || updateConfigMutation.isPending}
+                />
+              </div>
+              {enableShortLink && (
+                <div className='rounded-lg border bg-muted/40 p-4'>
+                  <p className='text-sm text-muted-foreground'>
+                    • 短链接格式：https://server:port/随机4位字符
+                    <br />
+                    • 访问默认链接（不带t参数）时，需要包含"clash"的User-Agent
+                    <br />
+                    • 访问带t参数的链接时，需要手机端User-Agent
+                    <br />
+                    • 可在个人设置页面重置短链接
+                    <br />
+                    • 重置Token时会同时重置短链接
                   </p>
                 </div>
               )}
