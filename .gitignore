@@ -33,3 +33,4 @@ internal/web/dist
 data/*
 .vscode
 VERSION.md
+miaomiaowu.db

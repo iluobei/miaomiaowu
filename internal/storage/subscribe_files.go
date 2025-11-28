@@ -152,7 +152,8 @@ func (r *TrafficRepository) CreateSubscribeFile(ctx context.Context, file Subscr
 			return SubscribeFile{}, fmt.Errorf("generate file short code: %w", err)
 		}
 
-		res, err := r.db.ExecContext(ctx, `INSERT INTO subscribe_files (name, description, url, type, filename, file_short_code) VALUES (?, ?, ?, ?, ?, ?)`,
+		// Default auto_sync_custom_rules to 1 (enabled) for new subscribe files
+		res, err := r.db.ExecContext(ctx, `INSERT INTO subscribe_files (name, description, url, type, filename, file_short_code, auto_sync_custom_rules) VALUES (?, ?, ?, ?, ?, ?, 1)`,
 			file.Name, file.Description, file.URL, file.Type, file.Filename, newFileShortCode)
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "unique") && strings.Contains(strings.ToLower(err.Error()), "file_short_code") {

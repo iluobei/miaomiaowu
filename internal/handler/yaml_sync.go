@@ -540,18 +540,40 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 					}
 				}
 
+				// Reorder proxy-groups fields
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					if docNode.Content[i].Value == "proxy-groups" {
+						proxyGroupsNode := docNode.Content[i+1]
+						if proxyGroupsNode.Kind == yaml.SequenceNode {
+							// Reorder fields in each proxy group
+							for _, groupNode := range proxyGroupsNode.Content {
+								if groupNode.Kind == yaml.MappingNode {
+									reorderProxyGroupFields(groupNode)
+								}
+							}
+						}
+						break
+					}
+				}
+
 				// Reorder top-level fields to put dns, proxies, proxy-groups before rule-providers
 				reorderTopLevelFields(docNode)
 			}
 		}
 
-		// Encode to YAML using yaml.Marshal on the node
-		output, err := yaml.Marshal(&rootNode)
+		// Encode to YAML using yaml.Marshal on the node (使用2空格缩进)
+		output, err := MarshalYAMLWithIndent(&rootNode)
 		if err != nil {
 			continue // Skip files we can't marshal
 		}
 
-		if err := os.WriteFile(filePath, output, 0644); err != nil {
+		// Fix emoji escapes and quoted numbers
+		fixed := RemoveUnicodeEscapeQuotes(string(output))
+
+		if err := os.WriteFile(filePath, []byte(fixed), 0644); err != nil {
 			continue // Skip files we can't write
 		}
 	}
@@ -958,8 +980,8 @@ func deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName string) ([]string, er
 			}
 		}
 
-		// Encode to YAML
-		output, err := yaml.Marshal(&rootNode)
+		// Encode to YAML (使用2空格缩进)
+		output, err := MarshalYAMLWithIndent(&rootNode)
 		if err != nil {
 			continue // Skip files we can't marshal
 		}

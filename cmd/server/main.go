@@ -68,6 +68,10 @@ func main() {
 	ensureDefaultSubscriptions(repo)
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
 
+	// Patch: Fix emoji escape sequences and remove unnecessary quotes from YAML files
+	// This is a one-time fix for issues introduced in previous versions
+	patchSubscribeFilesEmoji(subscribeDir)
+
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
 	userRepo := auth.NewRepositoryAdapter(repo)
 

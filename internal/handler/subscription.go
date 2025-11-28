@@ -436,6 +436,17 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
 				rootMap := yamlNode.Content[0]
 
+				// 重新排序 proxies 中每个节点的字段
+				for i := 0; i < len(rootMap.Content); i += 2 {
+					if rootMap.Content[i].Value == "proxies" {
+						proxiesNode := rootMap.Content[i+1]
+						if proxiesNode.Kind == yaml.SequenceNode {
+							reorderProxies(proxiesNode)
+						}
+						break
+					}
+				}
+
 				// 重新排序 proxy-groups 中每个代理组的字段
 				for i := 0; i < len(rootMap.Content); i += 2 {
 					if rootMap.Content[i].Value == "proxy-groups" {
@@ -470,9 +481,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 
-			// 重新序列化为 YAML
-			if reorderedData, err := yaml.Marshal(&yamlNode); err == nil {
-				data = reorderedData
+			// 重新序列化为 YAML (使用2空格缩进)
+			if reorderedData, err := MarshalYAMLWithIndent(&yamlNode); err == nil {
+				// Fix emoji escapes and quoted numbers
+				fixed := RemoveUnicodeEscapeQuotes(string(reorderedData))
+				data = []byte(fixed)
 			}
 		}
 	}
@@ -700,6 +713,85 @@ func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType st
 	}
 }
 
+// reorderProxies reorders each proxy's fields in the sequence node
+func reorderProxies(seqNode *yaml.Node) {
+	if seqNode == nil || seqNode.Kind != yaml.SequenceNode {
+		return
+	}
+
+	// Process each proxy in the sequence
+	for _, proxyNode := range seqNode.Content {
+		if proxyNode.Kind == yaml.MappingNode {
+			reorderProxyNode(proxyNode)
+		}
+	}
+}
+
+// reorderProxyNode reorders proxy configuration fields
+// Priority order: name, type, server, port, then all other fields
+func reorderProxyNode(proxyNode *yaml.Node) {
+	if proxyNode == nil || proxyNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Priority fields in desired order
+	priorityFields := []string{"name", "type", "server", "port"}
+
+	// Create a map of existing fields
+	fieldMap := make(map[string]*yaml.Node)
+	fieldKeyNodes := make(map[string]*yaml.Node) // Store original key nodes to preserve style
+	remainingFields := []*yaml.Node{}
+
+	// Parse existing fields
+	for i := 0; i < len(proxyNode.Content); i += 2 {
+		if i+1 >= len(proxyNode.Content) {
+			break
+		}
+		keyNode := proxyNode.Content[i]
+		valueNode := proxyNode.Content[i+1]
+
+		// Check if this is a priority field
+		isPriority := false
+		for _, pf := range priorityFields {
+			if keyNode.Value == pf {
+				fieldMap[pf] = valueNode
+				fieldKeyNodes[pf] = keyNode
+				isPriority = true
+				break
+			}
+		}
+
+		// If not a priority field, save both key and value for later
+		if !isPriority {
+			remainingFields = append(remainingFields, keyNode, valueNode)
+		}
+	}
+
+	// Rebuild the Content with ordered fields
+	newContent := []*yaml.Node{}
+
+	// Add priority fields first (in order)
+	for _, fieldName := range priorityFields {
+		if valueNode, exists := fieldMap[fieldName]; exists {
+			// Use original key node if available, otherwise create new one
+			keyNode := fieldKeyNodes[fieldName]
+			if keyNode == nil {
+				keyNode = &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Value: fieldName,
+				}
+			}
+			newContent = append(newContent, keyNode, valueNode)
+		}
+	}
+
+	// Add remaining fields
+	newContent = append(newContent, remainingFields...)
+
+	// Replace the original content
+	proxyNode.Content = newContent
+}
+
 // reorderProxyGroups reorders each proxy group's fields in the sequence node
 func reorderProxyGroups(seqNode *yaml.Node) {
 	if seqNode == nil || seqNode.Kind != yaml.SequenceNode {
@@ -715,14 +807,14 @@ func reorderProxyGroups(seqNode *yaml.Node) {
 }
 
 // reorderProxyGroupFields reorders proxy group configuration fields
-// Priority order: name, type, strategy, url, interval, tolerance, lazy, hidden, proxies
+// Priority order: name, type, strategy, proxies, url, interval, tolerance, lazy, hidden
 func reorderProxyGroupFields(groupNode *yaml.Node) {
 	if groupNode == nil || groupNode.Kind != yaml.MappingNode {
 		return
 	}
 
 	// Priority fields in desired order
-	priorityFields := []string{"name", "type", "strategy", "url", "interval", "tolerance", "lazy", "hidden", "proxies"}
+	priorityFields := []string{"name", "type", "strategy", "proxies", "url", "interval", "tolerance", "lazy", "hidden"}
 
 	// Create a map of existing fields
 	fieldMap := make(map[string]*yaml.Node)

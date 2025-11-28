@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,6 +122,9 @@ func (h *subscribeFilesHandler) handleCreate(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+
+	// Don't auto-apply custom rules for URL-based subscriptions
+	// They will be applied when the subscription is first fetched
 
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
@@ -240,6 +245,9 @@ func (h *subscribeFilesHandler) handleImport(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Don't auto-apply custom rules for imported files
+	// Users can manually enable auto-sync if needed
+
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
 	})
@@ -322,6 +330,9 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+
+	// Don't auto-apply custom rules for uploaded files
+	// Users can manually enable auto-sync if needed
 
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
@@ -638,6 +649,9 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		return
 	}
 
+	// Initialize custom rule application records to prevent duplicates on first modification
+	h.initializeCustomRuleApplications(r.Context(), created.ID)
+
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
 	})
@@ -759,4 +773,102 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 		"status":  "updated",
 		"version": version,
 	})
+}
+
+// initializeCustomRuleApplications records the initial custom rule application state for a newly created subscribe file.
+// This is called when a file is created from the generator page where custom rules are already included in the content.
+// We only record the application state, not re-apply the rules (which would duplicate them).
+func (h *subscribeFilesHandler) initializeCustomRuleApplications(ctx context.Context, fileID int64) {
+	// Get all enabled custom rules to record their current state
+	rules, err := h.repo.ListEnabledCustomRules(ctx, "")
+	if err != nil {
+		log.Printf("[Subscribe] Warning: failed to get custom rules for recording: %v", err)
+		return
+	}
+
+	if len(rules) == 0 {
+		return
+	}
+
+	// Record each rule's current state without modifying the file
+	for _, rule := range rules {
+		// Calculate content hash for tracking future changes
+		hash := sha256.Sum256([]byte(rule.Content))
+		contentHash := hex.EncodeToString(hash[:])
+
+		// Parse the rule content to extract the actual rules/providers that were applied
+		// This must match the format used in applyRulesRule and applyRuleProvidersRule
+		var appliedContent string
+		if rule.Type == "rules" {
+			// Parse rule content to get the array of rules
+			var newRules []interface{}
+
+			// Try to parse as map first (with "rules:" key)
+			var parsedAsMap map[string]interface{}
+			if err := yaml.Unmarshal([]byte(rule.Content), &parsedAsMap); err == nil {
+				if rulesValue, hasRulesKey := parsedAsMap["rules"]; hasRulesKey {
+					if rulesArray, ok := rulesValue.([]interface{}); ok {
+						newRules = rulesArray
+					}
+				}
+			}
+
+			// Try to parse as YAML array
+			if len(newRules) == 0 {
+				if err := yaml.Unmarshal([]byte(rule.Content), &newRules); err != nil {
+					// Parse as plain text
+					lines := strings.Split(rule.Content, "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if line != "" && !strings.HasPrefix(line, "#") {
+							newRules = append(newRules, line)
+						}
+					}
+				}
+			}
+
+			// Serialize to JSON format (same as applyRulesRule does)
+			if len(newRules) > 0 {
+				appliedJSON, _ := json.Marshal(newRules)
+				appliedContent = string(appliedJSON)
+			}
+		} else if rule.Type == "rule-providers" {
+			// Parse rule-providers content
+			var parsedContent map[string]interface{}
+			if err := yaml.Unmarshal([]byte(rule.Content), &parsedContent); err == nil {
+				var providersMap map[string]interface{}
+				if providersValue, hasProvidersKey := parsedContent["rule-providers"]; hasProvidersKey {
+					if pm, ok := providersValue.(map[string]interface{}); ok {
+						providersMap = pm
+					}
+				} else {
+					providersMap = parsedContent
+				}
+
+				// Serialize to JSON format
+				if len(providersMap) > 0 {
+					appliedJSON, _ := json.Marshal(providersMap)
+					appliedContent = string(appliedJSON)
+				}
+			}
+		} else if rule.Type == "dns" {
+			// For DNS rules, we don't track applied content
+			appliedContent = ""
+		}
+
+		app := &storage.CustomRuleApplication{
+			SubscribeFileID: fileID,
+			CustomRuleID:    rule.ID,
+			RuleType:        rule.Type,
+			RuleMode:        rule.Mode,
+			AppliedContent:  appliedContent,
+			ContentHash:     contentHash,
+		}
+
+		if err := h.repo.UpsertCustomRuleApplication(ctx, app); err != nil {
+			log.Printf("[Subscribe] Warning: failed to record custom rule application for rule %d: %v", rule.ID, err)
+		}
+	}
+
+	log.Printf("[Subscribe] Recorded %d custom rule application states for file ID %d", len(rules), fileID)
 }
