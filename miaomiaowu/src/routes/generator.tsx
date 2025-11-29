@@ -240,7 +240,7 @@ function SubscriptionGeneratorPage() {
   // 缺失节点替换对话框状态
   const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
   const [missingNodes, setMissingNodes] = useState<string[]>([])
-  const [replacementChoice, setReplacementChoice] = useState<'PROXY' | 'DIRECT'>('DIRECT')
+  const [replacementChoice, setReplacementChoice] = useState<string>('DIRECT')
   const [pendingConfigAfterGrouping, setPendingConfigAfterGrouping] = useState<string>('')
 
   // 获取已保存的节点
@@ -1644,21 +1644,39 @@ function SubscriptionGeneratorPage() {
             {/* 替换选项 */}
             <div className='space-y-2'>
               <Label>选择替换为：</Label>
-              <div className='flex gap-2'>
+              <div className='grid grid-cols-3 gap-2'>
                 <Button
                   variant={replacementChoice === 'DIRECT' ? 'default' : 'outline'}
                   onClick={() => setReplacementChoice('DIRECT')}
-                  className='flex-1'
+                  className='w-full'
                 >
                   DIRECT
                 </Button>
                 <Button
-                  variant={replacementChoice === 'PROXY' ? 'default' : 'outline'}
-                  onClick={() => setReplacementChoice('PROXY')}
-                  className='flex-1'
+                  variant={replacementChoice === 'REJECT' ? 'default' : 'outline'}
+                  onClick={() => setReplacementChoice('REJECT')}
+                  className='w-full'
                 >
-                  PROXY
+                  REJECT
                 </Button>
+                {(() => {
+                  try {
+                    const parsedConfig = yaml.load(pendingConfigAfterGrouping) as any
+                    const proxyGroupNames = parsedConfig['proxy-groups']?.map((g: any) => g.name) || []
+                    return proxyGroupNames.map((name: string) => (
+                      <Button
+                        key={name}
+                        variant={replacementChoice === name ? 'default' : 'outline'}
+                        onClick={() => setReplacementChoice(name)}
+                        className='w-full'
+                      >
+                        {name}
+                      </Button>
+                    ))
+                  } catch {
+                    return null
+                  }
+                })()}
               </div>
               <p className='text-xs text-muted-foreground'>
                 将把上述缺失的节点替换为 <span className='font-semibold'>{replacementChoice}</span>

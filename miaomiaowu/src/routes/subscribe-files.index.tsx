@@ -684,7 +684,10 @@ function SubscribeFilesPage() {
       if ('name' in proxy) orderedProxy.name = proxy.name
       if ('type' in proxy) orderedProxy.type = proxy.type
       if ('server' in proxy) orderedProxy.server = proxy.server
-      if ('port' in proxy) orderedProxy.port = proxy.port
+      // 确保 port 是数字类型，而不是字符串
+      if ('port' in proxy) {
+        orderedProxy.port = typeof proxy.port === 'string' ? parseInt(proxy.port, 10) : proxy.port
+      }
       // 添加其他所有属性
       Object.keys(proxy).forEach(key => {
         if (!['name', 'type', 'server', 'port'].includes(key)) {
@@ -1609,13 +1612,6 @@ function SubscribeFilesPage() {
                   className='w-full'
                 >
                   DIRECT
-                </Button>
-                <Button
-                  variant={replacementChoice === 'PROXY' ? 'default' : 'outline'}
-                  onClick={() => setReplacementChoice('PROXY')}
-                  className='w-full'
-                >
-                  PROXY
                 </Button>
                 <Button
                   variant={replacementChoice === 'REJECT' ? 'default' : 'outline'}

@@ -168,13 +168,23 @@ func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepos
 		historyMap[key] = &applications[i]
 	}
 
-	// Parse YAML
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(yamlData, &config); err != nil {
+	// Parse YAML using Node API to preserve order
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	// Apply each rule with deduplication
+	// Get the document node
+	if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
+		return yamlData, nil
+	}
+
+	docNode := rootNode.Content[0]
+	if docNode.Kind != yaml.MappingNode {
+		return yamlData, nil
+	}
+
+	// Apply each rule with deduplication using Node API
 	for _, rule := range rules {
 		key := fmt.Sprintf("%d-%s", rule.ID, rule.Type)
 		prevApp := historyMap[key]
@@ -189,34 +199,21 @@ func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepos
 
 		switch rule.Type {
 		case "dns":
-			if err := applyDNSRule(config, rule, prevApp); err != nil {
-				continue
-			}
+			applyDNSRuleToNodeSmart(docNode, rule, prevApp, ctx, repo, subscribeFileID, contentHash)
 
 		case "rules":
-			appliedContent, err := applyRulesRule(config, rule, prevApp)
-			if err != nil {
-				continue
-			}
-			// Record what was applied
-			if err := recordApplication(ctx, repo, subscribeFileID, rule, appliedContent, contentHash); err != nil {
-				continue
-			}
+			applyRulesRuleToNodeSmart(docNode, rule, prevApp, ctx, repo, subscribeFileID, contentHash)
 
 		case "rule-providers":
-			appliedContent, err := applyRuleProvidersRule(config, rule, prevApp)
-			if err != nil {
-				continue
-			}
-			// Record what was applied
-			if err := recordApplication(ctx, repo, subscribeFileID, rule, appliedContent, contentHash); err != nil {
-				continue
-			}
+			applyRuleProvidersRuleToNodeSmart(docNode, rule, prevApp, ctx, repo, subscribeFileID, contentHash)
 		}
 	}
 
-	// Marshal the modified config (使用2空格缩进)
-	modifiedData, err := MarshalWithIndent(config)
+	// Fix short-id fields to use double quotes before marshaling
+	fixShortIdStyleInNode(&rootNode)
+
+	// Marshal the modified node (使用2空格缩进)
+	modifiedData, err := MarshalYAMLWithIndent(&rootNode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal modified YAML: %w", err)
 	}
@@ -596,4 +593,204 @@ func mergeMapNodes(existingNode *yaml.Node, newNode *yaml.Node) {
 			existingNode.Content = append(existingNode.Content, newKeyNode, newValueNode)
 		}
 	}
+}
+
+// applyDNSRuleToNodeSmart applies DNS rule to YAML node (smart version for auto-sync)
+func applyDNSRuleToNodeSmart(docNode *yaml.Node, rule storage.CustomRule, prevApp *storage.CustomRuleApplication, ctx context.Context, repo *storage.TrafficRepository, subscribeFileID int64, contentHash string) {
+	// DNS rules always replace, no deduplication needed
+	applyDNSRuleToNode(docNode, rule)
+
+	// Record the application
+	_ = recordApplication(ctx, repo, subscribeFileID, rule, "", contentHash)
+}
+
+// applyRulesRuleToNodeSmart applies rules to YAML node with deduplication (smart version for auto-sync)
+func applyRulesRuleToNodeSmart(docNode *yaml.Node, rule storage.CustomRule, prevApp *storage.CustomRuleApplication, ctx context.Context, repo *storage.TrafficRepository, subscribeFileID int64, contentHash string) {
+	var parsedContent yaml.Node
+	if err := yaml.Unmarshal([]byte(rule.Content), &parsedContent); err != nil {
+		return
+	}
+
+	// Get content node
+	var contentNode *yaml.Node
+	if parsedContent.Kind == yaml.DocumentNode && len(parsedContent.Content) > 0 {
+		contentNode = parsedContent.Content[0]
+	} else {
+		contentNode = &parsedContent
+	}
+
+	// Check if it contains "rules:" key
+	var newRulesNode *yaml.Node
+	if contentNode.Kind == yaml.MappingNode {
+		if rulesNode, _ := findFieldNode(contentNode, "rules"); rulesNode != nil {
+			newRulesNode = rulesNode
+		}
+	}
+
+	// If not found as mapping, treat the content as rules array
+	if newRulesNode == nil {
+		if contentNode.Kind == yaml.SequenceNode {
+			newRulesNode = contentNode
+		} else {
+			return
+		}
+	}
+
+	// Get existing rules node
+	existingRulesNode, idx := findFieldNode(docNode, "rules")
+
+	if rule.Mode == "replace" {
+		if idx >= 0 {
+			docNode.Content[idx] = newRulesNode
+		} else {
+			setFieldNode(docNode, "rules", newRulesNode)
+		}
+	} else if rule.Mode == "prepend" {
+		if existingRulesNode == nil || existingRulesNode.Kind != yaml.SequenceNode {
+			// No existing rules, just set the new ones
+			setFieldNode(docNode, "rules", newRulesNode)
+		} else {
+			// Remove historical content if exists
+			if prevApp != nil && prevApp.AppliedContent != "" {
+				var historicalRules []interface{}
+				if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalRules); err == nil {
+					existingRulesNode.Content = removeNodesFromSequence(existingRulesNode.Content, historicalRules)
+				}
+			}
+			// Prepend new rules to existing rules
+			if newRulesNode.Kind == yaml.SequenceNode {
+				combined := &yaml.Node{
+					Kind:    yaml.SequenceNode,
+					Style:   existingRulesNode.Style,
+					Tag:     existingRulesNode.Tag,
+					Content: append(newRulesNode.Content, existingRulesNode.Content...),
+				}
+				docNode.Content[idx] = combined
+			}
+		}
+	}
+
+	// Serialize applied content for tracking (convert nodes to interface{} for JSON)
+	var appliedRules []interface{}
+	for _, node := range newRulesNode.Content {
+		var val interface{}
+		if err := node.Decode(&val); err == nil {
+			appliedRules = append(appliedRules, val)
+		}
+	}
+	appliedJSON, _ := json.Marshal(appliedRules)
+	_ = recordApplication(ctx, repo, subscribeFileID, rule, string(appliedJSON), contentHash)
+}
+
+// applyRuleProvidersRuleToNodeSmart applies rule-providers to YAML node with deduplication (smart version for auto-sync)
+func applyRuleProvidersRuleToNodeSmart(docNode *yaml.Node, rule storage.CustomRule, prevApp *storage.CustomRuleApplication, ctx context.Context, repo *storage.TrafficRepository, subscribeFileID int64, contentHash string) {
+	var parsedContent yaml.Node
+	if err := yaml.Unmarshal([]byte(rule.Content), &parsedContent); err != nil {
+		return
+	}
+
+	// Get content node
+	var contentNode *yaml.Node
+	if parsedContent.Kind == yaml.DocumentNode && len(parsedContent.Content) > 0 {
+		contentNode = parsedContent.Content[0]
+	} else {
+		contentNode = &parsedContent
+	}
+
+	// Check if it contains "rule-providers:" key
+	var newProvidersNode *yaml.Node
+	if contentNode.Kind == yaml.MappingNode {
+		if providersNode, _ := findFieldNode(contentNode, "rule-providers"); providersNode != nil {
+			newProvidersNode = providersNode
+		} else {
+			newProvidersNode = contentNode
+		}
+	} else {
+		return
+	}
+
+	// Get existing rule-providers node
+	existingProvidersNode, idx := findFieldNode(docNode, "rule-providers")
+
+	if rule.Mode == "replace" {
+		if idx >= 0 {
+			docNode.Content[idx] = newProvidersNode
+		} else {
+			setFieldNode(docNode, "rule-providers", newProvidersNode)
+		}
+	} else if rule.Mode == "prepend" {
+		if existingProvidersNode == nil || existingProvidersNode.Kind != yaml.MappingNode {
+			// No existing providers, just set the new ones
+			setFieldNode(docNode, "rule-providers", newProvidersNode)
+		} else {
+			// Remove historical providers if exists
+			if prevApp != nil && prevApp.AppliedContent != "" {
+				var historicalProviders map[string]interface{}
+				if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalProviders); err == nil {
+					removeKeysFromMapNode(existingProvidersNode, historicalProviders)
+				}
+			}
+			// Merge: new providers take precedence
+			if newProvidersNode.Kind == yaml.MappingNode {
+				mergeMapNodes(existingProvidersNode, newProvidersNode)
+			}
+		}
+	}
+
+	// Serialize applied content for tracking
+	var appliedProviders map[string]interface{}
+	if err := newProvidersNode.Decode(&appliedProviders); err == nil {
+		appliedJSON, _ := json.Marshal(appliedProviders)
+		_ = recordApplication(ctx, repo, subscribeFileID, rule, string(appliedJSON), contentHash)
+	}
+}
+
+// removeNodesFromSequence removes nodes from a sequence that match the given values
+func removeNodesFromSequence(nodes []*yaml.Node, toRemove []interface{}) []*yaml.Node {
+	// Build a set of values to remove
+	removeSet := make(map[string]bool)
+	for _, val := range toRemove {
+		if str, ok := val.(string); ok {
+			removeSet[str] = true
+		}
+	}
+
+	// Filter out nodes that match
+	var filtered []*yaml.Node
+	for _, node := range nodes {
+		var val interface{}
+		if err := node.Decode(&val); err == nil {
+			if str, ok := val.(string); ok {
+				if !removeSet[str] {
+					filtered = append(filtered, node)
+				}
+				continue
+			}
+		}
+		// Keep non-string nodes
+		filtered = append(filtered, node)
+	}
+	return filtered
+}
+
+// removeKeysFromMapNode removes keys from a map node
+func removeKeysFromMapNode(mapNode *yaml.Node, keysToRemove map[string]interface{}) {
+	if mapNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Create a new content slice without the keys to remove
+	var newContent []*yaml.Node
+	for i := 0; i < len(mapNode.Content); i += 2 {
+		if i+1 < len(mapNode.Content) {
+			keyNode := mapNode.Content[i]
+			valueNode := mapNode.Content[i+1]
+
+			// Check if this key should be removed
+			if _, shouldRemove := keysToRemove[keyNode.Value]; !shouldRemove {
+				newContent = append(newContent, keyNode, valueNode)
+			}
+		}
+	}
+	mapNode.Content = newContent
 }

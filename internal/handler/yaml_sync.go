@@ -665,6 +665,9 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 			}
 		}
 
+		// Fix short-id fields to use double quotes before marshaling
+		fixShortIdStyleInNode(&rootNode)
+
 		// Encode to YAML using yaml.Marshal on the node (使用2空格缩进)
 		output, err := MarshalYAMLWithIndent(&rootNode)
 		if err != nil {
@@ -1081,13 +1084,19 @@ func deleteNodeFromYAMLFilesWithLog(subscribeDir, nodeName string) ([]string, er
 			}
 		}
 
+		// Fix short-id fields to use double quotes before marshaling
+		fixShortIdStyleInNode(&rootNode)
+
 		// Encode to YAML (使用2空格缩进)
 		output, err := MarshalYAMLWithIndent(&rootNode)
 		if err != nil {
 			continue // Skip files we can't marshal
 		}
 
-		if err := os.WriteFile(filePath, output, 0644); err != nil {
+		// Post-process to fix emoji and short-id formatting
+		result := RemoveUnicodeEscapeQuotes(string(output))
+
+		if err := os.WriteFile(filePath, []byte(result), 0644); err != nil {
 			continue // Skip files we can't write
 		}
 	}
