@@ -65,7 +65,6 @@ func main() {
 		log.Fatalf("failed to prepare rule template files: %v", err)
 	}
 
-	ensureDefaultSubscriptions(repo)
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
 
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
@@ -220,52 +219,6 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 			return
 		case <-ticker.C:
 			run()
-		}
-	}
-}
-
-func ensureDefaultSubscriptions(repo *storage.TrafficRepository) {
-	if repo == nil {
-		return
-	}
-
-	defaults := []storage.SubscriptionLink{
-		{
-			Name:         "clash",
-			Type:         "clash",
-			Description:  "推荐用于 Clash Mobile 客户端的规则与订阅配置。",
-			RuleFilename: "subscribe.yaml",
-			Buttons:      []string{storage.SubscriptionButtonQR, storage.SubscriptionButtonCopy, storage.SubscriptionButtonImport},
-		},
-		{
-			Name:         "openclash-redirhost",
-			Type:         "openclash-redirhost",
-			Description:  "适用于 OpenClash Redir-Host 模式的进阶订阅。",
-			RuleFilename: "subscribe-openclash-redirhost.yaml",
-			Buttons:      []string{storage.SubscriptionButtonQR, storage.SubscriptionButtonCopy, storage.SubscriptionButtonImport},
-		},
-		{
-			Name:         "openclash-fakeip",
-			Type:         "openclash-fakeip",
-			Description:  "提供给 OpenClash Fake-IP 模式的最新规则集合。",
-			RuleFilename: "subscribe-openclash-fakeip.yaml",
-			Buttons:      []string{storage.SubscriptionButtonQR, storage.SubscriptionButtonCopy, storage.SubscriptionButtonImport},
-		},
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	for _, item := range defaults {
-		if _, err := repo.GetSubscriptionByName(ctx, item.Name); err == nil {
-			continue
-		} else if !errors.Is(err, storage.ErrSubscriptionNotFound) {
-			log.Printf("failed to ensure subscription %s: %v", item.Name, err)
-			continue
-		}
-
-		if _, err := repo.CreateSubscriptionLink(ctx, item); err != nil {
-			log.Printf("failed to create default subscription %s: %v", item.Name, err)
 		}
 	}
 }
