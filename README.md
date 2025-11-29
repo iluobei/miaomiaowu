@@ -241,7 +241,8 @@ MIT License
 
 ### v0.2.2 (2025-11-29)
 - 🌈 模板增加默认dns配置
-- 🌈 增加手动同步外部订阅按钮
+- 🌈 重置token后再次获取定义返回假的配置，通过节点name提示token过期
+- 🌈 增加手动同步外部订阅按钮[#23](https://github.com/Jimleerx/miaomiaowu/issues/23)
 - 🌈 调整自动选择的代理组属性顺序
 - 🌈 增加自定义规则同步开关[#23](https://github.com/Jimleerx/miaomiaowu/issues/23)
 - 🛠️ fix:修复拖动节点时光标闪烁
