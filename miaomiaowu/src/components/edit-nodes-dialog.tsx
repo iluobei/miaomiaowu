@@ -104,6 +104,10 @@ export function EditNodesDialog({
   // 保存滚动位置
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
+  // 拖拽区域的ref，用于防止闪烁
+  const allGroupsDropZoneRef = React.useRef<HTMLDivElement>(null)
+  const availableNodesCardRef = React.useRef<HTMLDivElement>(null)
+
   // 提取唯一标签列表
   const uniqueTags = useMemo(() => {
     const tags = new Set<string>()
@@ -518,7 +522,13 @@ export function EditNodesDialog({
         }`}
         onDragOver={(e) => e.preventDefault()}
         onDragEnter={() => onDragEnterGroup(group.name)}
-        onDragLeave={onDragLeaveGroup}
+        onDragLeave={(e) => {
+          // 只有当鼠标真正离开Card容器时才清除状态
+          // 检查relatedTarget是否在Card内部
+          if (cardRef.current && !cardRef.current.contains(e.relatedTarget as HTMLElement)) {
+            onDragLeaveGroup()
+          }
+        }}
         onDrop={handleDropWithPosition}
       >
         <CardHeader className='pb-3'>
@@ -606,6 +616,7 @@ export function EditNodesDialog({
             </div>
             {/* 拖放到所有代理组的区域 */}
             <div
+              ref={allGroupsDropZoneRef}
               className={`w-48 h-20 mr-9 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
                 dragOverGroup === 'all-groups'
                   ? 'border-primary bg-primary/10 border-solid'
@@ -613,7 +624,12 @@ export function EditNodesDialog({
               }`}
               onDragOver={(e) => e.preventDefault()}
               onDragEnter={() => onDragEnterGroup('all-groups')}
-              onDragLeave={onDragLeaveGroup}
+              onDragLeave={(e) => {
+                // 只有当鼠标真正离开区域时才清除状态
+                if (allGroupsDropZoneRef.current && !allGroupsDropZoneRef.current.contains(e.relatedTarget as HTMLElement)) {
+                  onDragLeaveGroup()
+                }
+              }}
               onDrop={() => onDrop('all-groups')}
             >
               <span className={dragOverGroup === 'all-groups' ? 'text-primary font-medium' : 'text-muted-foreground'}>
@@ -777,6 +793,7 @@ export function EditNodesDialog({
             </div>
 
             <Card
+              ref={availableNodesCardRef}
               className={`flex flex-col flex-1 transition-all duration-75 ${
                 dragOverGroup === 'available'
                   ? 'ring-2 ring-primary shadow-lg scale-[1.02]'
@@ -784,7 +801,12 @@ export function EditNodesDialog({
               }`}
               onDragOver={(e) => e.preventDefault()}
               onDragEnter={() => onDragEnterGroup('available')}
-              onDragLeave={onDragLeaveGroup}
+              onDragLeave={(e) => {
+                // 只有当鼠标真正离开Card容器时才清除状态
+                if (availableNodesCardRef.current && !availableNodesCardRef.current.contains(e.relatedTarget as HTMLElement)) {
+                  onDragLeaveGroup()
+                }
+              }}
               onDrop={onDropToAvailable}
             >
               <CardHeader className='pb-3 flex-shrink-0'>
