@@ -12,10 +12,67 @@ import (
 	"strings"
 	"time"
 
+	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
 
 	"gopkg.in/yaml.v3"
 )
+
+// syncExternalSubscriptionsManual is for manual sync triggered by user - syncs ALL external subscriptions regardless of ForceSyncExternal setting
+func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficRepository, subscribeDir, username string) error {
+	if repo == nil || username == "" {
+		return fmt.Errorf("invalid parameters")
+	}
+
+	// Get user settings to check match rule (but ignore ForceSyncExternal for manual sync)
+	userSettings, err := repo.GetUserSettings(ctx, username)
+	if err != nil {
+		// If settings not found, use default match rule
+		userSettings.MatchRule = "node_name"
+	}
+
+	// Get user's external subscriptions
+	externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
+	if err != nil {
+		return fmt.Errorf("list external subscriptions: %w", err)
+	}
+
+	if len(externalSubs) == 0 {
+		// No external subscriptions, nothing to sync
+		return nil
+	}
+
+	log.Printf("[External Sync - Manual] User %s has %d external subscriptions to sync (match rule: %s)", username, len(externalSubs), userSettings.MatchRule)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Track total nodes synced
+	totalNodesSynced := 0
+
+	for _, sub := range externalSubs {
+		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings.MatchRule)
+		if err != nil {
+			log.Printf("[External Sync - Manual] Failed to sync subscription %s (%s): %v", sub.Name, sub.URL, err)
+			continue
+		}
+
+		totalNodesSynced += nodeCount
+
+		// Update last sync time and node count
+		now := time.Now()
+		updatedSub.LastSyncAt = &now
+		updatedSub.NodeCount = nodeCount
+		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
+			log.Printf("[External Sync - Manual] Failed to update sync time for subscription %s: %v", sub.Name, err)
+		}
+	}
+
+	log.Printf("[External Sync - Manual] Completed: synced %d nodes total from %d subscriptions", totalNodesSynced, len(externalSubs))
+
+	return nil
+}
 
 // syncExternalSubscriptions fetches nodes from all external subscriptions and updates the node table
 func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficRepository, subscribeDir, username string) error {
@@ -404,4 +461,52 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 			log.Printf("[External Sync]   Expire: %s", sub.Expire.Format("2006-01-02 15:04:05"))
 		}
 	}
+}
+
+// SyncExternalSubscriptionsHandler is an HTTP handler for manually triggering external subscription sync
+type SyncExternalSubscriptionsHandler struct {
+	repo         *storage.TrafficRepository
+	subscribeDir string
+}
+
+// NewSyncExternalSubscriptionsHandler creates a new handler for manual sync
+func NewSyncExternalSubscriptionsHandler(repo *storage.TrafficRepository, subscribeDir string) http.Handler {
+	return &SyncExternalSubscriptionsHandler{
+		repo:         repo,
+		subscribeDir: subscribeDir,
+	}
+}
+
+func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get username from context (set by auth middleware)
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	log.Printf("[Sync API] Manual sync triggered by user: %s", username)
+
+	// Use manual sync function which ignores ForceSyncExternal setting
+	if err := syncExternalSubscriptionsManual(r.Context(), h.repo, h.subscribeDir, username); err != nil {
+		log.Printf("[Sync API] Failed to sync external subscriptions for user %s: %v", username, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("同步失败: %v", err),
+		})
+		return
+	}
+
+	log.Printf("[Sync API] Successfully synced external subscriptions for user: %s", username)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "外部订阅同步成功",
+	})
 }

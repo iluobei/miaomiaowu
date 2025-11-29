@@ -1171,6 +1171,25 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
                   </div>
                   <div className='flex gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => {
+                        toast.promise(
+                          api.post('/api/admin/sync-external-subscriptions'),
+                          {
+                            loading: '正在同步外部订阅...',
+                            success: (response) => {
+                              queryClient.invalidateQueries({ queryKey: ['nodes'] })
+                              return response.data.message || '外部订阅同步成功'
+                            },
+                            error: (error) => error.response?.data?.error || '同步失败'
+                          }
+                        )
+                      }}
+                    >
+                      同步外部订阅
+                    </Button>
                     {selectedNodeIds.size > 0 && (
                       <>
                         <Button
