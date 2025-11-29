@@ -406,11 +406,21 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 			}
 		}
 
-		// Get user short code for the current user
-		userShortCode, err := repo.GetUserShortCode(r.Context(), username)
-		if err != nil {
-			// If user short code doesn't exist, it will be generated on next token access
-			userShortCode = ""
+		// Get user settings to check if short link is enabled
+		userSettings, err := repo.GetUserSettings(r.Context(), username)
+		enableShortLink := false
+		if err == nil {
+			enableShortLink = userSettings.EnableShortLink
+		}
+
+		// Get user short code only if short link is enabled
+		var userShortCode string
+		if enableShortLink {
+			userShortCode, err = repo.GetUserShortCode(r.Context(), username)
+			if err != nil {
+				// If user short code doesn't exist, it will be generated on next token access
+				userShortCode = ""
+			}
 		}
 
 		type item struct {
@@ -432,13 +442,19 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 				latestVersion = versions[0].Version
 			}
 
+			// Only include file short code if short link is enabled
+			fileShortCode := ""
+			if enableShortLink {
+				fileShortCode = file.FileShortCode
+			}
+
 			payload = append(payload, item{
 				ID:            file.ID,
 				Name:          file.Name,
 				Description:   file.Description,
 				Filename:      file.Filename,
 				Type:          file.Type,
-				FileShortCode: file.FileShortCode,
+				FileShortCode: fileShortCode,
 				UpdatedAt:     file.UpdatedAt,
 				LatestVersion: latestVersion,
 			})
