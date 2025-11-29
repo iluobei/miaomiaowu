@@ -126,10 +126,10 @@ export class ClashConfigBuilder {
     groups.push({
       name: translateOutbound('Auto Select'),
       type: 'url-test',
-      proxies: [...proxyNames],
       url: 'https://www.gstatic.com/generate_204',
       interval: 300,
       lazy: false,
+      proxies: [...proxyNames],
     })
 
     // 3. Category-specific groups
