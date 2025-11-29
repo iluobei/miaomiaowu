@@ -240,6 +240,7 @@ MIT License
 <summary>更新日志</summary>
 
 ### v0.2.2 (2025-11-29)
+- 🌈 增加短链接功能，防止token泄露
 - 🌈 模板增加默认dns配置
 - 🌈 重置token后再次获取定义返回假的配置，通过节点name提示token过期
 - 🌈 增加手动同步外部订阅按钮[#23](https://github.com/Jimleerx/miaomiaowu/issues/23)
