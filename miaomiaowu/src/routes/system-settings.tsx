@@ -262,7 +262,7 @@ function SystemSettingsPage() {
                     节点探针服务器绑定
                   </Label>
                   <p className='text-sm text-muted-foreground'>
-                    开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量
+                    开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量，适用与创建单个节点的订阅时，保证流量统计正确
                   </p>
                 </div>
                 <Switch
@@ -338,11 +338,7 @@ function SystemSettingsPage() {
                     <br />
                     • 可以创建 DNS 配置、规则列表和规则集提供商
                     <br />
-                    • 生成订阅时会自动应用已启用的自定义规则
-                    <br />
-                    • DNS 规则会替换默认的 DNS 配置
-                    <br />
-                    • 普通规则和规则集可选择"替换"或"添加至头部"模式
+                    • 生成订阅时会自动开启同步已启用的自定义规则开关
                   </p>
                 </div>
               )}
@@ -362,7 +358,7 @@ function SystemSettingsPage() {
                     启用短链接
                   </Label>
                   <p className='text-sm text-muted-foreground'>
-                    开启后，订阅链接页面将显示4位字符的短链接，访问时会自动重定向到完整订阅链接
+                    开启后，订阅链接页面将显示6位字符的短链接，响应与/api/clash/subscribe接口一致
                   </p>
                 </div>
                 <Switch
@@ -385,11 +381,7 @@ function SystemSettingsPage() {
               {enableShortLink && (
                 <div className='rounded-lg border bg-muted/40 p-4'>
                   <p className='text-sm text-muted-foreground'>
-                    • 短链接格式：https://server:port/随机4位字符
-                    <br />
-                    • 访问默认链接（不带t参数）时，需要包含"clash"的User-Agent
-                    <br />
-                    • 访问带t参数的链接时，需要手机端User-Agent
+                    • 短链接格式：https://server:port/随机6位字符
                     <br />
                     • 可在个人设置页面重置短链接
                     <br />
