@@ -30,43 +30,24 @@ log-level: info
 mode: rule
 port: 7890
 proxies:
-  - name: Token已过期
-    type: vless
-    server: example.com.cn
+  - name: ⚠️ Token已过期
+    type: ss
+    server: test.example.com.cn
     port: 443
-    client-fingerprint: firefox
-    encryption: none
-    flow: xtls-rprx-vision
-    network: tcp
-    reality-opts:
-      public-key: "1234abcd5678efgh9012ijkl3456mnop7890qrstuvwx"
-      short-id: ""
-    servername: example.com.cn
-    skip-cert-verify: true
-    tls: true
-    uuid: uuid-example-1234-5678-9012-abcdefabcdef
-  - name: 请联系管理员
-    type: vless
-    server: example.com.cn
+    password: password123
+    cipher: 2022-blake3-chacha20-poly1305
+  - name: ⚠️ 请联系管理员
+    type: ss
+    server: test.example.com.cn
     port: 443
-    client-fingerprint: firefox
-    encryption: none
-    flow: xtls-rprx-vision
-    network: tcp
-    reality-opts:
-      public-key: "1234abcd5678efgh9012ijkl3456mnop7890qrstuvwx"
-      short-id: ""
-    servername: example.com.cn
-    skip-cert-verify: true
-    tls: true
-    uuid: uuid-example-1234-5678-9012-abcdefabcdef
+    password: password123
+    cipher: 2022-blake3-chacha20-poly1305
 proxy-groups:
   - name: 🚀 节点选择
     type: select
     proxies:
       - Token已过期
       - 请联系管理员
-rule-providers:
 rules:
   - MATCH,DIRECT
 socks-port: 7891

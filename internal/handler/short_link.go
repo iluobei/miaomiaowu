@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 )
 
 type shortLinkHandler struct {
-	repo               *storage.TrafficRepository
+	repo                *storage.TrafficRepository
 	subscriptionHandler *SubscriptionHandler
 }
 
@@ -25,7 +26,7 @@ func NewShortLinkHandler(repo *storage.TrafficRepository, subscriptionHandler *S
 	}
 
 	return &shortLinkHandler{
-		repo:               repo,
+		repo:                repo,
 		subscriptionHandler: subscriptionHandler,
 	}
 }
@@ -51,7 +52,7 @@ func (h *shortLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	filename, err := h.repo.GetFilenameByFileShortCode(r.Context(), fileShortCode)
 	if err != nil {
 		if errors.Is(err, storage.ErrSubscribeFileNotFound) {
-			http.NotFound(w, r)
+			writeError(w, http.StatusNotFound, errors.New("not found"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -61,8 +62,25 @@ func (h *shortLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Get username by user short code
 	username, err := h.repo.GetUsernameByUserShortCode(r.Context(), userShortCode)
 	if err != nil {
-		// User not found or invalid user short code
-		http.NotFound(w, r)
+		// 用户不存在，设置token失效标记并继续处理
+		ctx := context.WithValue(r.Context(), TokenInvalidKey, true)
+
+		// 构建新请求，不设置username
+		newURL := *r.URL
+		q := newURL.Query()
+		// 保留filename参数以维持URL结构
+		q.Set("filename", filename)
+		// 保留't'参数用于客户端类型转换
+		if clientType := r.URL.Query().Get("t"); clientType != "" {
+			q.Set("t", clientType)
+		}
+		newURL.RawQuery = q.Encode()
+
+		newRequest := r.Clone(ctx)
+		newRequest.URL = &newURL
+
+		// 直接调用subscription handler，它会检测到token_invalid标记
+		h.subscriptionHandler.ServeHTTP(w, newRequest)
 		return
 	}
 

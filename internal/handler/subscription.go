@@ -22,6 +22,67 @@ import (
 
 const subscriptionDefaultType = "clash"
 
+// Token失效时返回的YAML内容
+const tokenInvalidYAML = `allow-lan: false
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  ipv6: true
+  nameserver:
+    - https://120.53.53.53/dns-query
+    - https://223.5.5.5/dns-query
+  nameserver-policy:
+    geosite:cn,private:
+      - https://120.53.53.53/dns-query
+      - https://223.5.5.5/dns-query
+    geosite:geolocation-!cn:
+      - https://dns.cloudflare.com/dns-query
+      - https://dns.google/dns-query
+  proxy-server-nameserver:
+    - https://120.53.53.53/dns-query
+    - https://223.5.5.5/dns-query
+  respect-rules: true
+geo-auto-update: true
+geo-update-interval: 24
+geodata-loader: standard
+geodata-mode: true
+geox-url:
+  asn: https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb
+  geoip: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat
+  geosite: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
+  mmdb: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb
+log-level: info
+mode: rule
+port: 7890
+proxies:
+  - name: ⚠️ Token已过期
+    type: ss
+    server: test.example.com.cn
+    port: 443
+    password: password123
+    cipher: 2022-blake3-chacha20-poly1305
+  - name: ⚠️ 请联系管理员
+    type: ss
+    server: test.example.com.cn
+    port: 443
+    password: password123
+    cipher: 2022-blake3-chacha20-poly1305
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - Token已过期
+      - 请联系管理员
+rules:
+  - MATCH,DIRECT
+socks-port: 7891
+`
+
+// Context key for token invalid flag
+type ContextKey string
+
+const TokenInvalidKey ContextKey = "token_invalid"
+
 type SubscriptionHandler struct {
 	summary  *TrafficSummaryHandler
 	repo     *storage.TrafficRepository
@@ -136,13 +197,20 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 		return r.WithContext(ctx), true
 	}
 
-	auth.WriteUnauthorizedResponse(w)
-	return nil, false
+	// 所有认证方式都失败，设置token失效标记
+	ctx := context.WithValue(r.Context(), TokenInvalidKey, true)
+	return r.WithContext(ctx), true
 }
 
 func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, errors.New("only GET is supported"))
+		return
+	}
+
+	// 检查是否是token失效场景
+	if tokenInvalid, ok := r.Context().Value(TokenInvalidKey).(bool); ok && tokenInvalid {
+		h.serveTokenInvalidResponse(w, r)
 		return
 	}
 
@@ -167,7 +235,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		subscribeFile, err = h.repo.GetSubscribeFileByFilename(r.Context(), filename)
 		if err != nil {
 			if errors.Is(err, storage.ErrSubscribeFileNotFound) {
-				writeError(w, http.StatusNotFound, errors.New("subscription file not found"))
+				writeError(w, http.StatusNotFound, errors.New("not found"))
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err)
@@ -655,6 +723,55 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	log.Printf("[Subscription] Completed: synced %d nodes total from %d referenced subscriptions", totalNodesSynced, len(subsToSync))
 
 	return nil
+}
+
+// serveTokenInvalidResponse serves the token invalid YAML content with client type conversion
+func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r *http.Request) {
+	data := []byte(tokenInvalidYAML)
+
+	// 根据参数t的类型调用substore的转换代码
+	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
+	contentType := "text/yaml; charset=utf-8"
+	ext := ".yaml"
+
+	// 如果指定了客户端类型且不是clash/clashmeta，进行转换
+	if clientType != "" && clientType != "clash" && clientType != "clashmeta" {
+		convertedData, err := h.convertSubscription(data, clientType)
+		if err != nil {
+			// 转换失败，记录日志但继续返回YAML
+			log.Printf("[Token Invalid] Failed to convert for client %s: %v", clientType, err)
+		} else {
+			data = convertedData
+
+			// 根据客户端类型设置content type和扩展名
+			switch clientType {
+			case "surge", "surgemac", "loon", "qx", "surfboard", "shadowrocket":
+				contentType = "text/plain; charset=utf-8"
+				ext = ".txt"
+			case "sing-box":
+				contentType = "application/json; charset=utf-8"
+				ext = ".json"
+			case "v2ray", "uri":
+				contentType = "text/plain; charset=utf-8"
+				ext = ".txt"
+			default:
+				contentType = "text/yaml; charset=utf-8"
+				ext = ".yaml"
+			}
+		}
+	}
+
+	attachmentName := url.PathEscape("Token已失效" + ext)
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("profile-update-interval", "24")
+	if clientType == "" {
+		w.Header().Set("content-disposition", "attachment;filename*=UTF-8''"+attachmentName)
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+
+	log.Printf("[Token Invalid] Served token invalid response, client type: %s", clientType)
 }
 
 // convertSubscription converts a YAML subscription file to the specified client format
