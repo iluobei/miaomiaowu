@@ -17,8 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
 	"miaomiaowu/internal/storage"
+
+	"gopkg.in/yaml.v3"
 )
 
 type subscribeFilesHandler struct {
@@ -314,7 +315,7 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 	subscribeFile := storage.SubscribeFile{
 		Name:        name,
 		Description: description,
-		URL:         "",  // 上传的文件没有URL
+		URL:         "", // 上传的文件没有URL
 		Type:        storage.SubscribeTypeUpload,
 		Filename:    filename,
 	}
@@ -487,7 +488,7 @@ func (h *subscribeFilesHandler) handleDelete(w http.ResponseWriter, r *http.Requ
 }
 
 // parseFilenameFromContentDisposition 从Content-Disposition头解析文件名
-// 支持格式: attachment;filename*=UTF-8''%E6%B3%A1%E6%B3%A1Dog
+// 支持格式: attachment;filename*=UTF-8”%E6%B3%A1%E6%B3%A1Dog
 func parseFilenameFromContentDisposition(header string) string {
 	// 查找 filename*= 部分
 	if idx := strings.Index(header, "filename*="); idx != -1 {
@@ -608,15 +609,18 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		filename = filename + ".yaml"
 	}
 
-	// 验证YAML格式并重新序列化以确保空字符串被正确处理
-	var yamlCheck map[string]any
-	if err := yaml.Unmarshal([]byte(req.Content), &yamlCheck); err != nil {
+	// 验证YAML格式，使用Node API保持顺序和格式
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal([]byte(req.Content), &rootNode); err != nil {
 		writeError(w, http.StatusBadRequest, errors.New("配置内容不是有效的YAML格式"))
 		return
 	}
 
-	// 重新序列化YAML以确保空字符串带引号
-	reserializedContent, err := MarshalYAMLWithQuotedEmptyStrings(yamlCheck)
+	// 修复short-id字段，确保使用双引号
+	// fixShortIdStyleInNode(&rootNode)
+
+	// 重新序列化YAML，保持原有顺序和格式
+	reserializedContent, err := MarshalYAMLWithIndent(&rootNode)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errors.New("处理YAML内容失败"))
 		return
