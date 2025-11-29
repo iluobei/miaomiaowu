@@ -233,6 +233,7 @@ func encodeValue(value any) *yaml.Node {
 		node.Kind = yaml.ScalarNode
 		node.Tag = "!!str"
 		node.Value = ""
+		node.Style = yaml.DoubleQuotedStyle // 强制空字符串使用双引号
 		return node
 	}
 
@@ -242,6 +243,7 @@ func encodeValue(value any) *yaml.Node {
 		// 仅对空值设置!!str标签, 防止给数值类型加上双引号
 		if v == "" {
 			node.Tag = "!!str"
+			node.Style = yaml.DoubleQuotedStyle // 强制空字符串使用双引号
 		}
 		node.Value = v
 	case int:
@@ -273,7 +275,42 @@ func encodeValue(value any) *yaml.Node {
 				Value: k,
 			}
 			node.Content = append(node.Content, keyNode)
-			node.Content = append(node.Content, encodeValue(val))
+
+			// 特殊处理 short-id 字段，始终当作字符串处理并加引号
+			if k == "short-id" {
+				strVal := ""
+				switch typedVal := val.(type) {
+				case string:
+					strVal = typedVal
+				case int:
+					// 数字类型转为字符串，保持原值
+					strVal = fmt.Sprintf("%d", typedVal)
+				case int64:
+					strVal = fmt.Sprintf("%d", typedVal)
+				case float64:
+					// 浮点数转为字符串，保持原值
+					if typedVal == float64(int64(typedVal)) {
+						strVal = fmt.Sprintf("%d", int64(typedVal))
+					} else {
+						strVal = fmt.Sprintf("%g", typedVal)
+					}
+				case nil:
+					strVal = ""
+				default:
+					strVal = fmt.Sprintf("%v", typedVal)
+				}
+
+				// 创建带引号的字符串节点，强制使用 !!str 标签和双引号
+				valueNode := &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!str",
+					Value: strVal,
+					Style: yaml.DoubleQuotedStyle,
+				}
+				node.Content = append(node.Content, valueNode)
+			} else {
+				node.Content = append(node.Content, encodeValue(val))
+			}
 		}
 	default:
 		// Fallback: encode as string
@@ -299,6 +336,70 @@ func convertNilToEmptyString(m map[string]any) {
 					convertNilToEmptyString(itemMap)
 				}
 			}
+		}
+	}
+}
+
+// MarshalYAMLWithQuotedEmptyStrings marshals a map to YAML ensuring empty strings are quoted
+func MarshalYAMLWithQuotedEmptyStrings(data map[string]any) ([]byte, error) {
+	// Convert nil values to empty strings first
+	convertNilToEmptyString(data)
+
+	// Build the root YAML node using our custom encodeValue
+	rootNode := encodeValue(data)
+
+	// Create a YAML document
+	doc := &yaml.Node{
+		Kind:    yaml.DocumentNode,
+		Content: []*yaml.Node{rootNode},
+	}
+
+	// Marshal to bytes
+	return yaml.Marshal(doc)
+}
+
+// fixShortIdStyleInNode recursively fixes short-id fields to use double quotes
+func fixShortIdStyleInNode(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	// Process mapping nodes (objects)
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			if i+1 < len(node.Content) {
+				keyNode := node.Content[i]
+				valueNode := node.Content[i+1]
+
+				// If this is a short-id field, ensure the value uses double quotes
+				if keyNode.Value == "short-id" {
+					if valueNode.Kind == yaml.ScalarNode {
+						valueNode.Tag = "!!str"
+						valueNode.Style = yaml.DoubleQuotedStyle
+						// Ensure the value is a string
+						if valueNode.Value == "" || valueNode.Value == "null" {
+							valueNode.Value = ""
+						}
+					}
+				}
+
+				// Recursively process the value node
+				fixShortIdStyleInNode(valueNode)
+			}
+		}
+	}
+
+	// Process sequence nodes (arrays)
+	if node.Kind == yaml.SequenceNode {
+		for _, child := range node.Content {
+			fixShortIdStyleInNode(child)
+		}
+	}
+
+	// Process document nodes
+	if node.Kind == yaml.DocumentNode {
+		for _, child := range node.Content {
+			fixShortIdStyleInNode(child)
 		}
 	}
 }

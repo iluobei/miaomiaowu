@@ -608,12 +608,22 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		filename = filename + ".yaml"
 	}
 
-	// 验证YAML格式
+	// 验证YAML格式并重新序列化以确保空字符串被正确处理
 	var yamlCheck map[string]any
 	if err := yaml.Unmarshal([]byte(req.Content), &yamlCheck); err != nil {
 		writeError(w, http.StatusBadRequest, errors.New("配置内容不是有效的YAML格式"))
 		return
 	}
+
+	// 重新序列化YAML以确保空字符串带引号
+	reserializedContent, err := MarshalYAMLWithQuotedEmptyStrings(yamlCheck)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("处理YAML内容失败"))
+		return
+	}
+
+	// Fix emoji escapes and quoted numbers
+	fixedContent := RemoveUnicodeEscapeQuotes(string(reserializedContent))
 
 	// 保存文件到subscribes目录
 	subscribesDir := "subscribes"
@@ -623,7 +633,7 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 	}
 
 	filePath := filepath.Join(subscribesDir, filename)
-	if err := os.WriteFile(filePath, []byte(req.Content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(fixedContent), 0644); err != nil {
 		writeError(w, http.StatusInternalServerError, errors.New("保存订阅文件失败"))
 		return
 	}

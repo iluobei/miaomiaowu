@@ -127,6 +127,9 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 		}
 	}
 
+	// Fix short-id fields to use double quotes before marshaling
+	fixShortIdStyleInNode(&rootNode)
+
 	// Marshal the modified node (使用2空格缩进)
 	modifiedData, err := MarshalYAMLWithIndent(&rootNode)
 	if err != nil {

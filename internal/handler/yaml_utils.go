@@ -67,5 +67,16 @@ func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 	numericQuotesRe := regexp.MustCompile(`:\s+"(\d+)"`)
 	result = numericQuotesRe.ReplaceAllString(result, `: $1`)
 
+	// Step 4: Convert single quotes to double quotes for short-id field
+	// Replace short-id: 'value' with short-id: "value"
+	// Match only at line boundaries to avoid matching partial strings
+	shortIdSingleQuoteRe := regexp.MustCompile(`(?m)^([ \t]+)short-id:[ \t]+'([^']*)'[ \t]*$`)
+	result = shortIdSingleQuoteRe.ReplaceAllString(result, `$1short-id: "$2"`)
+
+	// Step 5: Add quotes to empty short-id values (short-id: → short-id: "")
+	// Match only complete lines ending after the colon
+	emptyShortIdRe := regexp.MustCompile(`(?m)^([ \t]+)short-id:[ \t]*$`)
+	result = emptyShortIdRe.ReplaceAllString(result, `$1short-id: ""`)
+
 	return result
 }

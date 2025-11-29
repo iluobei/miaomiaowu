@@ -53,6 +53,49 @@ import type { PredefinedRuleSetType, CustomRule } from '@/lib/sublink/types'
 import type { ProxyConfig } from '@/lib/sublink/types'
 import yaml from 'js-yaml'
 
+// 确保 short-id 字段始终作为字符串处理
+function ensureShortIdAsString(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(ensureShortIdAsString)
+  }
+
+  const result: any = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'short-id') {
+      // 强制转换为字符串
+      if (value === null || value === undefined) {
+        result[key] = ''
+      } else if (typeof value === 'string') {
+        result[key] = value
+      } else {
+        // 数字等其他类型转为字符串
+        result[key] = String(value)
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = ensureShortIdAsString(value)
+    } else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+// 修复 YAML 中的 short-id 空值显示
+function fixShortIdInYaml(yamlStr: string): string {
+  let result = yamlStr
+  // 1. 将 short-id: '' (单引号空字符串) 替换为 short-id: ""
+  result = result.replace(/^([ \t]*)short-id:[ \t]*''[ \t]*$/gm, '$1short-id: ""')
+  // 2. 将 short-id: 后面没有值的行替换为 short-id: ""
+  result = result.replace(/^([ \t]*)short-id:[ \t]*$/gm, '$1short-id: ""')
+  // 3. 将 short-id: 'value' (单引号非空值) 替换为 short-id: "value"
+  result = result.replace(/^([ \t]*)short-id:[ \t]*'([^']*)'[ \t]*$/gm, '$1short-id: "$2"')
+  return result
+}
+
 // 重新排序代理节点字段，将 name, type, server, port 放在最前面
 function reorderProxyFields(proxy: ProxyConfig): ProxyConfig {
   const ordered: any = {}
@@ -366,11 +409,17 @@ function SubscriptionGeneratorPage() {
       // 插入代理节点，并重新排序字段
       templateConfig.proxies = proxies.map(proxy => reorderProxyFields(proxy))
 
+      // 确保 short-id 字段始终作为字符串
+      const processedConfig = ensureShortIdAsString(templateConfig)
+
       // 转换回 YAML
-      let finalConfig = yaml.dump(templateConfig, {
+      let finalConfig = yaml.dump(processedConfig, {
         lineWidth: -1,
         noRefs: true,
       })
+
+      // 修复 short-id 空值显示
+      finalConfig = fixShortIdInYaml(finalConfig)
 
       // 应用自定义规则
       try {
@@ -621,11 +670,17 @@ function SubscriptionGeneratorPage() {
         parsedConfig.proxies = parsedConfig.proxies.map((proxy: any) => reorderProxyFields(proxy))
       }
 
+      // 确保 short-id 字段始终作为字符串
+      const processedConfig = ensureShortIdAsString(parsedConfig)
+
       // 转换回 YAML
-      const newConfig = yaml.dump(parsedConfig, {
+      let newConfig = yaml.dump(processedConfig, {
         lineWidth: -1,
         noRefs: true,
       })
+
+      // 修复 short-id 空值显示
+      newConfig = fixShortIdInYaml(newConfig)
 
       // 验证 rules 中引用的节点是否都存在
       const validationResult = validateRulesNodes(parsedConfig)
@@ -736,11 +791,17 @@ function SubscriptionGeneratorPage() {
         parsedConfig.proxies = parsedConfig.proxies.map((proxy: any) => reorderProxyFields(proxy))
       }
 
+      // 确保 short-id 字段始终作为字符串
+      const processedConfigFinal = ensureShortIdAsString(parsedConfig)
+
       // 转换回 YAML
-      const finalConfig = yaml.dump(parsedConfig, {
+      let finalConfig = yaml.dump(processedConfigFinal, {
         lineWidth: -1,
         noRefs: true,
       })
+
+      // 修复 short-id 空值显示
+      finalConfig = fixShortIdInYaml(finalConfig)
 
       setClashConfig(finalConfig)
       setGroupDialogOpen(false)
@@ -1019,8 +1080,15 @@ function SubscriptionGeneratorPage() {
           parsedConfig['rules'] = updatedRules
         }
 
+        // 确保 short-id 字段始终作为字符串
+        const processedParsedConfig = ensureShortIdAsString(parsedConfig)
+
         // 转换回YAML并更新待处理配置
-        const newConfig = yaml.dump(parsedConfig, { lineWidth: -1, noRefs: true })
+        let newConfig = yaml.dump(processedParsedConfig, { lineWidth: -1, noRefs: true })
+
+        // 修复 short-id 空值显示
+        newConfig = fixShortIdInYaml(newConfig)
+
         setPendingConfigAfterGrouping(newConfig)
       } catch (error) {
         console.error('更新待处理配置中的代理组引用失败:', error)
@@ -1059,8 +1127,15 @@ function SubscriptionGeneratorPage() {
           parsedConfig['rules'] = updatedRules
         }
 
+        // 确保 short-id 字段始终作为字符串
+        const processedCurrentConfig = ensureShortIdAsString(parsedConfig)
+
         // 转换回YAML并更新当前配置
-        const newConfig = yaml.dump(parsedConfig, { lineWidth: -1, noRefs: true })
+        let newConfig = yaml.dump(processedCurrentConfig, { lineWidth: -1, noRefs: true })
+
+        // 修复 short-id 空值显示
+        newConfig = fixShortIdInYaml(newConfig)
+
         setClashConfig(newConfig)
       } catch (error) {
         console.error('更新当前配置中的代理组引用失败:', error)

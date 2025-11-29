@@ -86,31 +86,95 @@ func patchFile(filePath string) bool {
 	return true
 }
 
-// needsPatching checks if a file contains Unicode escape sequences or quoted numbers that need fixing
+// needsPatching checks if a file needs patching
 func needsPatching(content string) bool {
-	// Check for patterns like \U0001F4B0 or \u4E2D
+	// Check for Unicode escape sequences
 	if strings.Contains(content, "\\U") || strings.Contains(content, "\\u") {
 		return true
 	}
 
-	// Check for quoted numeric values like port: "443"
-	numericQuotesRe := regexp.MustCompile(`:\s+"(\d+)"`)
-	return numericQuotesRe.MatchString(content)
+	// Check for quoted port values in proxies section
+	if strings.Contains(content, "proxies:") {
+		portQuotesRe := regexp.MustCompile(`(?m)^\s+port:\s+"(\d+)"`)
+		if portQuotesRe.MatchString(content) {
+			return true
+		}
+	}
+
+	// Check for short-id that needs fixing (empty, <nil>, null, or unquoted values)
+	// Match patterns like: "short-id: <nil>", "short-id: null", "short-id:", "short-id: abc"
+	shortIdNeedsFixRe := regexp.MustCompile(`(?m)^\s+short-id:\s*(?:$|<nil>|null|[^"\n])`)
+	return shortIdNeedsFixRe.MatchString(content)
 }
 
-// removeUnicodeEscapeQuotesFromFile removes quotes from strings that contain Unicode escape sequences
-// and converts the escape sequences back to actual Unicode characters (like emoji)
+// removeUnicodeEscapeQuotesFromFile applies the 3 fixes:
+// 1. Remove quotes from port values in proxies section
+// 2. Fix short-id values to use double quotes
+// 3. Convert Unicode escapes back to emoji
 func removeUnicodeEscapeQuotesFromFile(yamlContent string) string {
-	// Step 1: Remove quotes from strings that contain Unicode escape sequences
-	// Pattern: "...\U000XXXXX..." or "...\uXXXX..."
+	result := yamlContent
+
+	// Fix 1: Remove quotes from port values in proxies section only
+	// Match: port: "443" → port: 443 (only under proxies)
+	inProxiesSection := false
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		// Detect if we're in proxies section
+		if strings.HasPrefix(strings.TrimSpace(line), "proxies:") {
+			inProxiesSection = true
+			continue
+		}
+		// Exit proxies section when we hit another top-level key
+		if inProxiesSection && len(line) > 0 && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && strings.Contains(line, ":") {
+			inProxiesSection = false
+		}
+
+		// Fix port values only in proxies section
+		if inProxiesSection {
+			portQuotesRe := regexp.MustCompile(`^([ \t]+port:[ \t]*)"(\d+)"`)
+			if portQuotesRe.MatchString(line) {
+				lines[i] = portQuotesRe.ReplaceAllString(line, `$1$2`)
+			}
+		}
+	}
+	result = strings.Join(lines, "\n")
+
+	// Fix 2: Fix short-id values to always use double quotes
+	// Handle different cases:
+	// - short-id: → short-id: ""
+	// - short-id: <nil> → short-id: ""
+	// - short-id: null → short-id: ""
+	// - short-id: value → short-id: "value" (if not already quoted)
+	// - short-id: 'value' → short-id: "value" (single quotes to double)
+
+	// 2.1: Fix <nil> and null values
+	nilShortIdRe := regexp.MustCompile(`(?m)^([ \t]+short-id:[ \t]*)<nil>([ \t]*)$`)
+	result = nilShortIdRe.ReplaceAllString(result, `$1""$2`)
+
+	nullShortIdRe := regexp.MustCompile(`(?m)^([ \t]+short-id:[ \t]*)null([ \t]*)$`)
+	result = nullShortIdRe.ReplaceAllString(result, `$1""$2`)
+
+	// 2.2: Fix empty values (just colon with nothing after)
+	emptyShortIdRe := regexp.MustCompile(`(?m)^([ \t]+short-id:)([ \t]*)$`)
+	result = emptyShortIdRe.ReplaceAllString(result, `$1 ""$2`)
+
+	// 2.3: Convert single quotes to double quotes
+	singleQuoteShortIdRe := regexp.MustCompile(`(?m)^([ \t]+short-id:[ \t]*)'([^']*)'([ \t]*)$`)
+	result = singleQuoteShortIdRe.ReplaceAllString(result, `$1"$2"$3`)
+
+	// 2.4: Add double quotes to unquoted non-empty values (but skip if already has quotes)
+	// Match: short-id: abc123 (not starting with quote)
+	unquotedShortIdRe := regexp.MustCompile(`(?m)^([ \t]+short-id:[ \t]*)([^"'\s][^ \t\n]*)([ \t]*)$`)
+	result = unquotedShortIdRe.ReplaceAllString(result, `$1"$2"$3`)
+
+	// Fix 3: Convert Unicode escape sequences back to actual emoji/characters
+	// First, remove quotes from strings containing Unicode escapes to avoid double-encoding
 	quotedUnicodeRe := regexp.MustCompile(`"([^"]*\\[Uu][0-9A-Fa-f]{4,8}[^"]*)"`)
-	result := quotedUnicodeRe.ReplaceAllStringFunc(yamlContent, func(match string) string {
-		// Remove the outer quotes
+	result = quotedUnicodeRe.ReplaceAllStringFunc(result, func(match string) string {
 		return strings.Trim(match, `"`)
 	})
 
-	// Step 2: Convert ALL Unicode escapes back to actual characters (quoted or not)
-	// \U0001F4B0 -> 💰, \u4E2D -> 中, \U0001F1ED\U0001F1F0 -> 🇭🇰
+	// Then convert all Unicode escapes: \U0001F4B0 → 💰, \u4E2D → 中
 	escapeRe := regexp.MustCompile(`\\U([0-9A-Fa-f]{8})|\\u([0-9A-Fa-f]{4})`)
 	result = escapeRe.ReplaceAllStringFunc(result, func(escapeSeq string) string {
 		var codepoint int
@@ -121,11 +185,6 @@ func removeUnicodeEscapeQuotesFromFile(yamlContent string) string {
 		}
 		return string(rune(codepoint))
 	})
-
-	// Step 3: Remove quotes from numeric values (like port: "443")
-	// This fixes values that should be numbers but got quoted
-	numericQuotesRe := regexp.MustCompile(`:\s+"(\d+)"`)
-	result = numericQuotesRe.ReplaceAllString(result, `: $1`)
 
 	return result
 }

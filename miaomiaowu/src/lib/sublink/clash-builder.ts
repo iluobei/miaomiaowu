@@ -276,7 +276,7 @@ export class ClashConfigBuilder {
             } else if (typeof firstValue === 'object' && firstValue !== null) {
               yaml += `${spaces}- ${firstKey}:\n${this.toYAML(firstValue, indent + 2)}`
             } else {
-              yaml += `${spaces}- ${firstKey}: ${this.formatValue(firstValue)}\n`
+              yaml += `${spaces}- ${firstKey}: ${this.formatValue(firstValue, firstKey)}\n`
             }
 
             for (const [key, value] of restEntries) {
@@ -285,7 +285,7 @@ export class ClashConfigBuilder {
               } else if (typeof value === 'object' && value !== null) {
                 yaml += `${spaces}  ${key}:\n${this.toYAML(value, indent + 2)}`
               } else {
-                yaml += `${spaces}  ${key}: ${this.formatValue(value)}\n`
+                yaml += `${spaces}  ${key}: ${this.formatValue(value, key)}\n`
               }
             }
           }
@@ -302,7 +302,7 @@ export class ClashConfigBuilder {
         } else if (typeof value === 'object' && value !== null) {
           yaml += `${spaces}${key}:\n${this.toYAML(value, indent + 1)}`
         } else {
-          yaml += `${spaces}${key}: ${this.formatValue(value)}\n`
+          yaml += `${spaces}${key}: ${this.formatValue(value, key)}\n`
         }
       }
     }
@@ -310,8 +310,12 @@ export class ClashConfigBuilder {
     return yaml
   }
 
-  private formatValue(value: unknown): string {
+  private formatValue(value: unknown, key?: string): string {
     if (typeof value === 'string') {
+      // 空字符串或 short-id 字段强制使用引号
+      if (value === '' || key === 'short-id') {
+        return `"${value}"`
+      }
       if (
         value.includes(':') ||
         value.includes('#') ||
