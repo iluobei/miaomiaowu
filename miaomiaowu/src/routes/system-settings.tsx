@@ -83,6 +83,10 @@ function SystemSettingsPage() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['user-config'] })
+      // 当短链接开关状态改变时，刷新订阅列表以更新链接显示
+      if (variables.enable_short_link !== enableShortLink) {
+        queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
+      }
       setForceSyncExternal(variables.force_sync_external)
       setMatchRule(variables.match_rule as 'node_name' | 'server_port')
       setCacheExpireMinutes(variables.cache_expire_minutes)
