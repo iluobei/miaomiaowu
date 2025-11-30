@@ -157,15 +157,20 @@ function parseShadowsocksR(url: string): ProxyNode | null {
     const paramsPart = parts.length > 1 ? parts[1] : ''
 
     // 解析主体部分: server:port:protocol:method:obfs:base64(password)
+    // 注意：需要从右往左解析，因为 server 可能是 IPv6 地址（包含冒号）
     const mainSegments = mainPart.split(':')
     if (mainSegments.length < 6) return null
 
-    const server = mainSegments[0]
-    const port = parseInt(mainSegments[1]) || 0
-    const protocol = mainSegments[2]
-    const method = mainSegments[3]
-    const obfs = mainSegments[4]
-    const passwordBase64 = mainSegments.slice(5).join(':')
+    // 从右往左提取固定的字段（最后5个字段）
+    const passwordBase64 = mainSegments[mainSegments.length - 1]
+    const obfs = mainSegments[mainSegments.length - 2]
+    const method = mainSegments[mainSegments.length - 3]
+    const protocol = mainSegments[mainSegments.length - 4]
+    const portStr = mainSegments[mainSegments.length - 5]
+
+    // server 是剩余的所有部分（可能包含冒号，如 IPv6）
+    const server = mainSegments.slice(0, mainSegments.length - 5).join(':')
+    const port = parseInt(portStr) || 0
     const password = base64Decode(passwordBase64)
 
     // 解析参数部分
@@ -233,9 +238,11 @@ function parseShadowsocks(url: string): ProxyNode | null {
       method = m
       password = p
 
-      const [s, po] = serverPart.split(':')
-      server = s
-      port = parseInt(po) || 0
+      // 从最后一个冒号分割，支持IPv6地址
+      const lastColonIndex = serverPart.lastIndexOf(':')
+      if (lastColonIndex === -1) return null
+      server = serverPart.substring(0, lastColonIndex)
+      port = parseInt(serverPart.substring(lastColonIndex + 1)) || 0
     } else {
       // 格式2: base64(method:password@server:port)
       const decoded = base64Decode(mainPart)
@@ -251,9 +258,11 @@ function parseShadowsocks(url: string): ProxyNode | null {
       method = m
       password = p
 
-      const [s, po] = serverPart.split(':')
-      server = s
-      port = parseInt(po) || 0
+      // 从最后一个冒号分割，支持IPv6地址
+      const lastColonIndex = serverPart.lastIndexOf(':')
+      if (lastColonIndex === -1) return null
+      server = serverPart.substring(0, lastColonIndex)
+      port = parseInt(serverPart.substring(lastColonIndex + 1)) || 0
     }
 
     return {
