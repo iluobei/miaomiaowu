@@ -109,12 +109,14 @@ create_systemd_service() {
     echo ""
     if [ -t 0 ]; then
         # 交互式环境，可以读取用户输入
-        read -p "请输入端口（默认8080）: " PORT_INPUT
-        PORT_INPUT=${PORT_INPUT:-8080}
+        read -p "请输入端口号（默认 8080，直接回车使用默认值）: " PORT_INPUT
+        if [ -z "$PORT_INPUT" ]; then
+            PORT_INPUT=8080
+        fi
     else
         # 非交互式环境（如管道），使用默认值
         PORT_INPUT=${PORT:-8080}
-        echo_info "使用默认端口: $PORT_INPUT"
+        echo_info "使用端口: $PORT_INPUT"
     fi
 
     cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
@@ -189,6 +191,7 @@ show_status() {
     echo "  查看状态: systemctl status $SERVICE_NAME"
     echo "  查看日志: journalctl -u $SERVICE_NAME -f"
     echo "  更新版本: curl -sL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | sudo bash -s update"
+    echo "  卸载服务: curl -sL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | sudo bash -s uninstall"
     echo ""
     echo "⚠️  首次访问需要完成初始化配置"
     echo ""
@@ -236,12 +239,14 @@ update_service() {
     echo ""
     if [ -t 0 ]; then
         # 交互式环境
-        read -p "请输入端口（当前: $CURRENT_PORT，直接回车保持不变）: " PORT_INPUT
-        PORT_INPUT=${PORT_INPUT:-$CURRENT_PORT}
+        read -p "请输入端口号（默认 $CURRENT_PORT，直接回车使用默认值）: " PORT_INPUT
+        if [ -z "$PORT_INPUT" ]; then
+            PORT_INPUT=$CURRENT_PORT
+        fi
     else
         # 非交互式环境，保持当前端口或使用环境变量
         PORT_INPUT=${PORT:-$CURRENT_PORT}
-        echo_info "保持端口: $PORT_INPUT"
+        echo_info "使用端口: $PORT_INPUT"
     fi
 
     # 更新 systemd 服务文件中的端口
@@ -274,6 +279,94 @@ update_service() {
     fi
 }
 
+# 卸载服务
+uninstall_service() {
+    echo_info "开始卸载妙妙屋..."
+    echo ""
+
+    # 检查服务是否已安装
+    if [ ! -f "$INSTALL_DIR/$SERVICE_NAME" ]; then
+        echo_error "未检测到已安装的服务"
+        exit 1
+    fi
+
+    # 显示当前版本
+    if [ -f "$DATA_DIR/.version" ]; then
+        CURRENT_VERSION=$(cat "$DATA_DIR/.version")
+        echo_info "当前版本: $CURRENT_VERSION"
+        echo ""
+    fi
+
+    # 停止并禁用服务
+    echo_info "停止并禁用服务..."
+    systemctl stop ${SERVICE_NAME}.service || true
+    systemctl disable ${SERVICE_NAME}.service || true
+    echo_info "✓ 服务已停止"
+    echo ""
+
+    # 询问是否保留配置和数据
+    KEEP_DATA=false
+    if [ -t 0 ]; then
+        # 交互式环境
+        echo "是否保留配置和数据？"
+        echo "  1) 完全删除（删除所有文件和数据）"
+        echo "  2) 保留数据（保留 $DATA_DIR 和 $CONFIG_DIR 目录）"
+        read -p "请选择 (1/2，默认 2): " CHOICE
+
+        if [ "$CHOICE" = "1" ]; then
+            KEEP_DATA=false
+        else
+            KEEP_DATA=true
+        fi
+    else
+        # 非交互式环境，检查环境变量
+        if [ "$KEEP_DATA" != "false" ]; then
+            KEEP_DATA=true
+        fi
+        if [ "$KEEP_DATA" = "true" ]; then
+            echo_info "保留数据模式"
+        else
+            echo_info "完全删除模式"
+        fi
+    fi
+    echo ""
+
+    # 删除 systemd 服务文件
+    echo_info "删除 systemd 服务..."
+    rm -f /etc/systemd/system/${SERVICE_NAME}.service
+    systemctl daemon-reload
+    echo_info "✓ systemd 服务已删除"
+    echo ""
+
+    # 删除二进制文件
+    echo_info "删除程序文件..."
+    rm -f "$INSTALL_DIR/$SERVICE_NAME" "$INSTALL_DIR/${SERVICE_NAME}.bak"
+    echo_info "✓ 程序文件已删除"
+    echo ""
+
+    # 根据选择删除或保留数据
+    if [ "$KEEP_DATA" = "false" ]; then
+        echo_info "删除数据和配置..."
+        rm -rf "$DATA_DIR" "$CONFIG_DIR"
+        echo_info "✓ 数据和配置已删除"
+        echo ""
+        echo "======================================"
+        echo_info "卸载完成！所有文件已删除"
+        echo "======================================"
+    else
+        echo_info "保留数据目录: $DATA_DIR"
+        echo_info "保留配置目录: $CONFIG_DIR"
+        echo ""
+        echo "======================================"
+        echo_info "卸载完成！配置和数据已保留"
+        echo "======================================"
+        echo ""
+        echo "如需重新安装:"
+        echo "  curl -sL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | sudo bash"
+    fi
+    echo ""
+}
+
 # 主函数
 main() {
     # 检查命令行参数
@@ -283,6 +376,10 @@ main() {
         check_architecture
         install_dependencies
         update_service
+    elif [ "$1" = "uninstall" ]; then
+        echo_info "进入卸载模式..."
+        check_root
+        uninstall_service
     else
         echo_info "开始安装妙妙屋个人Clash订阅管理系统..."
         echo ""
