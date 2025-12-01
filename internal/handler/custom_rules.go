@@ -21,7 +21,7 @@ import (
 type customRuleRequest struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"` // "dns", "rules", "rule-providers"
-	Mode    string `json:"mode"` // "replace", "prepend"
+	Mode    string `json:"mode"` // "replace", "prepend", "append" (append only for rules type)
 	Content string `json:"content"`
 	Enabled bool   `json:"enabled"`
 }

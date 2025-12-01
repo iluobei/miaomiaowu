@@ -15,7 +15,6 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
-	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog'
@@ -52,6 +51,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { RULE_TEMPLATES } from './custom-rules-templates'
 
 export const Route = createFileRoute('/custom-rules/')({
 	component: CustomRulesPage,
@@ -84,6 +84,7 @@ function CustomRulesPage() {
 		content: '',
 		enabled: true,
 	})
+	const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
 
 	// Fetch rules
 	const { data: rules = [], isLoading } = useQuery<CustomRule[]>({
@@ -243,6 +244,7 @@ function CustomRulesPage() {
 			enabled: true,
 		})
 		setEditingRule(null)
+		setSelectedTemplate(null)
 	}
 
 	const handleCreate = () => {
@@ -440,6 +442,41 @@ function CustomRulesPage() {
 						</DialogDescription>
 					</DialogHeader>
 
+				{/* 顶部操作区 */}
+				<div className='flex items-center justify-between border-b pb-4'>
+					<div className='flex items-center space-x-2'>
+						<Switch
+							id='enabled'
+							checked={formData.enabled}
+							onCheckedChange={(checked) =>
+								setFormData({ ...formData, enabled: checked })
+							}
+						/>
+						<Label htmlFor='enabled'>启用此规则</Label>
+					</div>
+					<div className='flex items-center space-x-2'>
+						<Button
+							variant='outline'
+							onClick={() => {
+								setIsDialogOpen(false)
+								resetForm()
+							}}
+						>
+							取消
+						</Button>
+						<Button
+							onClick={handleSubmit}
+							disabled={
+								createMutation.isPending || updateMutation.isPending
+							}
+						>
+							{createMutation.isPending || updateMutation.isPending
+								? '保存中...'
+								: '保存'}
+						</Button>
+					</div>
+				</div>
+
 					<div className='space-y-4 py-4'>
 						<div className='space-y-2'>
 							<Label htmlFor='name'>名称</Label>
@@ -453,7 +490,7 @@ function CustomRulesPage() {
 							/>
 						</div>
 
-						<div className='grid grid-cols-2 gap-4'>
+						<div className={`grid gap-4 ${!editingRule ? 'grid-cols-4' : 'grid-cols-2'}`}>
 							<div className='space-y-2'>
 								<Label htmlFor='type'>类型</Label>
 								<Select
@@ -468,6 +505,8 @@ function CustomRulesPage() {
 											newFormData.mode = 'replace'
 										}
 										setFormData(newFormData)
+										// Reset selected template when changing type
+										setSelectedTemplate(null)
 									}}
 								>
 									<SelectTrigger id='type'>
@@ -499,8 +538,54 @@ function CustomRulesPage() {
 									</SelectContent>
 								</Select>
 							</div>
-						</div>
+				{/* 模板选择 - 仅在新建时显示 */}
+				{!editingRule && (
+					<div className='space-y-2 col-span-2'>
+						<Label htmlFor='template'>模板（可选）</Label>
+						<Select
+							value={selectedTemplate || 'none'}
+							onValueChange={(value: string) => {
+								if (value === 'none') {
+									setSelectedTemplate(null)
+									return
+								}
 
+								const templates = RULE_TEMPLATES[formData.type as keyof typeof RULE_TEMPLATES]
+								const template = templates[value as keyof typeof templates] as { name: string; content: string } | undefined
+
+if (template) {
+									setSelectedTemplate(value)
+
+									// 检查当前名称是否为空或是某个模板的名称
+									const allTemplates = RULE_TEMPLATES[formData.type as keyof typeof RULE_TEMPLATES]
+									const isTemplateName = Object.values(allTemplates).some(
+										(t: any) => t.name === formData.name
+									)
+
+									setFormData({
+										...formData,
+										// 只在名称为空或当前名称是模板名称时才更新名称
+										name: (formData.name === '' || isTemplateName) ? template.name : formData.name,
+										content: template.content
+									})
+								}
+							}}
+						>
+							<SelectTrigger id='template'>
+								<SelectValue placeholder='选择模板或手动输入' />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value='none'>不使用模板</SelectItem>
+								{Object.entries(RULE_TEMPLATES[formData.type as keyof typeof RULE_TEMPLATES]).map(([key, template]) => (
+									<SelectItem key={key} value={key}>
+										{template.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						</div>
+					)}
+					</div>
 						<div className='space-y-2'>
 							<Label htmlFor='content'>规则内容（YAML 格式）</Label>
 							<Textarea
@@ -510,46 +595,14 @@ function CustomRulesPage() {
 									setFormData({ ...formData, content: e.target.value })
 								}
 								placeholder='输入 YAML 格式的规则内容...'
-								className='font-mono text-sm min-h-[300px]'
+								className='font-mono text-sm min-h-[300px] whitespace-pre-wrap break-all [field-sizing:fixed]'
 							/>
 							<p className='text-xs text-muted-foreground'>
 								请确保内容符合 YAML 格式规范
 							</p>
 						</div>
 
-						<div className='flex items-center space-x-2'>
-							<Switch
-								id='enabled'
-								checked={formData.enabled}
-								onCheckedChange={(checked) =>
-									setFormData({ ...formData, enabled: checked })
-								}
-							/>
-							<Label htmlFor='enabled'>启用此规则</Label>
-						</div>
 					</div>
-
-					<DialogFooter>
-						<Button
-							variant='outline'
-							onClick={() => {
-								setIsDialogOpen(false)
-								resetForm()
-							}}
-						>
-							取消
-						</Button>
-						<Button
-							onClick={handleSubmit}
-							disabled={
-								createMutation.isPending || updateMutation.isPending
-							}
-						>
-							{createMutation.isPending || updateMutation.isPending
-								? '保存中...'
-								: '保存'}
-						</Button>
-					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 

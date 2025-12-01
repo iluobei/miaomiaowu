@@ -3032,6 +3032,11 @@ func (r *TrafficRepository) CreateCustomRule(ctx context.Context, rule *CustomRu
 	rule.Mode = strings.TrimSpace(rule.Mode)
 	if rule.Type == "dns" {
 		rule.Mode = "replace"
+	} else if rule.Type == "rules" {
+		// rules type supports replace, prepend, and append
+		if rule.Mode != "replace" && rule.Mode != "prepend" && rule.Mode != "append" {
+			return errors.New("custom rule mode must be 'replace', 'prepend', or 'append' for rules type")
+		}
 	} else if rule.Mode != "replace" && rule.Mode != "prepend" {
 		return errors.New("custom rule mode must be 'replace' or 'prepend'")
 	}
@@ -3092,6 +3097,11 @@ func (r *TrafficRepository) UpdateCustomRule(ctx context.Context, rule *CustomRu
 	rule.Mode = strings.TrimSpace(rule.Mode)
 	if rule.Type == "dns" {
 		rule.Mode = "replace"
+	} else if rule.Type == "rules" {
+		// rules type supports replace, prepend, and append
+		if rule.Mode != "replace" && rule.Mode != "prepend" && rule.Mode != "append" {
+			return errors.New("custom rule mode must be 'replace', 'prepend', or 'append' for rules type")
+		}
 	} else if rule.Mode != "replace" && rule.Mode != "prepend" {
 		return errors.New("custom rule mode must be 'replace' or 'prepend'")
 	}

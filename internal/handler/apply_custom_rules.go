@@ -291,6 +291,18 @@ func applyRulesRule(config map[string]interface{}, rule storage.CustomRule, prev
 		}
 		// Prepend new rules
 		config["rules"] = append(newRules, existingRules...)
+	} else if rule.Mode == "append" {
+		// Remove historical content if exists
+		if prevApp != nil && prevApp.AppliedContent != "" {
+			var historicalRules []interface{}
+			if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalRules); err == nil {
+				existingRules = removeRulesFromList(existingRules, historicalRules)
+			}
+		}
+		// Remove case-insensitive duplicates before appending
+		existingRules = removeDuplicateRulesCaseInsensitive(existingRules, newRules)
+		// Append new rules
+		config["rules"] = append(existingRules, newRules...)
 	}
 
 	// Serialize applied content for tracking
@@ -366,6 +378,33 @@ func removeRulesFromList(existing []interface{}, toRemove []interface{}) []inter
 	for _, rule := range existing {
 		if ruleStr, ok := rule.(string); ok {
 			if !removeSet[ruleStr] {
+				filtered = append(filtered, rule)
+			}
+		} else {
+			// Keep non-string rules as-is
+			filtered = append(filtered, rule)
+		}
+	}
+
+	return filtered
+}
+
+// removeDuplicateRulesCaseInsensitive removes rules from existing list that match newRules (case-insensitive)
+func removeDuplicateRulesCaseInsensitive(existing []interface{}, newRules []interface{}) []interface{} {
+	// Build a set of new rules in lowercase for O(n) lookup
+	newRulesSet := make(map[string]bool)
+	for _, rule := range newRules {
+		if ruleStr, ok := rule.(string); ok {
+			newRulesSet[strings.ToLower(ruleStr)] = true
+		}
+	}
+
+	// Filter out existing rules that match new rules (case-insensitive)
+	var filtered []interface{}
+	for _, rule := range existing {
+		if ruleStr, ok := rule.(string); ok {
+			// Only keep if not a duplicate (case-insensitive)
+			if !newRulesSet[strings.ToLower(ruleStr)] {
 				filtered = append(filtered, rule)
 			}
 		} else {
@@ -484,6 +523,22 @@ func applyRulesRuleToNode(docNode *yaml.Node, rule storage.CustomRule) {
 					Style:   existingRulesNode.Style,
 					Tag:     existingRulesNode.Tag,
 					Content: append(newRulesNode.Content, existingRulesNode.Content...),
+				}
+				docNode.Content[idx] = combined
+			}
+		}
+	} else if rule.Mode == "append" {
+		if existingRulesNode == nil || existingRulesNode.Kind != yaml.SequenceNode {
+			// No existing rules, just set the new ones
+			setFieldNode(docNode, "rules", newRulesNode)
+		} else {
+			// Append new rules to existing rules
+			if newRulesNode.Kind == yaml.SequenceNode {
+				combined := &yaml.Node{
+					Kind:    yaml.SequenceNode,
+					Style:   existingRulesNode.Style,
+					Tag:     existingRulesNode.Tag,
+					Content: append(existingRulesNode.Content, newRulesNode.Content...),
 				}
 				docNode.Content[idx] = combined
 			}
@@ -664,6 +719,29 @@ func applyRulesRuleToNodeSmart(docNode *yaml.Node, rule storage.CustomRule, prev
 					Style:   existingRulesNode.Style,
 					Tag:     existingRulesNode.Tag,
 					Content: append(newRulesNode.Content, existingRulesNode.Content...),
+				}
+				docNode.Content[idx] = combined
+			}
+		}
+	} else if rule.Mode == "append" {
+		if existingRulesNode == nil || existingRulesNode.Kind != yaml.SequenceNode {
+			// No existing rules, just set the new ones
+			setFieldNode(docNode, "rules", newRulesNode)
+		} else {
+			// Remove historical content if exists
+			if prevApp != nil && prevApp.AppliedContent != "" {
+				var historicalRules []interface{}
+				if err := json.Unmarshal([]byte(prevApp.AppliedContent), &historicalRules); err == nil {
+					existingRulesNode.Content = removeNodesFromSequence(existingRulesNode.Content, historicalRules)
+				}
+			}
+			// Append new rules to existing rules
+			if newRulesNode.Kind == yaml.SequenceNode {
+				combined := &yaml.Node{
+					Kind:    yaml.SequenceNode,
+					Style:   existingRulesNode.Style,
+					Tag:     existingRulesNode.Tag,
+					Content: append(existingRulesNode.Content, newRulesNode.Content...),
 				}
 				docNode.Content[idx] = combined
 			}
