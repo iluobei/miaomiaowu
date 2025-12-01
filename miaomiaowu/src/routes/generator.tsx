@@ -489,11 +489,13 @@ function SubscriptionGeneratorPage() {
       let generatedConfig = clashBuilder.build()
 
       // 应用自定义规则
+      let addedProxyGroups: string[] = []
       try {
         const applyRulesResponse = await api.post('/api/admin/apply-custom-rules', {
           yaml_content: generatedConfig
         })
         generatedConfig = applyRulesResponse.data.yaml_content
+        addedProxyGroups = applyRulesResponse.data.added_proxy_groups || []
       } catch (error) {
         console.error('Apply custom rules error:', error)
         // 应用规则失败不影响主流程，继续使用原配置
@@ -502,7 +504,15 @@ function SubscriptionGeneratorPage() {
       setClashConfig(generatedConfig)
       setHasManuallyGrouped(true) // 自定义规则模式生成后自动标记为已分组
 
-      toast.success('Clash 配置生成成功！')
+      // 显示生成成功通知，如果有新增代理组则包含提示
+      if (addedProxyGroups.length > 0) {
+        toast.success(
+          `Clash 配置生成成功！已应用自定义规则，新增了以下代理组：${addedProxyGroups.join('、')}，默认节点：🚀 节点选择、DIRECT`,
+          { duration: 8000 }
+        )
+      } else {
+        toast.success('Clash 配置生成成功！')
+      }
     } catch (error) {
       console.error('Generation error:', error)
       toast.error('生成订阅链接失败')
