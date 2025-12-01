@@ -6,7 +6,6 @@ import { UserMenu } from './user-menu'
 import { useAuthStore } from '@/stores/auth-store'
 import { profileQueryFn } from '@/lib/profile'
 import { cn } from '@/lib/utils'
-import { api } from '@/lib/api'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,33 +71,17 @@ export function Topbar() {
     staleTime: 5 * 60 * 1000,
   })
 
-  // Fetch user config to check if custom rules are enabled
-  const { data: userConfig } = useQuery({
-    queryKey: ['user-config'],
-    queryFn: async () => {
-      const response = await api.get('/api/user/config')
-      return response.data as {
-        custom_rules_enabled: boolean
-      }
-    },
-    enabled: Boolean(auth.accessToken) && Boolean(profile?.is_admin),
-    staleTime: 5 * 60 * 1000,
-  })
-
   const isAdmin = Boolean(profile?.is_admin)
-  const customRulesEnabled = Boolean(userConfig?.custom_rules_enabled)
 
-  // Add custom rules link conditionally
-  const adminNavLinksWithCustomRules = customRulesEnabled
-    ? [
-        ...adminNavLinks,
-        {
-          title: '自定义规则',
-          to: '/custom-rules',
-          icon: FileCode,
-        },
-      ]
-    : adminNavLinks
+  // Add custom rules link for admin users (always enabled)
+  const adminNavLinksWithCustomRules = [
+    ...adminNavLinks,
+    {
+      title: '自定义规则',
+      to: '/custom-rules',
+      icon: FileCode,
+    },
+  ]
 
   const navLinks = isAdmin ? [...baseNavLinks, ...adminNavLinksWithCustomRules] : baseNavLinks
 

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -98,6 +98,25 @@ function CustomRulesPage() {
 	// Create rule mutation
 	const createMutation = useMutation({
 		mutationFn: async (rule: RuleFormData) => {
+			// 如果是启用状态且模式为替换，需要先禁用同类型的其他替换模式规则
+			if (rule.enabled && rule.mode === 'replace') {
+				const conflictingRules = rules.filter(
+					r => r.type === rule.type &&
+					r.mode === 'replace' &&
+					r.enabled
+				)
+
+				for (const conflictRule of conflictingRules) {
+					await api.put(`/api/admin/custom-rules/${conflictRule.id}`, {
+						name: conflictRule.name,
+						type: conflictRule.type,
+						mode: conflictRule.mode,
+						content: conflictRule.content,
+						enabled: false,
+					})
+				}
+			}
+
 			const response = await api.post('/api/admin/custom-rules', rule)
 			return response.data
 		},
@@ -118,6 +137,26 @@ function CustomRulesPage() {
 			id,
 			...rule
 		}: RuleFormData & { id: number }) => {
+			// 如果是启用状态且模式为替换，需要先禁用同类型的其他替换模式规则
+			if (rule.enabled && rule.mode === 'replace') {
+				const conflictingRules = rules.filter(
+					r => r.id !== id &&
+					r.type === rule.type &&
+					r.mode === 'replace' &&
+					r.enabled
+				)
+
+				for (const conflictRule of conflictingRules) {
+					await api.put(`/api/admin/custom-rules/${conflictRule.id}`, {
+						name: conflictRule.name,
+						type: conflictRule.type,
+						mode: conflictRule.mode,
+						content: conflictRule.content,
+						enabled: false,
+					})
+				}
+			}
+
 			const response = await api.put(`/api/admin/custom-rules/${id}`, rule)
 			return response.data
 		},
@@ -145,6 +184,53 @@ function CustomRulesPage() {
 		},
 		onError: (error: any) => {
 			toast.error(error.response?.data?.error || '删除规则时出错')
+		},
+	})
+
+	// Toggle enabled state mutation
+	const toggleEnabledMutation = useMutation({
+		mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+			const rule = rules.find(r => r.id === id)
+			if (!rule) throw new Error('规则不存在')
+
+			// 如果是启用操作且模式为替换，需要检查同类型的其他替换模式规则
+			if (enabled && rule.mode === 'replace') {
+				// 找出同类型且为替换模式的其他已启用规则
+				const conflictingRules = rules.filter(
+					r => r.id !== id &&
+					r.type === rule.type &&
+					r.mode === 'replace' &&
+					r.enabled
+				)
+
+				// 如果有冲突的规则，先禁用它们
+				for (const conflictRule of conflictingRules) {
+					await api.put(`/api/admin/custom-rules/${conflictRule.id}`, {
+						name: conflictRule.name,
+						type: conflictRule.type,
+						mode: conflictRule.mode,
+						content: conflictRule.content,
+						enabled: false,
+					})
+				}
+			}
+
+			// 更新当前规则
+			const response = await api.put(`/api/admin/custom-rules/${id}`, {
+				name: rule.name,
+				type: rule.type,
+				mode: rule.mode,
+				content: rule.content,
+				enabled: enabled,
+			})
+			return response.data
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ['custom-rules'] })
+			toast.success('状态已更新')
+		},
+		onError: (error: any) => {
+			toast.error(error.response?.data?.error || '更新状态时出错')
 		},
 	})
 
@@ -294,17 +380,21 @@ function CustomRulesPage() {
 												{getModeLabel(rule.mode)}
 											</TableCell>
 											<TableCell>
-												{rule.enabled ? (
-													<Badge variant='default'>
-														<Eye className='mr-1 h-3 w-3' />
-														启用
-													</Badge>
-												) : (
-													<Badge variant='secondary'>
-														<EyeOff className='mr-1 h-3 w-3' />
-														禁用
-													</Badge>
-												)}
+												<div className='flex items-center gap-2'>
+													<Switch
+														checked={rule.enabled}
+														onCheckedChange={(checked) => {
+															toggleEnabledMutation.mutate({
+																id: rule.id,
+																enabled: checked,
+															})
+														}}
+														disabled={toggleEnabledMutation.isPending}
+													/>
+													<span className='text-sm text-muted-foreground'>
+														{rule.enabled ? '启用' : '禁用'}
+													</span>
+												</div>
 											</TableCell>
 											<TableCell className='text-sm text-muted-foreground'>
 												{new Date(rule.created_at).toLocaleString('zh-CN')}

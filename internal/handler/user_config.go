@@ -64,7 +64,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				CacheExpireMinutes: 0,
 				SyncTraffic:        false,
 				EnableProbeBinding: false,
-				CustomRulesEnabled: false,
+				CustomRulesEnabled: true, // 自定义规则始终启用
 				EnableShortLink:    false,
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -82,7 +82,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		CacheExpireMinutes: settings.CacheExpireMinutes,
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,
-		CustomRulesEnabled: settings.CustomRulesEnabled,
+		CustomRulesEnabled: true, // 自定义规则始终启用
 		EnableShortLink:    settings.EnableShortLink,
 	}
 
@@ -121,7 +121,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		CacheExpireMinutes: cacheExpireMinutes,
 		SyncTraffic:        payload.SyncTraffic,
 		EnableProbeBinding: payload.EnableProbeBinding,
-		CustomRulesEnabled: payload.CustomRulesEnabled,
+		CustomRulesEnabled: true, // 自定义规则始终启用
 		EnableShortLink:    payload.EnableShortLink,
 	}
 
@@ -136,7 +136,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		CacheExpireMinutes: settings.CacheExpireMinutes,
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,
-		CustomRulesEnabled: settings.CustomRulesEnabled,
+		CustomRulesEnabled: true, // 自定义规则始终启用
 		EnableShortLink:    settings.EnableShortLink,
 	}
 

@@ -36,7 +36,6 @@ function SystemSettingsPage() {
   const [cacheExpireMinutes, setCacheExpireMinutes] = useState(0)
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
-  const [customRulesEnabled, setCustomRulesEnabled] = useState(false)
   const [enableShortLink, setEnableShortLink] = useState(false)
 
   const { data: userConfig, isLoading: loadingConfig } = useQuery({
@@ -49,7 +48,6 @@ function SystemSettingsPage() {
         cache_expire_minutes: number
         sync_traffic: boolean
         enable_probe_binding: boolean
-        custom_rules_enabled: boolean
         enable_short_link: boolean
       }
     },
@@ -64,7 +62,6 @@ function SystemSettingsPage() {
       setCacheExpireMinutes(userConfig.cache_expire_minutes)
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
-      setCustomRulesEnabled(userConfig.custom_rules_enabled || false)
       setEnableShortLink(userConfig.enable_short_link || false)
     }
   }, [userConfig])
@@ -76,7 +73,6 @@ function SystemSettingsPage() {
       cache_expire_minutes: number
       sync_traffic: boolean
       enable_probe_binding: boolean
-      custom_rules_enabled: boolean
       enable_short_link: boolean
     }) => {
       await api.put('/api/user/config', data)
@@ -92,7 +88,6 @@ function SystemSettingsPage() {
       setCacheExpireMinutes(variables.cache_expire_minutes)
       setSyncTraffic(variables.sync_traffic)
       setEnableProbeBinding(variables.enable_probe_binding)
-      setCustomRulesEnabled(variables.custom_rules_enabled)
       setEnableShortLink(variables.enable_short_link)
       toast.success('设置已更新')
     },
@@ -138,7 +133,6 @@ function SystemSettingsPage() {
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: checked,
                       enable_probe_binding: enableProbeBinding,
-                      custom_rules_enabled: customRulesEnabled,
                       enable_short_link: enableShortLink,
                     })
                   }}
@@ -164,7 +158,6 @@ function SystemSettingsPage() {
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
-                      custom_rules_enabled: customRulesEnabled,
                       enable_short_link: enableShortLink,
                     })
                   }}
@@ -187,7 +180,6 @@ function SystemSettingsPage() {
                             cache_expire_minutes: cacheExpireMinutes,
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
-                            custom_rules_enabled: customRulesEnabled,
                             enable_short_link: enableShortLink,
                           })
                         }}
@@ -231,7 +223,6 @@ function SystemSettingsPage() {
                             cache_expire_minutes: cacheExpireMinutes,
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
-                            custom_rules_enabled: customRulesEnabled,
                             enable_short_link: enableShortLink,
                           })
                         }}
@@ -275,7 +266,6 @@ function SystemSettingsPage() {
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: checked,
-                      custom_rules_enabled: customRulesEnabled,
                       enable_short_link: enableShortLink,
                     })
                   }}
@@ -292,53 +282,6 @@ function SystemSettingsPage() {
                     • 流量统计只会汇总绑定了节点的探针服务器流量
                     <br />
                     • 关闭后，流量统计会汇总所有探针服务器的流量
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 自定义规则设置 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>自定义规则设置</CardTitle>
-              <CardDescription>配置自定义 DNS、规则和规则集功能</CardDescription>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='flex items-center justify-between space-x-2 pt-2'>
-                <div className='flex-1 space-y-1'>
-                  <Label htmlFor='custom-rules-enabled' className='cursor-pointer'>
-                    启用自定义规则
-                  </Label>
-                  <p className='text-sm text-muted-foreground'>
-                    开启后，可在自定义规则页面配置 DNS、规则和规则集，应用于订阅生成时
-                  </p>
-                </div>
-                <Switch
-                  id='custom-rules-enabled'
-                  checked={customRulesEnabled}
-                  onCheckedChange={(checked) => {
-                    updateConfigMutation.mutate({
-                      force_sync_external: forceSyncExternal,
-                      match_rule: matchRule,
-                      cache_expire_minutes: cacheExpireMinutes,
-                      sync_traffic: syncTraffic,
-                      enable_probe_binding: enableProbeBinding,
-                      custom_rules_enabled: checked,
-                      enable_short_link: enableShortLink,
-                    })
-                  }}
-                  disabled={loadingConfig || updateConfigMutation.isPending}
-                />
-              </div>
-              {customRulesEnabled && (
-                <div className='rounded-lg border bg-muted/40 p-4'>
-                  <p className='text-sm text-muted-foreground'>
-                    • 开启后，导航栏将显示"自定义规则"菜单项
-                    <br />
-                    • 可以创建 DNS 配置、规则列表和规则集提供商
-                    <br />
-                    • 生成订阅时会自动开启同步已启用的自定义规则开关
                   </p>
                 </div>
               )}
@@ -371,7 +314,6 @@ function SystemSettingsPage() {
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
-                      custom_rules_enabled: customRulesEnabled,
                       enable_short_link: checked,
                     })
                   }}
