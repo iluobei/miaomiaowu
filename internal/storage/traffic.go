@@ -713,7 +713,7 @@ CREATE TABLE IF NOT EXISTS custom_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('dns','rules','rule-providers')),
-    mode TEXT NOT NULL CHECK (mode IN ('replace','prepend')),
+    mode TEXT NOT NULL CHECK (mode IN ('replace','prepend','append')),
     content TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -726,6 +726,11 @@ CREATE INDEX IF NOT EXISTS idx_custom_rules_enabled ON custom_rules(enabled);
 
 	if _, err := r.db.Exec(customRulesSchema); err != nil {
 		return fmt.Errorf("migrate custom_rules: %w", err)
+	}
+
+	// Migrate existing custom_rules table to support 'append' mode
+	if err := r.migrateCustomRulesAppendMode(); err != nil {
+		return fmt.Errorf("migrate custom_rules append mode: %w", err)
 	}
 
 	// Add auto_sync_custom_rules column to subscribe_files table
@@ -1363,6 +1368,71 @@ func (r *TrafficRepository) ensureUserSettingsColumn(name, definition string) er
 	alter := fmt.Sprintf("ALTER TABLE user_settings ADD COLUMN %s %s", name, definition)
 	if _, err := r.db.Exec(alter); err != nil {
 		return fmt.Errorf("add column %s: %w", name, err)
+	}
+
+	return nil
+}
+
+func (r *TrafficRepository) migrateCustomRulesAppendMode() error {
+	// Check if table already supports 'append' mode by trying to insert a dummy row
+	// If it fails, we need to recreate the table
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check if append mode is already supported
+	_, err = tx.Exec(`INSERT INTO custom_rules (name, type, mode, content) VALUES ('__test_append__', 'rules', 'append', 'test')`)
+	if err == nil {
+		// append mode is supported, clean up test row
+		tx.Exec(`DELETE FROM custom_rules WHERE name = '__test_append__'`)
+		tx.Commit()
+		return nil
+	}
+
+	// Need to migrate - recreate table with new constraint
+	// 1. Rename old table
+	if _, err := tx.Exec(`ALTER TABLE custom_rules RENAME TO custom_rules_old`); err != nil {
+		return fmt.Errorf("rename old table: %w", err)
+	}
+
+	// 2. Create new table with updated constraint
+	const newTableSchema = `
+CREATE TABLE custom_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('dns','rules','rule-providers')),
+    mode TEXT NOT NULL CHECK (mode IN ('replace','prepend','append')),
+    content TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, type)
+);
+CREATE INDEX IF NOT EXISTS idx_custom_rules_type ON custom_rules(type);
+CREATE INDEX IF NOT EXISTS idx_custom_rules_enabled ON custom_rules(enabled);
+`
+	if _, err := tx.Exec(newTableSchema); err != nil {
+		return fmt.Errorf("create new table: %w", err)
+	}
+
+	// 3. Copy data from old table
+	if _, err := tx.Exec(`
+		INSERT INTO custom_rules (id, name, type, mode, content, enabled, created_at, updated_at)
+		SELECT id, name, type, mode, content, enabled, created_at, updated_at
+		FROM custom_rules_old
+	`); err != nil {
+		return fmt.Errorf("copy data: %w", err)
+	}
+
+	// 4. Drop old table
+	if _, err := tx.Exec(`DROP TABLE custom_rules_old`); err != nil {
+		return fmt.Errorf("drop old table: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil

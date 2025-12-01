@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
@@ -142,6 +142,9 @@ function NodesPage() {
   // 自定义标签状态
   const [manualTag, setManualTag] = useState<string>('手动输入')
   const [subscriptionTag, setSubscriptionTag] = useState<string>('')
+
+  // 导入节点卡片折叠状态 - 默认折叠
+  const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
 
   // 批量操作状态
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
@@ -1045,10 +1048,13 @@ function NodesPage() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>节点输入</CardTitle>
+            <CardHeader className='cursor-pointer' onClick={() => setIsInputCardExpanded(!isInputCardExpanded)}>
+              <div className='flex items-center justify-between'>
+                <CardTitle>导入节点</CardTitle>
+                {isInputCardExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
+              </div>
             </CardHeader>
-            <CardContent>
+            {isInputCardExpanded && <CardContent>
               <Tabs defaultValue='manual' className='w-full'>
                 <TabsList className='grid w-full grid-cols-2'>
                   <TabsTrigger value='manual'>手动输入</TabsTrigger>
@@ -1159,7 +1165,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   </div>
                 </TabsContent>
               </Tabs>
-            </CardContent>
+            </CardContent>}
           </Card>
 
           {displayNodes.length > 0 && (

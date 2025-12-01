@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -127,6 +128,9 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 		}
 	}
 
+	// Auto-add missing proxy groups referenced in rules
+	autoAddMissingProxyGroups(docNode)
+
 	// Fix short-id fields to use double quotes before marshaling
 	fixShortIdStyleInNode(&rootNode)
 
@@ -144,21 +148,21 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 
 // applyCustomRulesToYamlSmart applies custom rules with intelligent deduplication
 // This function is used for auto-sync to avoid duplicate content in prepend mode
-func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepository, yamlData []byte, subscribeFileID int64) ([]byte, error) {
+func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepository, yamlData []byte, subscribeFileID int64) ([]byte, []string, error) {
 	// Get enabled custom rules
 	rules, err := repo.ListEnabledCustomRules(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get custom rules: %w", err)
+		return nil, nil, fmt.Errorf("failed to get custom rules: %w", err)
 	}
 
 	if len(rules) == 0 {
-		return yamlData, nil
+		return yamlData, nil, nil
 	}
 
 	// Get historical application records
 	applications, err := repo.GetCustomRuleApplications(ctx, subscribeFileID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get custom rule applications: %w", err)
+		return nil, nil, fmt.Errorf("failed to get custom rule applications: %w", err)
 	}
 
 	// Build a map of historical applications for quick lookup
@@ -171,17 +175,17 @@ func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepos
 	// Parse YAML using Node API to preserve order
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
 	// Get the document node
 	if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
-		return yamlData, nil
+		return yamlData, nil, nil
 	}
 
 	docNode := rootNode.Content[0]
 	if docNode.Kind != yaml.MappingNode {
-		return yamlData, nil
+		return yamlData, nil, nil
 	}
 
 	// Apply each rule with deduplication using Node API
@@ -209,19 +213,22 @@ func applyCustomRulesToYamlSmart(ctx context.Context, repo *storage.TrafficRepos
 		}
 	}
 
+	// Auto-add missing proxy groups referenced in rules
+	addedGroups := autoAddMissingProxyGroups(docNode)
+
 	// Fix short-id fields to use double quotes before marshaling
 	fixShortIdStyleInNode(&rootNode)
 
 	// Marshal the modified node (使用2空格缩进)
 	modifiedData, err := MarshalYAMLWithIndent(&rootNode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal modified YAML: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal modified YAML: %w", err)
 	}
 
 	// Post-process to remove quotes from strings with Unicode characters (emoji)
 	result := RemoveUnicodeEscapeQuotes(string(modifiedData))
 
-	return []byte(result), nil
+	return []byte(result), addedGroups, nil
 }
 
 // applyDNSRule applies DNS custom rule
@@ -299,7 +306,7 @@ func applyRulesRule(config map[string]interface{}, rule storage.CustomRule, prev
 				existingRules = removeRulesFromList(existingRules, historicalRules)
 			}
 		}
-		// Remove case-insensitive duplicates before appending
+		// Remove from existingRules any rules that match newRules (case-insensitive, based on text before second comma)
 		existingRules = removeDuplicateRulesCaseInsensitive(existingRules, newRules)
 		// Append new rules
 		config["rules"] = append(existingRules, newRules...)
@@ -392,10 +399,19 @@ func removeRulesFromList(existing []interface{}, toRemove []interface{}) []inter
 // removeDuplicateRulesCaseInsensitive removes rules from existing list that match newRules (case-insensitive)
 func removeDuplicateRulesCaseInsensitive(existing []interface{}, newRules []interface{}) []interface{} {
 	// Build a set of new rules in lowercase for O(n) lookup
+	// Extract text before second comma for comparison
 	newRulesSet := make(map[string]bool)
+	hasMatchRule := false
 	for _, rule := range newRules {
 		if ruleStr, ok := rule.(string); ok {
-			newRulesSet[strings.ToLower(ruleStr)] = true
+			// Extract text before second comma
+			key := extractRuleKey(ruleStr)
+			newRulesSet[strings.ToLower(key)] = true
+
+			// Check if there's a MATCH rule in newRules (handle YAML format with "- " prefix)
+			if isMatchRule(ruleStr) {
+				hasMatchRule = true
+			}
 		}
 	}
 
@@ -403,13 +419,99 @@ func removeDuplicateRulesCaseInsensitive(existing []interface{}, newRules []inte
 	var filtered []interface{}
 	for _, rule := range existing {
 		if ruleStr, ok := rule.(string); ok {
+			// Extract text before second comma for comparison
+			key := extractRuleKey(ruleStr)
+
+			// If newRules contains MATCH rule, remove all MATCH rules from existing
+			if hasMatchRule && isMatchRule(ruleStr) {
+				log.Printf("删除重复的MATCH规则: %s", ruleStr)
+				continue
+			}
+
 			// Only keep if not a duplicate (case-insensitive)
-			if !newRulesSet[strings.ToLower(ruleStr)] {
+			if !newRulesSet[strings.ToLower(key)] {
 				filtered = append(filtered, rule)
+			} else {
+				log.Printf("删除重复规则: %s", ruleStr)
 			}
 		} else {
 			// Keep non-string rules as-is
 			filtered = append(filtered, rule)
+		}
+	}
+
+	return filtered
+}
+
+// extractRuleKey extracts text before the second comma from a rule string
+func extractRuleKey(ruleStr string) string {
+	// Count commas and extract text before second comma
+	commaCount := 0
+	for i, ch := range ruleStr {
+		if ch == ',' {
+			commaCount++
+			if commaCount == 2 {
+				return ruleStr[:i]
+			}
+		}
+	}
+	// If less than 2 commas, return the whole string
+	return ruleStr
+}
+
+// isMatchRule checks if a rule string is a MATCH rule (handles YAML format with "- " prefix)
+func isMatchRule(ruleStr string) bool {
+	// Trim whitespace and remove YAML list prefix "- " if present
+	trimmed := strings.TrimSpace(ruleStr)
+	if strings.HasPrefix(trimmed, "- ") {
+		trimmed = strings.TrimSpace(trimmed[2:])
+	}
+	// Check if it starts with MATCH (case-insensitive)
+	return strings.HasPrefix(strings.ToUpper(trimmed), "MATCH")
+}
+
+// removeDuplicateNodesBasedOnNewRules removes duplicate yaml nodes from existing based on newRules
+// Uses the same logic as removeDuplicateRulesCaseInsensitive but works with yaml.Node
+func removeDuplicateNodesBasedOnNewRules(existing []*yaml.Node, newRules []*yaml.Node) []*yaml.Node {
+	// Build a set of new rules in lowercase for O(n) lookup
+	newRulesSet := make(map[string]bool)
+	hasMatchRule := false
+
+	for _, node := range newRules {
+		if node.Kind == yaml.ScalarNode {
+			ruleStr := node.Value
+			key := extractRuleKey(ruleStr)
+			newRulesSet[strings.ToLower(key)] = true
+
+			if isMatchRule(ruleStr) {
+				hasMatchRule = true
+			}
+		}
+	}
+
+	// Filter out existing rules that match new rules
+	var filtered []*yaml.Node
+
+	for _, node := range existing {
+		if node.Kind == yaml.ScalarNode {
+			ruleStr := node.Value
+			key := extractRuleKey(ruleStr)
+
+			// If newRules contains MATCH rule, remove all MATCH rules from existing
+			if hasMatchRule && isMatchRule(ruleStr) {
+				log.Printf("删除重复的MATCH规则: %s", ruleStr)
+				continue
+			}
+
+			// Only keep if not a duplicate
+			if !newRulesSet[strings.ToLower(key)] {
+				filtered = append(filtered, node)
+			} else {
+				log.Printf("删除重复规则: %s", ruleStr)
+			}
+		} else {
+			// Keep non-scalar nodes as-is
+			filtered = append(filtered, node)
 		}
 	}
 
@@ -428,6 +530,170 @@ func recordApplication(ctx context.Context, repo *storage.TrafficRepository, fil
 	}
 
 	return repo.UpsertCustomRuleApplication(ctx, app)
+}
+
+// autoAddMissingProxyGroups checks rules and auto-adds missing proxy groups
+// Returns a list of added proxy group names
+func autoAddMissingProxyGroups(docNode *yaml.Node) []string {
+	// Get rules node
+	rulesNode, _ := findFieldNode(docNode, "rules")
+	if rulesNode == nil || rulesNode.Kind != yaml.SequenceNode {
+		return []string{}
+	}
+
+	// Get proxy-groups node
+	proxyGroupsNode, proxyGroupsIdx := findFieldNode(docNode, "proxy-groups")
+	if proxyGroupsNode == nil || proxyGroupsNode.Kind != yaml.SequenceNode {
+		return []string{}
+	}
+
+	// Collect existing proxy group names
+	existingGroups := make(map[string]bool)
+	for _, groupNode := range proxyGroupsNode.Content {
+		if groupNode.Kind == yaml.MappingNode {
+			nameNode, _ := findFieldNode(groupNode, "name")
+			if nameNode != nil && nameNode.Kind == yaml.ScalarNode {
+				existingGroups[nameNode.Value] = true
+			}
+		}
+	}
+
+	// Collect proxy groups referenced in rules
+	referencedGroups := make(map[string]bool)
+	for _, ruleNode := range rulesNode.Content {
+		if ruleNode.Kind == yaml.ScalarNode {
+			// Parse rule: TYPE,PARAM,POLICY or TYPE,PARAM,POLICY,no-resolve
+			parts := strings.Split(ruleNode.Value, ",")
+			if len(parts) >= 3 {
+				var policy string
+				// Check if last part is "no-resolve"
+				lastPart := strings.TrimSpace(parts[len(parts)-1])
+				if lastPart == "no-resolve" && len(parts) >= 4 {
+					// Policy is before "no-resolve": TYPE,PARAM,POLICY,no-resolve
+					policy = strings.TrimSpace(parts[len(parts)-2])
+				} else {
+					// Policy is the last part: TYPE,PARAM,POLICY
+					policy = lastPart
+				}
+				// Skip built-in policies
+				if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+					referencedGroups[policy] = true
+				}
+			} else if len(parts) == 2 {
+				// MATCH,POLICY format
+				policy := strings.TrimSpace(parts[1])
+				if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+					referencedGroups[policy] = true
+				}
+			}
+		}
+	}
+
+	// Find missing groups
+	var missingGroups []string
+	for group := range referencedGroups {
+		if !existingGroups[group] {
+			missingGroups = append(missingGroups, group)
+		}
+	}
+
+	// Add missing groups
+	if len(missingGroups) > 0 {
+		for _, groupName := range missingGroups {
+			log.Printf("自动添加缺失的代理组: %s", groupName)
+
+			// Create a new proxy group node
+			newGroupNode := &yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "name"},
+					{Kind: yaml.ScalarNode, Value: groupName},
+					{Kind: yaml.ScalarNode, Value: "type"},
+					{Kind: yaml.ScalarNode, Value: "select"},
+					{Kind: yaml.ScalarNode, Value: "proxies"},
+					{
+						Kind: yaml.SequenceNode,
+						Content: []*yaml.Node{
+							{Kind: yaml.ScalarNode, Value: "🚀 节点选择"},
+							{Kind: yaml.ScalarNode, Value: "DIRECT"},
+						},
+					},
+				},
+			}
+
+			// Append to proxy-groups
+			proxyGroupsNode.Content = append(proxyGroupsNode.Content, newGroupNode)
+		}
+
+		// Update the proxy-groups node in docNode
+		if proxyGroupsIdx >= 0 {
+			docNode.Content[proxyGroupsIdx] = proxyGroupsNode
+		}
+	}
+
+	return missingGroups
+}
+
+// extractProxyGroupsFromRulesContent extracts proxy group names from rules content
+func extractProxyGroupsFromRulesContent(content string) []string {
+	var groups []string
+	groupSet := make(map[string]bool)
+
+	// Parse content as YAML to get rules list
+	var rulesData interface{}
+	if err := yaml.Unmarshal([]byte(content), &rulesData); err != nil {
+		return groups
+	}
+
+	// Handle different formats
+	var rulesList []string
+	switch v := rulesData.(type) {
+	case []interface{}:
+		for _, rule := range v {
+			if ruleStr, ok := rule.(string); ok {
+				rulesList = append(rulesList, ruleStr)
+			}
+		}
+	case map[string]interface{}:
+		if rules, ok := v["rules"].([]interface{}); ok {
+			for _, rule := range rules {
+				if ruleStr, ok := rule.(string); ok {
+					rulesList = append(rulesList, ruleStr)
+				}
+			}
+		}
+	}
+
+	// Extract proxy groups from rules
+	for _, ruleStr := range rulesList {
+		parts := strings.Split(ruleStr, ",")
+		if len(parts) >= 3 {
+			var policy string
+			lastPart := strings.TrimSpace(parts[len(parts)-1])
+			if lastPart == "no-resolve" && len(parts) >= 4 {
+				policy = strings.TrimSpace(parts[len(parts)-2])
+			} else {
+				policy = lastPart
+			}
+			// Skip built-in policies
+			if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+				if !groupSet[policy] {
+					groupSet[policy] = true
+					groups = append(groups, policy)
+				}
+			}
+		} else if len(parts) == 2 {
+			policy := strings.TrimSpace(parts[1])
+			if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+				if !groupSet[policy] {
+					groupSet[policy] = true
+					groups = append(groups, policy)
+				}
+			}
+		}
+	}
+
+	return groups
 }
 
 // findFieldNode finds a field node by key in a mapping node
@@ -516,13 +782,16 @@ func applyRulesRuleToNode(docNode *yaml.Node, rule storage.CustomRule) {
 			// No existing rules, just set the new ones
 			setFieldNode(docNode, "rules", newRulesNode)
 		} else {
-			// Prepend new rules to existing rules
+			// Prepend new rules to existing rules with deduplication
 			if newRulesNode.Kind == yaml.SequenceNode {
+				// Remove duplicates from existing rules before prepending
+				filteredExisting := removeDuplicateNodesBasedOnNewRules(existingRulesNode.Content, newRulesNode.Content)
+
 				combined := &yaml.Node{
 					Kind:    yaml.SequenceNode,
 					Style:   existingRulesNode.Style,
 					Tag:     existingRulesNode.Tag,
-					Content: append(newRulesNode.Content, existingRulesNode.Content...),
+					Content: append(newRulesNode.Content, filteredExisting...),
 				}
 				docNode.Content[idx] = combined
 			}
@@ -532,13 +801,16 @@ func applyRulesRuleToNode(docNode *yaml.Node, rule storage.CustomRule) {
 			// No existing rules, just set the new ones
 			setFieldNode(docNode, "rules", newRulesNode)
 		} else {
-			// Append new rules to existing rules
+			// Append new rules to existing rules with deduplication
 			if newRulesNode.Kind == yaml.SequenceNode {
+				// Remove duplicates from existing rules before appending
+				filteredExisting := removeDuplicateNodesBasedOnNewRules(existingRulesNode.Content, newRulesNode.Content)
+
 				combined := &yaml.Node{
 					Kind:    yaml.SequenceNode,
 					Style:   existingRulesNode.Style,
 					Tag:     existingRulesNode.Tag,
-					Content: append(existingRulesNode.Content, newRulesNode.Content...),
+					Content: append(filteredExisting, newRulesNode.Content...),
 				}
 				docNode.Content[idx] = combined
 			}
@@ -712,13 +984,16 @@ func applyRulesRuleToNodeSmart(docNode *yaml.Node, rule storage.CustomRule, prev
 					existingRulesNode.Content = removeNodesFromSequence(existingRulesNode.Content, historicalRules)
 				}
 			}
-			// Prepend new rules to existing rules
+			// Prepend new rules to existing rules with deduplication
 			if newRulesNode.Kind == yaml.SequenceNode {
+				// Remove duplicates from existing rules before prepending
+				filteredExisting := removeDuplicateNodesBasedOnNewRules(existingRulesNode.Content, newRulesNode.Content)
+
 				combined := &yaml.Node{
 					Kind:    yaml.SequenceNode,
 					Style:   existingRulesNode.Style,
 					Tag:     existingRulesNode.Tag,
-					Content: append(newRulesNode.Content, existingRulesNode.Content...),
+					Content: append(newRulesNode.Content, filteredExisting...),
 				}
 				docNode.Content[idx] = combined
 			}

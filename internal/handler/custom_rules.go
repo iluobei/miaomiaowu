@@ -27,14 +27,15 @@ type customRuleRequest struct {
 }
 
 type customRuleResponse struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Mode      string `json:"mode"`
-	Content   string `json:"content"`
-	Enabled   bool   `json:"enabled"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID              int64    `json:"id"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`
+	Mode            string   `json:"mode"`
+	Content         string   `json:"content"`
+	Enabled         bool     `json:"enabled"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
+	AddedProxyGroups []string `json:"added_proxy_groups,omitempty"`
 }
 
 func NewCustomRulesHandler(repo *storage.TrafficRepository) http.Handler {
@@ -221,23 +222,25 @@ func handleCreateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 		return
 	}
 
+	// Trigger auto-sync for subscribe files with auto-sync enabled (synchronously to collect added groups)
+	addedGroups := triggerAutoSync(repo, rule.ID)
+	log.Printf("[CreateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
+
 	response := customRuleResponse{
-		ID:        rule.ID,
-		Name:      rule.Name,
-		Type:      rule.Type,
-		Mode:      rule.Mode,
-		Content:   rule.Content,
-		Enabled:   rule.Enabled,
-		CreatedAt: rule.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt: rule.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:              rule.ID,
+		Name:            rule.Name,
+		Type:            rule.Type,
+		Mode:            rule.Mode,
+		Content:         rule.Content,
+		Enabled:         rule.Enabled,
+		CreatedAt:       rule.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:       rule.UpdatedAt.Format("2006-01-02 15:04:05"),
+		AddedProxyGroups: addedGroups,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(response)
-
-	// Trigger auto-sync for subscribe files with auto-sync enabled
-	go triggerAutoSync(repo, rule.ID)
 }
 
 func handleUpdateCustomRule(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, id int64) {
@@ -287,23 +290,25 @@ func handleUpdateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 		return
 	}
 
+	// Trigger auto-sync for subscribe files with auto-sync enabled (synchronously to collect added groups)
+	addedGroups := triggerAutoSync(repo, rule.ID)
+	log.Printf("[UpdateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
+
 	response := customRuleResponse{
-		ID:        rule.ID,
-		Name:      rule.Name,
-		Type:      rule.Type,
-		Mode:      rule.Mode,
-		Content:   rule.Content,
-		Enabled:   rule.Enabled,
-		CreatedAt: rule.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt: rule.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:              rule.ID,
+		Name:            rule.Name,
+		Type:            rule.Type,
+		Mode:            rule.Mode,
+		Content:         rule.Content,
+		Enabled:         rule.Enabled,
+		CreatedAt:       rule.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:       rule.UpdatedAt.Format("2006-01-02 15:04:05"),
+		AddedProxyGroups: addedGroups,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(response)
-
-	// Trigger auto-sync for subscribe files with auto-sync enabled
-	go triggerAutoSync(repo, rule.ID)
 }
 
 func handleDeleteCustomRule(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, id int64) {
@@ -320,51 +325,191 @@ func handleDeleteCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 }
 
 // triggerAutoSync triggers automatic synchronization of custom rules to subscribe files with auto-sync enabled
-func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) {
+// Returns list of all proxy groups that were added across all files
+func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) []string {
 	ctx := context.Background()
 
 	// Get all subscribe files with auto-sync enabled
 	files, err := repo.GetSubscribeFilesWithAutoSync(ctx)
 	if err != nil {
 		log.Printf("[AutoSync] Failed to get subscribe files with auto-sync: %v", err)
-		return
+		return nil
 	}
 
 	if len(files) == 0 {
-		return
+		return nil
 	}
 
 	log.Printf("[AutoSync] Syncing custom rule %d to %d subscribe files", ruleID, len(files))
 
+	// Collect all added groups
+	allAddedGroups := make(map[string]bool)
+
 	// Sync to each file
 	for _, file := range files {
-		if err := syncCustomRulesToFile(ctx, repo, file); err != nil {
+		addedGroups, err := syncCustomRulesToFile(ctx, repo, file)
+		if err != nil {
 			log.Printf("[AutoSync] Failed to sync to file %s (ID: %d): %v", file.Filename, file.ID, err)
 		} else {
 			log.Printf("[AutoSync] Successfully synced to file %s (ID: %d)", file.Filename, file.ID)
+			// Collect added groups
+			for _, group := range addedGroups {
+				allAddedGroups[group] = true
+			}
 		}
 	}
+
+	// Convert map to slice
+	var result []string
+	for group := range allAddedGroups {
+		result = append(result, group)
+	}
+
+	return result
 }
 
 // syncCustomRulesToFile synchronizes all custom rules to a specific subscribe file
-func syncCustomRulesToFile(ctx context.Context, repo *storage.TrafficRepository, file storage.SubscribeFile) error {
+// Returns list of added proxy groups
+func syncCustomRulesToFile(ctx context.Context, repo *storage.TrafficRepository, file storage.SubscribeFile) ([]string, error) {
 	// Read the subscribe file
 	filePath := filepath.Join("subscribes", file.Filename)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("read file: %w", err)
+		return nil, fmt.Errorf("read file: %w", err)
 	}
 
 	// Apply custom rules using the smart algorithm
-	modified, err := applyCustomRulesToYamlSmart(ctx, repo, data, file.ID)
+	modified, addedGroups, err := applyCustomRulesToYamlSmart(ctx, repo, data, file.ID)
 	if err != nil {
-		return fmt.Errorf("apply custom rules: %w", err)
+		return nil, fmt.Errorf("apply custom rules: %w", err)
 	}
 
 	// Write back to file
 	if err := os.WriteFile(filePath, modified, 0644); err != nil {
-		return fmt.Errorf("write file: %w", err)
+		return nil, fmt.Errorf("write file: %w", err)
 	}
 
-	return nil
+	return addedGroups, nil
+}
+
+// checkAndAddMissingProxyGroupsForRule checks if a rules-type custom rule references missing proxy groups
+// and adds them to all subscribe files
+func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.TrafficRepository, rule *storage.CustomRule) ([]string, error) {
+	if rule.Type != "rules" {
+		return nil, nil
+	}
+
+	// Extract proxy groups from rule content
+	referencedGroups := extractProxyGroupsFromRulesContent(rule.Content)
+	if len(referencedGroups) == 0 {
+		return nil, nil
+	}
+
+	// Get all subscribe files
+	files, err := repo.ListSubscribeFiles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list subscribe files: %w", err)
+	}
+
+	addedGroups := make(map[string]bool)
+
+	// Process each file
+	for _, file := range files {
+		filePath := filepath.Join("data", "subscriptions", file.FileShortCode+".yaml")
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Printf("Warning: failed to read file %s: %v", filePath, err)
+			continue
+		}
+
+		// Parse YAML
+		var rootNode yaml.Node
+		if err := yaml.Unmarshal(data, &rootNode); err != nil {
+			log.Printf("Warning: failed to parse YAML for file %s: %v", filePath, err)
+			continue
+		}
+
+		if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
+			continue
+		}
+
+		docNode := rootNode.Content[0]
+		if docNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// Get proxy-groups node
+		proxyGroupsNode, proxyGroupsIdx := findFieldNode(docNode, "proxy-groups")
+		if proxyGroupsNode == nil || proxyGroupsNode.Kind != yaml.SequenceNode {
+			continue
+		}
+
+		// Collect existing proxy group names
+		existingGroups := make(map[string]bool)
+		for _, groupNode := range proxyGroupsNode.Content {
+			if groupNode.Kind == yaml.MappingNode {
+				nameNode, _ := findFieldNode(groupNode, "name")
+				if nameNode != nil && nameNode.Kind == yaml.ScalarNode {
+					existingGroups[nameNode.Value] = true
+				}
+			}
+		}
+
+		// Find and add missing groups
+		needsUpdate := false
+		for _, groupName := range referencedGroups {
+			if !existingGroups[groupName] {
+				log.Printf("为订阅文件 %s 自动添加代理组: %s", file.Name, groupName)
+				addedGroups[groupName] = true
+				needsUpdate = true
+
+				// Create new proxy group node
+				newGroupNode := &yaml.Node{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "name"},
+						{Kind: yaml.ScalarNode, Value: groupName},
+						{Kind: yaml.ScalarNode, Value: "type"},
+						{Kind: yaml.ScalarNode, Value: "select"},
+						{Kind: yaml.ScalarNode, Value: "proxies"},
+						{
+							Kind: yaml.SequenceNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "🚀 节点选择"},
+								{Kind: yaml.ScalarNode, Value: "DIRECT"},
+							},
+						},
+					},
+				}
+
+				proxyGroupsNode.Content = append(proxyGroupsNode.Content, newGroupNode)
+			}
+		}
+
+		// If we added groups, save the file
+		if needsUpdate {
+			docNode.Content[proxyGroupsIdx] = proxyGroupsNode
+
+			// Marshal back to YAML
+			modifiedData, err := MarshalYAMLWithIndent(&rootNode)
+			if err != nil {
+				log.Printf("Warning: failed to marshal YAML for file %s: %v", filePath, err)
+				continue
+			}
+
+			result := RemoveUnicodeEscapeQuotes(string(modifiedData))
+			if err := os.WriteFile(filePath, []byte(result), 0644); err != nil {
+				log.Printf("Warning: failed to write file %s: %v", filePath, err)
+				continue
+			}
+		}
+	}
+
+	// Convert map to slice
+	var result []string
+	for group := range addedGroups {
+		result = append(result, group)
+	}
+
+	return result, nil
 }

@@ -439,10 +439,14 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	// If auto_sync was just enabled (changed from false to true), trigger immediate sync
 	if !wasAutoSyncEnabled && updated.AutoSyncCustomRules {
 		go func() {
-			if err := syncCustomRulesToFile(context.Background(), h.repo, updated); err != nil {
+			addedGroups, err := syncCustomRulesToFile(context.Background(), h.repo, updated)
+			if err != nil {
 				log.Printf("[AutoSync] Failed to sync custom rules to file %s (ID: %d) after enabling auto-sync: %v", updated.Filename, updated.ID, err)
 			} else {
 				log.Printf("[AutoSync] Successfully synced custom rules to file %s (ID: %d) after enabling auto-sync", updated.Filename, updated.ID)
+				if len(addedGroups) > 0 {
+					log.Printf("[AutoSync] Added proxy groups: %v", addedGroups)
+				}
 			}
 		}()
 	}

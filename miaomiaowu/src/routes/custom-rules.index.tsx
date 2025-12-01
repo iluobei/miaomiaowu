@@ -51,7 +51,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { RULE_TEMPLATES } from './custom-rules-templates'
+import { RULE_TEMPLATES, RULE_PROVIDER_RULES } from '../config/custom-rules-templates'
 
 export const Route = createFileRoute('/custom-rules/')({
 	component: CustomRulesPage,
@@ -61,11 +61,12 @@ interface CustomRule {
 	id: number
 	name: string
 	type: 'dns' | 'rules' | 'rule-providers'
-	mode: 'replace' | 'prepend'
+	mode: 'replace' | 'prepend' | 'append'
 	content: string
 	enabled: boolean
 	created_at: string
 	updated_at: string
+	added_proxy_groups?: string[]
 }
 
 type RuleFormData = Omit<CustomRule, 'id' | 'created_at' | 'updated_at'>
@@ -85,6 +86,8 @@ function CustomRulesPage() {
 		enabled: true,
 	})
 	const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+	const [isRuleProviderConfirmOpen, setIsRuleProviderConfirmOpen] = useState(false)
+	const [pendingRuleProviderData, setPendingRuleProviderData] = useState<RuleFormData | null>(null)
 
 	// Fetch rules
 	const { data: rules = [], isLoading } = useQuery<CustomRule[]>({
@@ -121,11 +124,20 @@ function CustomRulesPage() {
 			const response = await api.post('/api/admin/custom-rules', rule)
 			return response.data
 		},
-		onSuccess: () => {
+		onSuccess: (data: CustomRule) => {
 			queryClient.invalidateQueries({ queryKey: ['custom-rules'] })
 			setIsDialogOpen(false)
 			resetForm()
-			toast.success('自定义规则已创建')
+
+			// 如果有新增的代理组，显示通知
+			if (data.added_proxy_groups && data.added_proxy_groups.length > 0) {
+				toast.success(
+					`自定义规则已创建。已新增 ${data.added_proxy_groups.join('、')} 代理组，默认节点：🚀 节点选择、DIRECT，如需修改请编辑订阅`,
+					{ duration: 8000 }
+				)
+			} else {
+				toast.success('自定义规则已创建')
+			}
 		},
 		onError: (error: any) => {
 			toast.error(error.response?.data?.error || '创建规则时出错')
@@ -161,11 +173,20 @@ function CustomRulesPage() {
 			const response = await api.put(`/api/admin/custom-rules/${id}`, rule)
 			return response.data
 		},
-		onSuccess: () => {
+		onSuccess: (data: CustomRule) => {
 			queryClient.invalidateQueries({ queryKey: ['custom-rules'] })
 			setIsDialogOpen(false)
 			resetForm()
-			toast.success('自定义规则已更新')
+
+			// 如果有新增的代理组，显示通知
+			if (data.added_proxy_groups && data.added_proxy_groups.length > 0) {
+				toast.success(
+					`自定义规则已更新。已新增 ${data.added_proxy_groups.join('、')} 代理组，默认节点：🚀 节点选择、DIRECT，如需修改请编辑订阅`,
+					{ duration: 8000 }
+				)
+			} else {
+				toast.success('自定义规则已更新')
+			}
 		},
 		onError: (error: any) => {
 			toast.error(error.response?.data?.error || '更新规则时出错')
@@ -280,6 +301,13 @@ function CustomRulesPage() {
 			return
 		}
 
+		// 如果是新建规则集且使用了模板，询问是否创建对应的规则配置
+		if (!editingRule && formData.type === 'rule-providers' && selectedTemplate && selectedTemplate in RULE_PROVIDER_RULES) {
+			setPendingRuleProviderData(formData)
+			setIsRuleProviderConfirmOpen(true)
+			return
+		}
+
 		if (editingRule) {
 			updateMutation.mutate({ id: editingRule.id, ...formData })
 		} else {
@@ -287,6 +315,75 @@ function CustomRulesPage() {
 		}
 	}
 
+
+	// 处理规则集确认创建
+	const handleRuleProviderConfirm = async (createRuleConfig: boolean) => {
+		if (!pendingRuleProviderData) return
+
+		try {
+			// 先创建规则集
+			await createMutation.mutateAsync(pendingRuleProviderData)
+
+			// 如果用户选择创建规则配置
+			if (createRuleConfig && selectedTemplate && selectedTemplate in RULE_PROVIDER_RULES) {
+				const ruleContent = RULE_PROVIDER_RULES[selectedTemplate as keyof typeof RULE_PROVIDER_RULES]
+
+				// 重新获取最新的规则列表
+				await queryClient.invalidateQueries({ queryKey: ['custom-rules'] })
+				const latestRules = await api.get('/api/admin/custom-rules').then(res => res.data)
+
+				// 查找现有的 rules 类型规则
+				const existingRulesRules = latestRules?.filter((r: CustomRule) => r.type === 'rules')
+
+				// 处理规则内容：移除与现有规则重复的部分（忽略大小写）
+				let finalRuleContent = ruleContent
+
+				if (existingRulesRules && existingRulesRules.length > 0) {
+					// 收集所有现有 rules 的内容
+					const allExistingLines: string[] = []
+					existingRulesRules.forEach((rule: CustomRule) => {
+						const lines = rule.content.split('\n').map((line: string) => line.trim()).filter((line: string) => line)
+						// 从第二行开始收集（跳过第一行，通常是注释或标题）
+						allExistingLines.push(...lines.slice(1))
+					})
+
+					const newLines = ruleContent.split('\n').map((line: string) => line.trim()).filter((line: string) => line)
+					const existingLinesLower = allExistingLines.map((line: string) => line.toLowerCase())
+
+					// 过滤掉与现有规则重复的内容
+					const filteredNewLines = newLines.filter((line: string) =>
+						!existingLinesLower.includes(line.toLowerCase())
+					)
+
+					// 如果过滤后还有内容，则使用过滤后的内容
+					if (filteredNewLines.length > 0) {
+						finalRuleContent = filteredNewLines.join('\n')
+					}
+				}
+
+				// 创建新的 rules 规则
+				const rulesData: RuleFormData = {
+					name: `路由规则 - ${pendingRuleProviderData.name}`,
+					type: 'rules',
+					mode: 'append',
+					content: finalRuleContent,
+					enabled: true
+				}
+				await createMutation.mutateAsync(rulesData)
+				toast.success('规则集和规则配置已创建')
+			} else {
+				toast.success('规则集已创建')
+			}
+		} catch (error) {
+			console.error('创建规则配置失败:', error)
+			toast.error('创建规则配置时出错，请检查控制台')
+		} finally {
+			setIsRuleProviderConfirmOpen(false)
+			setPendingRuleProviderData(null)
+			setIsDialogOpen(false)
+			resetForm()
+		}
+	}
 	const getTypeLabel = (type: string) => {
 		switch (type) {
 			case 'dns':
@@ -306,6 +403,8 @@ function CustomRulesPage() {
 				return '替换'
 			case 'prepend':
 				return '添加至头部'
+			case 'append':
+				return '添加至尾部'
 			default:
 				return mode
 		}
@@ -535,6 +634,7 @@ function CustomRulesPage() {
 									<SelectContent>
 										<SelectItem value='replace'>替换</SelectItem>
 										<SelectItem value='prepend'>添加至头部</SelectItem>
+										<SelectItem value='append'>添加至尾部</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
@@ -629,6 +729,33 @@ if (template) {
 							disabled={deleteMutation.isPending}
 						>
 							{deleteMutation.isPending ? '删除中...' : '删除'}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* Rule Provider Confirmation Dialog */}
+			<AlertDialog
+				open={isRuleProviderConfirmOpen}
+				onOpenChange={setIsRuleProviderConfirmOpen}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>创建规则配置</AlertDialogTitle>
+						<AlertDialogDescription>
+							检测到您使用了规则集模板，是否同时创建对应的规则配置？
+							<br /><br />
+							规则配置将会追加到现有规则的末尾，系统会自动去除重复的规则（忽略大小写）。
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel onClick={() => handleRuleProviderConfirm(false)}>
+							仅创建规则集
+						</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => handleRuleProviderConfirm(true)}
+						>
+							创建规则集和规则配置
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
