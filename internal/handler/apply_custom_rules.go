@@ -100,7 +100,6 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 		return nil, nil, fmt.Errorf("failed to get custom rules: %w", err)
 	}
 
-	log.Printf("[applyCustomRulesToYaml] Found %d enabled custom rules", len(rules))
 	if len(rules) == 0 {
 		return yamlData, nil, nil
 	}
@@ -123,7 +122,6 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 
 	// Apply each rule based on its type using Node API
 	for _, rule := range rules {
-		log.Printf("[applyCustomRulesToYaml] Applying rule: ID=%d, Type=%s, Mode=%s, Name=%s", rule.ID, rule.Type, rule.Mode, rule.Name)
 		switch rule.Type {
 		case "dns":
 			applyDNSRuleToNode(docNode, rule)
@@ -508,7 +506,6 @@ func removeDuplicateNodesBasedOnNewRules(existing []*yaml.Node, newRules []*yaml
 				trimmed = strings.TrimSpace(trimmed[2:])
 			}
 			if strings.HasPrefix(strings.ToUpper(trimmed), "RULE-SET") {
-				log.Printf("保留RULE-SET规则: %s", ruleStr)
 				filtered = append(filtered, node)
 				continue
 			}
@@ -554,11 +551,9 @@ func recordApplication(ctx context.Context, repo *storage.TrafficRepository, fil
 func extractRuleSetRules(rulesNode *yaml.Node) []*yaml.Node {
 	var ruleSetRules []*yaml.Node
 	if rulesNode == nil || rulesNode.Kind != yaml.SequenceNode {
-		log.Printf("[extractRuleSetRules] rulesNode is nil or not a sequence")
 		return ruleSetRules
 	}
 
-	log.Printf("[extractRuleSetRules] Scanning %d rules for RULE-SET entries", len(rulesNode.Content))
 	for _, node := range rulesNode.Content {
 		if node.Kind == yaml.ScalarNode {
 			trimmed := strings.TrimSpace(node.Value)
@@ -567,12 +562,10 @@ func extractRuleSetRules(rulesNode *yaml.Node) []*yaml.Node {
 			}
 			// Check if this is a RULE-SET rule (case-insensitive)
 			if strings.HasPrefix(strings.ToUpper(trimmed), "RULE-SET") {
-				log.Printf("[extractRuleSetRules] Found RULE-SET rule: %s", node.Value)
 				ruleSetRules = append(ruleSetRules, node)
 			}
 		}
 	}
-	log.Printf("[extractRuleSetRules] Total RULE-SET rules found: %d", len(ruleSetRules))
 	return ruleSetRules
 }
 
@@ -818,11 +811,9 @@ func applyRulesRuleToNode(docNode *yaml.Node, rule storage.CustomRule) {
 	if rule.Mode == "replace" {
 		// Extract RULE-SET rules from existing rules to preserve them
 		ruleSetRules := extractRuleSetRules(existingRulesNode)
-		log.Printf("[applyRulesRuleToNode] Replace mode: extracted %d RULE-SET rules from existing", len(ruleSetRules))
 
 		// If we have RULE-SET rules, append them to new rules
 		if len(ruleSetRules) > 0 && newRulesNode.Kind == yaml.SequenceNode {
-			log.Printf("[applyRulesRuleToNode] Appending %d RULE-SET rules to end of new rules", len(ruleSetRules))
 			combined := &yaml.Node{
 				Kind:    yaml.SequenceNode,
 				Style:   newRulesNode.Style,
@@ -915,7 +906,6 @@ func applyRuleProvidersRuleToNode(docNode *yaml.Node, rule storage.CustomRule) {
 	if rule.Mode == "replace" {
 		// In replace mode, merge new providers with existing ones (new providers take precedence)
 		if existingProvidersNode != nil && existingProvidersNode.Kind == yaml.MappingNode && newProvidersNode.Kind == yaml.MappingNode {
-			log.Printf("[applyRuleProvidersRuleToNode] Replace mode: merging new rule-providers with existing ones")
 			mergeMapNodes(existingProvidersNode, newProvidersNode)
 		} else {
 			// No existing providers or wrong type, just set the new ones

@@ -1171,12 +1171,12 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
           {displayNodes.length > 0 && (
             <Card>
               <CardHeader>
-                <div className='flex items-center justify-between'>
+                <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
                   <div>
                     <CardTitle>节点列表 ({filteredNodes.length})</CardTitle>
                     <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
                   </div>
-                  <div className='flex gap-2'>
+                  <div className='flex flex-wrap gap-2'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -1382,8 +1382,227 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   </div>
                 </div>
 
-                {/* 节点表格 */}
-                <div className='rounded-md border overflow-auto'>
+                {/* 移动端卡片视图 */}
+                <div className='md:hidden space-y-3'>
+                  {filteredNodes.length === 0 ? (
+                    <Card>
+                      <CardContent className='text-center text-muted-foreground py-8'>
+                        没有找到匹配的节点
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    filteredNodes.map(node => (
+                      <Card key={node.id} className='overflow-hidden'>
+                        <CardContent className='p-4 space-y-3'>
+                          {/* 头部：复选框、协议、已保存标签 */}
+                          <div className='flex items-center justify-between'>
+                            <div className='flex items-center gap-2'>
+                              {node.isSaved && node.dbId && (
+                                <Checkbox
+                                  checked={selectedNodeIds.has(node.dbId)}
+                                  onCheckedChange={(checked) => {
+                                    const newSet = new Set(selectedNodeIds)
+                                    if (checked) {
+                                      newSet.add(node.dbId!)
+                                    } else {
+                                      newSet.delete(node.dbId!)
+                                    }
+                                    setSelectedNodeIds(newSet)
+                                  }}
+                                />
+                              )}
+                              {node.parsed ? (
+                                <Badge
+                                  variant='outline'
+                                  className={
+                                    node.dbNode?.protocol?.includes('⇋')
+                                      ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
+                                      : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
+                                  }
+                                >
+                                  {node.dbNode?.protocol?.includes('⇋')
+                                    ? node.dbNode.protocol.toUpperCase()
+                                    : node.parsed.type.toUpperCase()}
+                                </Badge>
+                              ) : (
+                                <Badge variant='destructive'>解析失败</Badge>
+                              )}
+                            </div>
+                            {node.isSaved && (
+                              <Badge variant='secondary' className='text-xs'>已保存</Badge>
+                            )}
+                          </div>
+
+                          {/* 节点名称（可编辑） */}
+                          <div className='space-y-2'>
+                            <Label className='text-xs text-muted-foreground'>节点名称</Label>
+                            {editingNode?.id === node.id ? (
+                              <div className='flex items-center gap-2'>
+                                <Input
+                                  value={editingNode.value}
+                                  onChange={(event) => handleNameEditChange(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.preventDefault()
+                                      handleNameEditSubmit(node)
+                                    } else if (event.key === 'Escape') {
+                                      event.preventDefault()
+                                      handleNameEditCancel()
+                                    }
+                                  }}
+                                  className='h-8'
+                                  autoFocus
+                                />
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='size-8 text-emerald-600 shrink-0'
+                                  onClick={() => handleNameEditSubmit(node)}
+                                  disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                >
+                                  <Check className='size-4' />
+                                </Button>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='size-8 text-muted-foreground shrink-0'
+                                  onClick={handleNameEditCancel}
+                                >
+                                  <X className='size-4' />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className='flex items-center gap-2 flex-wrap'>
+                                <span className='font-medium break-all'>{node.name || '未知'}</span>
+                                <div className='flex items-center gap-1'>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
+                                    onClick={() => handleNameEditStart(node)}
+                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                  >
+                                    <Pencil className='size-4' />
+                                  </Button>
+                                  {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
+                                    <Button
+                                      variant='ghost'
+                                      size='icon'
+                                      className='size-7 text-muted-foreground hover:text-foreground shrink-0'
+                                      onClick={() => {
+                                        setSourceNodeForExchange(node.dbNode)
+                                        setExchangeDialogOpen(true)
+                                      }}
+                                    >
+                                      <img
+                                        src={ExchangeIcon}
+                                        alt='交换'
+                                        className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                      />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 标签 */}
+                          <div className='space-y-2'>
+                            <Label className='text-xs text-muted-foreground'>标签</Label>
+                            <div className='flex flex-wrap gap-1'>
+                              <Badge variant='secondary' className='text-xs'>
+                                {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                              </Badge>
+                              {node.isSaved && node.dbNode?.probe_server && (
+                                <Badge variant='secondary' className='text-xs flex items-center gap-1'>
+                                  <Activity className='size-3' />
+                                  {node.dbNode.probe_server}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 服务器地址 */}
+                          {node.parsed && (
+                            <div className='space-y-2'>
+                              <Label className='text-xs text-muted-foreground'>服务器地址</Label>
+                              <div className='flex items-center gap-2 flex-wrap'>
+                                <span className='font-mono text-sm break-all'>{node.parsed.server}:{node.parsed.port}</span>
+                                {node.parsed.network && node.parsed.network !== 'tcp' && (
+                                  <Badge variant='outline' className='text-xs'>
+                                    {node.parsed.network}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 操作按钮组 */}
+                          <div className='flex items-center gap-2 pt-2 border-t flex-wrap'>
+                            {node.clash && (
+                              <Button
+                                variant='outline'
+                                size='sm'
+                                onClick={() => {
+                                  if (node.isSaved && node.dbNode) {
+                                    handleEditClashConfig(node.dbNode)
+                                  } else if (!node.isSaved) {
+                                    handleEditClashConfig(node)
+                                  }
+                                }}
+                              >
+                                <Eye className='size-4 mr-1' />
+                                配置
+                              </Button>
+                            )}
+                            {node.clash && node.isSaved && (
+                              <Button
+                                variant='outline'
+                                size='sm'
+                                onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
+                              >
+                                <Copy className='size-4 mr-1' />
+                                复制
+                              </Button>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  disabled={node.isSaved && deleteMutation.isPending}
+                                  className='text-destructive hover:text-destructive'
+                                >
+                                  删除
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    确定要删除节点 "{node.name || '未知'}" 吗？
+                                    {node.isSaved && '此操作不可撤销。'}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>取消</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
+                                  >
+                                    删除
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+
+                {/* 桌面端表格视图 */}
+                <div className='hidden md:block rounded-md border overflow-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
