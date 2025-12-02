@@ -1,14 +1,16 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Loader2, Save, Layers, Activity, Upload } from 'lucide-react'
+import { Loader2, Save, Layers, Activity, Upload } from 'lucide-react'
 import { type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
+import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
@@ -139,6 +141,7 @@ export const Route = createFileRoute('/generator')({
 function SubscriptionGeneratorPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [ruleSet, setRuleSet] = useState<PredefinedRuleSetType>('balanced')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [customRules, setCustomRules] = useState<CustomRule[]>([])
@@ -513,24 +516,6 @@ function SubscriptionGeneratorPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(clashConfig)
-    toast.success('Clash 配置已复制到剪贴板')
-  }
-
-  const downloadClashConfig = () => {
-    const blob = new Blob([clashConfig], { type: 'text/yaml;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'clash-config.yaml'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast.success('clash-config.yaml 下载成功')
   }
 
   const handleClear = () => {
@@ -1545,27 +1530,19 @@ function SubscriptionGeneratorPage() {
           {clashConfig && (
             <Card>
               <CardHeader>
-                <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
+                <div className='flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
                   <div>
                     <CardTitle>生成的 Clash 配置</CardTitle>
                     <CardDescription>
-                      预览生成的 YAML 配置文件，可复制或下载
+                      预览生成的 YAML 配置文件
                     </CardDescription>
                   </div>
-                  <div className='flex flex-wrap gap-2'>
-                    <Button variant='outline' size='sm' onClick={copyToClipboard}>
-                      <Copy className='mr-2 h-4 w-4' />
-                      复制
-                    </Button>
-                    <Button variant='outline' size='sm' onClick={downloadClashConfig}>
-                      <Download className='mr-2 h-4 w-4' />
-                      下载
-                    </Button>
-                    <Button variant='outline' size='sm' onClick={handleOpenGroupDialog}>
+                  <div className='flex gap-2'>
+                    <Button variant='outline' size='sm' className='flex-1' onClick={handleOpenGroupDialog}>
                       <Layers className='mr-2 h-4 w-4' />
                       手动分组
                     </Button>
-                    <Button size='sm' onClick={handleOpenSaveDialog}>
+                    <Button size='sm' className='flex-1' onClick={handleOpenSaveDialog}>
                       <Save className='mr-2 h-4 w-4' />
                       保存为订阅
                     </Button>
@@ -1593,7 +1570,6 @@ function SubscriptionGeneratorPage() {
                 <div className='mt-4 rounded-lg border bg-muted/50 p-4'>
                   <h3 className='mb-2 font-semibold'>使用说明</h3>
                   <ul className='space-y-1 text-sm text-muted-foreground'>
-                    <li>• 点击"复制"按钮将配置复制到剪贴板</li>
                     <li>• 点击"下载"按钮下载为 clash-config.yaml 文件</li>
                     <li>• 将配置文件导入 Clash 客户端即可使用</li>
                     <li>• 支持 Clash、Clash Meta、Mihomo 等客户端</li>
@@ -1662,36 +1638,51 @@ function SubscriptionGeneratorPage() {
       </Dialog>
 
       {/* 手动分组对话框 */}
-      <EditNodesDialog
-        open={groupDialogOpen}
-        onOpenChange={handleGroupDialogOpenChange}
-        title="手动分组节点"
-        proxyGroups={proxyGroups}
-        availableNodes={availableProxies}
-        allNodes={savedNodes.filter(n => selectedNodeIds.has(n.id))}
-        onProxyGroupsChange={setProxyGroups}
-        onSave={handleApplyGrouping}
-        onConfigureChainProxy={handleConfigureChainProxy}
-        showAllNodes={showAllNodes}
-        onShowAllNodesChange={setShowAllNodes}
-        draggedNode={draggedItem}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        dragOverGroup={dragOverGroup}
-        onDragEnterGroup={handleDragEnterGroup}
-        onDragLeaveGroup={handleDragLeaveGroup}
-        onDrop={handleDrop}
-        onDropToAvailable={handleDropToAvailable}
-        onRemoveNodeFromGroup={handleRemoveProxy}
-        onRemoveGroup={handleRemoveGroup}
-        onRenameGroup={handleRenameGroup}
-        handleCardDragStart={handleCardDragStart}
-        handleCardDragEnd={handleCardDragEnd}
-        handleNodeDragEnd={handleNodeDragEnd}
-        activeGroupTitle={activeGroupTitle}
-        activeCard={activeCard}
-        saveButtonText="确定"
-      />
+      {!isMobile ? (
+        <EditNodesDialog
+          open={groupDialogOpen}
+          onOpenChange={handleGroupDialogOpenChange}
+          title="手动分组节点"
+          proxyGroups={proxyGroups}
+          availableNodes={availableProxies}
+          allNodes={savedNodes.filter(n => selectedNodeIds.has(n.id))}
+          onProxyGroupsChange={setProxyGroups}
+          onSave={handleApplyGrouping}
+          onConfigureChainProxy={handleConfigureChainProxy}
+          showAllNodes={showAllNodes}
+          onShowAllNodesChange={setShowAllNodes}
+          draggedNode={draggedItem}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          dragOverGroup={dragOverGroup}
+          onDragEnterGroup={handleDragEnterGroup}
+          onDragLeaveGroup={handleDragLeaveGroup}
+          onDrop={handleDrop}
+          onDropToAvailable={handleDropToAvailable}
+          onRemoveNodeFromGroup={handleRemoveProxy}
+          onRemoveGroup={handleRemoveGroup}
+          onRenameGroup={handleRenameGroup}
+          handleCardDragStart={handleCardDragStart}
+          handleCardDragEnd={handleCardDragEnd}
+          handleNodeDragEnd={handleNodeDragEnd}
+          activeGroupTitle={activeGroupTitle}
+          activeCard={activeCard}
+          saveButtonText="确定"
+        />
+      ) : (
+        <MobileEditNodesDialog
+          open={groupDialogOpen}
+          onOpenChange={handleGroupDialogOpenChange}
+          proxyGroups={proxyGroups}
+          availableNodes={availableProxies}
+          allNodes={savedNodes.filter(n => selectedNodeIds.has(n.id))}
+          onProxyGroupsChange={setProxyGroups}
+          onSave={handleApplyGrouping}
+          onRemoveNodeFromGroup={handleRemoveProxy}
+          onRemoveGroup={handleRemoveGroup}
+          onRenameGroup={handleRenameGroup}
+        />
+      )}
 
       {/* 缺失节点替换对话框 */}
       <Dialog open={missingNodesDialogOpen} onOpenChange={setMissingNodesDialogOpen}>

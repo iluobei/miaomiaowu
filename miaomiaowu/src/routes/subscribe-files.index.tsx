@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Trash2 } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
+import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import {
   DndContext,
   type DragEndEvent,
@@ -76,6 +78,7 @@ function SubscribeFilesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const isMobile = useMediaQuery('(max-width: 768px)')
 
   // 日期格式化器
   const dateFormatter = useMemo(
@@ -1577,10 +1580,11 @@ function SubscribeFilesPage() {
             <DialogDescription>
               {editingConfigFile?.filename}
             </DialogDescription>
-            <div className='flex items-center justify-end gap-2'>
+            <div className='flex gap-2'>
               <Button
                 variant='outline'
                 size='sm'
+                className='flex-1'
                 onClick={() => handleEditNodes(editingConfigFile!)}
               >
                 <Edit className='mr-2 h-4 w-4' />
@@ -1588,6 +1592,7 @@ function SubscribeFilesPage() {
               </Button>
               <Button
                 size='sm'
+                className='flex-1'
                 onClick={handleSaveConfig}
                 disabled={saveConfigMutation.isPending}
               >
@@ -1626,36 +1631,51 @@ function SubscribeFilesPage() {
       </Dialog>
 
       {/* 编辑节点对话框 */}
-      <EditNodesDialog
-        open={editNodesDialogOpen}
-        onOpenChange={handleEditNodesDialogOpenChange}
-        title={`编辑节点 - ${editingNodesFile?.name}`}
-        proxyGroups={proxyGroups}
-        availableNodes={availableNodes}
-        allNodes={nodesQuery.data?.nodes || []}
-        onProxyGroupsChange={setProxyGroups}
-        onSave={handleSaveNodes}
-        isSaving={saveConfigMutation.isPending}
-        showAllNodes={showAllNodes}
-        onShowAllNodesChange={setShowAllNodes}
-        draggedNode={draggedNode}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        dragOverGroup={dragOverGroup}
-        onDragEnterGroup={handleDragEnterGroup}
-        onDragLeaveGroup={handleDragLeaveGroup}
-        onDrop={handleDrop}
-        onDropToAvailable={handleDropToAvailable}
-        onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
-        onRemoveGroup={handleRemoveGroup}
-        onRenameGroup={handleRenameGroup}
-        handleCardDragStart={handleCardDragStart}
-        handleCardDragEnd={handleCardDragEnd}
-        handleNodeDragEnd={handleNodeDragEnd}
-        activeGroupTitle={activeGroupTitle}
-        activeCard={activeCard}
-        saveButtonText='应用并保存'
-      />
+      {!isMobile ? (
+        <EditNodesDialog
+          open={editNodesDialogOpen}
+          onOpenChange={handleEditNodesDialogOpenChange}
+          title={`编辑节点 - ${editingNodesFile?.name}`}
+          proxyGroups={proxyGroups}
+          availableNodes={availableNodes}
+          allNodes={nodesQuery.data?.nodes || []}
+          onProxyGroupsChange={setProxyGroups}
+          onSave={handleSaveNodes}
+          isSaving={saveConfigMutation.isPending}
+          showAllNodes={showAllNodes}
+          onShowAllNodesChange={setShowAllNodes}
+          draggedNode={draggedNode}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          dragOverGroup={dragOverGroup}
+          onDragEnterGroup={handleDragEnterGroup}
+          onDragLeaveGroup={handleDragLeaveGroup}
+          onDrop={handleDrop}
+          onDropToAvailable={handleDropToAvailable}
+          onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
+          onRemoveGroup={handleRemoveGroup}
+          onRenameGroup={handleRenameGroup}
+          handleCardDragStart={handleCardDragStart}
+          handleCardDragEnd={handleCardDragEnd}
+          handleNodeDragEnd={handleNodeDragEnd}
+          activeGroupTitle={activeGroupTitle}
+          activeCard={activeCard}
+          saveButtonText='应用并保存'
+        />
+      ) : (
+        <MobileEditNodesDialog
+          open={editNodesDialogOpen}
+          onOpenChange={handleEditNodesDialogOpenChange}
+          proxyGroups={proxyGroups}
+          availableNodes={availableNodes}
+          allNodes={nodesQuery.data?.nodes || []}
+          onProxyGroupsChange={setProxyGroups}
+          onSave={handleSaveNodes}
+          onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
+          onRemoveGroup={handleRemoveGroup}
+          onRenameGroup={handleRenameGroup}
+        />
+      )}
 
       {/* 缺失节点替换对话框 */}
       <Dialog open={missingNodesDialogOpen} onOpenChange={setMissingNodesDialogOpen}>
