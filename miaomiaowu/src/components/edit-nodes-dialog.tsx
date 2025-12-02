@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import { GripVertical, X, Plus, Edit2, Check, Search } from 'lucide-react'
 import {
   DndContext,
@@ -12,7 +11,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
   pointerWithin,
-  rectIntersection,
+  closestCenter,
   type CollisionDetection
 } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -177,15 +176,15 @@ export function EditNodesDialog({
     })
   )
 
-  // 自定义碰撞检测 - 优先使用指针检测，然后使用矩形相交
+  // 自定义碰撞检测 - 优先使用指针检测，然后使用最近中心点
   const customCollisionDetection: CollisionDetection = React.useCallback((args) => {
     // 先尝试指针检测
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) {
       return pointerCollisions
     }
-    // 回退到矩形相交检测
-    return rectIntersection(args)
+    // 回退到最近中心点检测（比矩形相交更精确）
+    return closestCenter(args)
   }, [])
 
   // 统一的拖拽开始处理
@@ -208,7 +207,7 @@ export function EditNodesDialog({
 
     const activeData = active.data.current as DragItemData
     const overId = String(over.id)
-    const overData = over.data.current as { type?: string; groupName?: string } | undefined
+    const overData = over.data.current as DragItemData | { type?: string; groupName?: string } | undefined
 
     // 获取目标代理组名称
     const getTargetGroupName = (): string | null => {
@@ -223,6 +222,16 @@ export function EditNodesDialog({
         if (groupName) return groupName
       }
       return null
+    }
+
+    // 计算在目标代理组中的插入位置
+    const getInsertIndex = (group: ProxyGroup): number => {
+      // 如果 overData 包含 index 信息（放在了某个节点上）
+      if (overData && 'index' in overData && typeof overData.index === 'number' && overData.groupName === group.name) {
+        return overData.index
+      }
+      // 否则插入到末尾
+      return group.proxies.length
     }
 
     switch (activeData.type) {
@@ -249,17 +258,8 @@ export function EditNodesDialog({
           // 添加到指定代理组
           const updatedGroups = proxyGroups.map(group => {
             if (group.name === targetGroup && !group.proxies.includes(nodeName)) {
-              // 计算插入位置
-              let insertIndex = group.proxies.length
-
-              // 如果放置目标是代理组内的节点，计算插入位置
-              if (overId.startsWith(`${targetGroup}-`)) {
-                const targetNodeName = overId.replace(`${targetGroup}-`, '')
-                const targetIdx = group.proxies.indexOf(targetNodeName)
-                if (targetIdx !== -1) {
-                  insertIndex = targetIdx
-                }
-              }
+              // 使用 getInsertIndex 计算插入位置
+              const insertIndex = getInsertIndex(group)
 
               const newProxies = [...group.proxies]
               newProxies.splice(insertIndex, 0, nodeName)
@@ -299,7 +299,11 @@ export function EditNodesDialog({
               // 过滤掉已存在的节点和与当前代理组同名的节点
               const newNodes = nodeNames.filter(name => !existingNodes.has(name) && name !== group.name)
               if (newNodes.length > 0) {
-                return { ...group, proxies: [...group.proxies, ...newNodes] }
+                // 使用 getInsertIndex 计算插入位置
+                const insertIndex = getInsertIndex(group)
+                const newProxies = [...group.proxies]
+                newProxies.splice(insertIndex, 0, ...newNodes)
+                return { ...group, proxies: newProxies }
               }
             }
             return group
@@ -356,8 +360,11 @@ export function EditNodesDialog({
               return { ...group, proxies: group.proxies.filter((_, i) => i !== activeData.index) }
             }
             if (group.name === targetGroup && !group.proxies.includes(nodeName)) {
-              // 添加到目标组
-              return { ...group, proxies: [...group.proxies, nodeName] }
+              // 使用 getInsertIndex 计算插入位置
+              const insertIndex = getInsertIndex(group)
+              const newProxies = [...group.proxies]
+              newProxies.splice(insertIndex, 0, nodeName)
+              return { ...group, proxies: newProxies }
             }
             return group
           })
@@ -386,7 +393,11 @@ export function EditNodesDialog({
           // 添加到指定代理组
           const updatedGroups = proxyGroups.map(group => {
             if (group.name === targetGroup && !group.proxies.includes(sourceGroupName)) {
-              return { ...group, proxies: [...group.proxies, sourceGroupName] }
+              // 使用 getInsertIndex 计算插入位置
+              const insertIndex = getInsertIndex(group)
+              const newProxies = [...group.proxies]
+              newProxies.splice(insertIndex, 0, sourceGroupName)
+              return { ...group, proxies: newProxies }
             }
             return group
           })
@@ -703,11 +714,12 @@ export function EditNodesDialog({
       transform,
       transition,
       isDragging,
+      isOver,
     } = useSortable({
       id: `${groupName}-${proxy}`,
       transition: {
-        duration: 200,
-        easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+        duration: 150,
+        easing: 'ease-out',
       },
       data: {
         type: 'group-node',
@@ -717,34 +729,45 @@ export function EditNodesDialog({
       } as DragItemData,
     })
 
-    const style = {
+    // 判断是否显示插入指示器：有拖拽进行中 + 当前项被悬停 + 当前项不是正在拖拽的项
+    const showDropIndicator = activeDragItem && isOver && !isDragging
+
+    const style: React.CSSProperties = {
       transform: CSS.Transform.toString(transform),
-      transition: transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
+      transition: transition || 'transform 150ms ease-out',
       opacity: isDragging ? 0.5 : 1,
     }
 
     return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item'
-        data-proxy-item
-      >
-        <div {...attributes} {...listeners} className='cursor-move touch-none'>
-          <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-        </div>
-        <span className='text-sm truncate flex-1'>{proxy}</span>
-        <Button
-          variant='ghost'
-          size='sm'
-          className='h-6 w-6 p-0 flex-shrink-0'
-          onClick={(e) => {
-            e.stopPropagation()
-            wrappedRemoveNodeFromGroup(groupName, index)
-          }}
+      <div className='relative'>
+        {/* 顶部插入指示器 */}
+        {showDropIndicator && (
+          <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+        )}
+        <div
+          ref={setNodeRef}
+          style={style}
+          className={`flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item ${
+            showDropIndicator ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30' : ''
+          }`}
+          data-proxy-item
         >
-          <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
-        </Button>
+          <div {...attributes} {...listeners} className='cursor-move touch-none'>
+            <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+          </div>
+          <span className='text-sm truncate flex-1'>{proxy}</span>
+          <Button
+            variant='ghost'
+            size='sm'
+            className='h-6 w-6 p-0 flex-shrink-0'
+            onClick={(e) => {
+              e.stopPropagation()
+              wrappedRemoveNodeFromGroup(groupName, index)
+            }}
+          >
+            <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
+          </Button>
+        </div>
       </div>
     )
   }
@@ -891,7 +914,7 @@ export function EditNodesDialog({
                   items={proxyGroups.map(g => g.name)}
                   strategy={rectSortingStrategy}
                 >
-                  <div className='grid gap-4' style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+                  <div className='grid gap-4 pt-1' style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
                     {proxyGroups.map((group) => (
                       <SortableCard key={group.name} group={group} />
                     ))}
@@ -997,81 +1020,78 @@ export function EditNodesDialog({
               </div>
             </div>
 
-            {/* DragOverlay - 通过 Portal 渲染到 body 以避免 Dialog transform 影响定位 */}
-            {typeof document !== 'undefined' && createPortal(
-              <DragOverlay dropAnimation={null} style={{ cursor: 'grabbing' }}>
-                {activeDragItem?.data.type === 'available-node' && (
-                  <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
-                    <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                    <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
-                  </div>
-                )}
-                {activeDragItem?.data.type === 'available-header' && (
-                  <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
-                    <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                    <span className='text-sm'>
-                      批量添加 {activeDragItem.data.nodeNames?.length || 0} 个节点
-                    </span>
-                  </div>
-                )}
-                {activeDragItem?.data.type === 'group-node' && (
-                  <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
-                    <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                    <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
-                  </div>
-                )}
-                {activeDragItem?.data.type === 'group-title' && (
-                  <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
-                    <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                    <span className='text-sm truncate'>{activeDragItem.data.groupName}</span>
-                  </div>
-                )}
-                {activeDragItem?.data.type === 'group-card' && (() => {
-                  const group = proxyGroups.find(g => g.name === activeDragItem.data.groupName)
-                  return (
-                    <Card className='w-[240px] shadow-2xl opacity-95 pointer-events-none max-h-[400px] overflow-hidden'>
-                      <CardHeader className='pb-3'>
-                        <div className='flex justify-center -mt-2 mb-2'>
-                          <div className='bg-accent rounded-md px-3 py-1'>
-                            <GripVertical className='h-4 w-4 text-foreground' />
-                          </div>
+            {/* DragOverlay */}
+            <DragOverlay dropAnimation={null} style={{ cursor: 'grabbing' }}>
+              {activeDragItem?.data.type === 'available-node' && (
+                <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
+                  <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+                  <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
+                </div>
+              )}
+              {activeDragItem?.data.type === 'available-header' && (
+                <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
+                  <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+                  <span className='text-sm'>
+                    批量添加 {activeDragItem.data.nodeNames?.length || 0} 个节点
+                  </span>
+                </div>
+              )}
+              {activeDragItem?.data.type === 'group-node' && (
+                <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
+                  <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+                  <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
+                </div>
+              )}
+              {activeDragItem?.data.type === 'group-title' && (
+                <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
+                  <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+                  <span className='text-sm truncate'>{activeDragItem.data.groupName}</span>
+                </div>
+              )}
+              {activeDragItem?.data.type === 'group-card' && (() => {
+                const group = proxyGroups.find(g => g.name === activeDragItem.data.groupName)
+                return (
+                  <Card className='w-[240px] shadow-2xl opacity-95 pointer-events-none max-h-[400px] overflow-hidden'>
+                    <CardHeader className='pb-3'>
+                      <div className='flex justify-center -mt-2 mb-2'>
+                        <div className='bg-accent rounded-md px-3 py-1'>
+                          <GripVertical className='h-4 w-4 text-foreground' />
                         </div>
-                        <div className='flex items-start justify-between gap-2'>
-                          <div className='flex-1 min-w-0'>
-                            <CardTitle className='text-base truncate'>{activeDragItem.data.groupName}</CardTitle>
-                            <CardDescription className='text-xs'>
-                              {group?.type || 'select'} ({group?.proxies.length || 0} 个节点)
-                            </CardDescription>
-                          </div>
+                      </div>
+                      <div className='flex items-start justify-between gap-2'>
+                        <div className='flex-1 min-w-0'>
+                          <CardTitle className='text-base truncate'>{activeDragItem.data.groupName}</CardTitle>
+                          <CardDescription className='text-xs'>
+                            {group?.type || 'select'} ({group?.proxies.length || 0} 个节点)
+                          </CardDescription>
                         </div>
-                      </CardHeader>
-                      <CardContent className='space-y-1 max-h-[280px] overflow-hidden'>
-                        {group?.proxies.slice(0, 8).map((proxy, idx) => (
-                          <div
-                            key={`overlay-${proxy}-${idx}`}
-                            className='flex items-center gap-2 p-2 rounded border bg-background'
-                          >
-                            <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                            <span className='text-sm truncate flex-1'>{proxy}</span>
-                          </div>
-                        ))}
-                        {(group?.proxies.length || 0) > 8 && (
-                          <div className='text-xs text-center text-muted-foreground py-1'>
-                            还有 {(group?.proxies.length || 0) - 8} 个节点...
-                          </div>
-                        )}
-                        {(group?.proxies.length || 0) === 0 && (
-                          <div className='text-sm text-center py-4 text-muted-foreground'>
-                            暂无节点
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })()}
-              </DragOverlay>,
-              document.body
-            )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className='space-y-1 max-h-[280px] overflow-hidden'>
+                      {group?.proxies.slice(0, 8).map((proxy, idx) => (
+                        <div
+                          key={`overlay-${proxy}-${idx}`}
+                          className='flex items-center gap-2 p-2 rounded border bg-background'
+                        >
+                          <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+                          <span className='text-sm truncate flex-1'>{proxy}</span>
+                        </div>
+                      ))}
+                      {(group?.proxies.length || 0) > 8 && (
+                        <div className='text-xs text-center text-muted-foreground py-1'>
+                          还有 {(group?.proxies.length || 0) - 8} 个节点...
+                        </div>
+                      )}
+                      {(group?.proxies.length || 0) === 0 && (
+                        <div className='text-sm text-center py-4 text-muted-foreground'>
+                          暂无节点
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+            </DragOverlay>
           </DndContext>
         </DialogContent>
       </Dialog>
