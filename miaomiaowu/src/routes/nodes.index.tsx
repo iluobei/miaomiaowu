@@ -1635,9 +1635,9 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           />
                         </TableHead>
                         <TableHead className='w-[100px]'>协议</TableHead>
-                        <TableHead className='min-w-[150px]'>节点名称</TableHead>
-                        <TableHead className='w-[100px]'>标签</TableHead>
-                        <TableHead className='min-w-[200px]'>服务器地址</TableHead>
+                        <TableHead className='w-[200px]'>节点名称</TableHead>
+                        <TableHead className='w-[120px]'>标签</TableHead>
+                        <TableHead className='w-[250px]'>服务器地址</TableHead>
                         <TableHead className='w-[80px] text-center'>配置</TableHead>
                         <TableHead className='w-[100px] text-center'>操作</TableHead>
                       </TableRow>
@@ -1726,15 +1726,15 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   )}
                                 </div>
                               ) : (
-                                <div className='flex items-center gap-2'>
-                                  <span className='truncate max-w-[200px]'>{node.name || '未知'}</span>
+                                <div className='flex items-center gap-2 min-w-0'>
+                                  <span className='truncate flex-1 min-w-0'>{node.name || '未知'}</span>
                                   {node.isSaved && (
-                                    <Badge variant='secondary' className='text-xs'>已保存</Badge>
+                                    <Badge variant='secondary' className='text-xs shrink-0'>已保存</Badge>
                                   )}
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                     onClick={() => handleNameEditStart(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
@@ -1744,7 +1744,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     <Button
                                       variant='ghost'
                                       size='icon'
-                                      className='size-7 text-muted-foreground hover:text-foreground'
+                                      className='size-7 text-muted-foreground hover:text-foreground shrink-0'
                                       onClick={() => {
                                         setSourceNodeForExchange(node.dbNode)
                                         setExchangeDialogOpen(true)
@@ -1779,9 +1779,9 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             <TableCell>
                               <div className='text-sm text-muted-foreground'>
                                 {node.parsed ? (
-                                  <div className='flex items-center gap-2'>
-                                    <div>
-                                      <div className='font-mono'>{node.parsed.server}:{node.parsed.port}</div>
+                                  <div className='flex items-center gap-2 min-w-0'>
+                                    <div className='min-w-0 flex-1'>
+                                      <div className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</div>
                                       {node.parsed.network && node.parsed.network !== 'tcp' && (
                                         <div className='text-xs mt-1'>
                                           <Badge variant='outline' className='text-xs'>
@@ -1807,7 +1807,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                             <Button
                                               variant='ghost'
                                               size='sm'
-                                              className='size-6 p-0 border border-orange-500/50 hover:border-orange-500'
+                                              className='size-6 p-0 border border-orange-500/50 hover:border-orange-500 shrink-0'
                                               title='恢复原始域名'
                                               onClick={() => restoreTempNodeServer(node.id)}
                                             >
@@ -1823,7 +1823,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                               <Button
                                                 variant='ghost'
                                                 size='sm'
-                                                className='size-6 p-0 border border-primary/50 hover:border-primary'
+                                                className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0'
                                                 title='选择IP地址'
                                               >
                                                 <img
@@ -1858,7 +1858,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                           <Button
                                             variant='ghost'
                                             size='sm'
-                                            className='size-6 p-0 border border-primary/50 hover:border-primary'
+                                            className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0'
                                             title='解析IP地址'
                                             disabled={resolvingIpFor === nodeKey}
                                             onClick={() => handleResolveIp(node)}
@@ -1876,7 +1876,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       <Button
                                         variant='ghost'
                                         size='sm'
-                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1'
+                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
                                         title='恢复原始域名'
                                         disabled={restoreNodeServerMutation.isPending}
                                         onClick={() => restoreNodeServerMutation.mutate(node.dbId)}
@@ -1888,7 +1888,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       <Button
                                         variant='ghost'
                                         size='sm'
-                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1'
+                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
                                         title={node.dbNode.probe_server ? `当前绑定: ${node.dbNode.probe_server}` : '绑定探针服务器'}
                                         onClick={() => {
                                           setSelectedNodeForProbe(node.dbNode!)

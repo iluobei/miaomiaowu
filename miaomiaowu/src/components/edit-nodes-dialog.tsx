@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { GripVertical, X, Plus, Edit2, Check, Search } from 'lucide-react'
-import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
+import { polyfill } from 'mobile-drag-drop'
+import { scrollBehaviourDragImageTranslateOverride } from 'mobile-drag-drop/scroll-behaviour'
 
 interface ProxyGroup {
   name: string
@@ -89,6 +91,19 @@ export function EditNodesDialog({
   cancelButtonText: _cancelButtonText = '取消',
   saveButtonText = '确定'
 }: EditNodesDialogProps) {
+  // 初始化触摸拖放 polyfill
+  useEffect(() => {
+    // 仅在触摸设备上启用 polyfill
+    if ('ontouchstart' in window) {
+      polyfill({
+        // 使用滚动行为覆盖
+        dragImageTranslateOverride: scrollBehaviourDragImageTranslateOverride,
+        // 强制使用立即生效模式
+        forceApply: true
+      })
+    }
+  }, [])
+
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
@@ -174,6 +189,12 @@ export function EditNodesDialog({
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
       },
     })
   )
@@ -814,6 +835,14 @@ export function EditNodesDialog({
                   draggable
                   onDragStart={() => onDragStart('__AVAILABLE_NODES__', 'available', -1, filteredAvailableNodes)}
                   onDragEnd={onDragEnd}
+                  onTouchStart={(e) => {
+                    // 防止触摸滚动干扰拖动
+                    e.currentTarget.style.touchAction = 'none'
+                  }}
+                  onTouchEnd={(e) => {
+                    // 恢复触摸行为
+                    e.currentTarget.style.touchAction = 'auto'
+                  }}
                   className='flex items-center gap-2 cursor-move rounded-md px-2 py-1 hover:bg-accent transition-colors'
                 >
                   <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
@@ -832,6 +861,14 @@ export function EditNodesDialog({
                     draggable
                     onDragStart={() => onDragStart(proxy, 'available', idx)}
                     onDragEnd={onDragEnd}
+                    onTouchStart={(e) => {
+                      // 防止触摸滚动干扰拖动
+                      e.currentTarget.style.touchAction = 'none'
+                    }}
+                    onTouchEnd={(e) => {
+                      // 恢复触摸行为
+                      e.currentTarget.style.touchAction = 'auto'
+                    }}
                     className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent cursor-move transition-colors duration-75'
                   >
                     <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />

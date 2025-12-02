@@ -78,7 +78,7 @@ function SubscribeFilesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useMediaQuery('(max-width: 640px)')
 
   // 日期格式化器
   const dateFormatter = useMemo(

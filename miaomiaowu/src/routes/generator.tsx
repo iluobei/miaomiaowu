@@ -141,7 +141,7 @@ export const Route = createFileRoute('/generator')({
 function SubscriptionGeneratorPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isMobile = useMediaQuery('(max-width: 640px)')
   const [ruleSet, setRuleSet] = useState<PredefinedRuleSetType>('balanced')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [customRules, setCustomRules] = useState<CustomRule[]>([])
