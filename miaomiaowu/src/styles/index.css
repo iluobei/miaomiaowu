@@ -1,7 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
-@import 'mobile-drag-drop/default.css';
 
 @font-face {
   font-family: 'JetBrains Mono';

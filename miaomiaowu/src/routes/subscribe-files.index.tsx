@@ -1,13 +1,12 @@
 // @ts-nocheck
 import { useState, useEffect, useMemo } from 'react'
-import { createFileRoute, redirect, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
-import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
@@ -19,26 +18,10 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Trash2 } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2 } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragStartEvent,
-  useDraggable,
-  useDroppable,
-  type DragOverEvent,
-  DragOverlay,
-} from '@dnd-kit/core'
-import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 
 export const Route = createFileRoute('/subscribe-files/')({
   beforeLoad: () => {
@@ -106,34 +89,6 @@ function SubscribeFilesPage() {
   const [editingNodesFile, setEditingNodesFile] = useState<SubscribeFile | null>(null)
   const [proxyGroups, setProxyGroups] = useState<Array<{ name: string; type: string; proxies: string[] }>>([])
   const [showAllNodes, setShowAllNodes] = useState(true)
-  const [activeCard, setActiveCard] = useState<{ name: string; type: string; proxies: string[] } | null>(null)
-
-  // 使用拖拽 hook
-  const {
-    draggedNode,
-    dragOverGroup,
-    activeGroupTitle,
-    setActiveGroupTitle,
-    handleDragStart,
-    handleDragEnd,
-    handleDragEnterGroup,
-    handleDragLeaveGroup,
-    handleDrop,
-    handleDropToAvailable
-  } = useNodeDragDrop({
-    proxyGroups,
-    onProxyGroupsChange: setProxyGroups,
-    specialNodesToFilter: []  // subscribe-files 不需要过滤特殊节点
-  })
-
-  // DND Kit 状态 - 用于卡片排序
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // 移动8px后才开始拖动，避免点击误触发
-      },
-    })
-  )
 
   // 编辑器状态
   const [editorValue, setEditorValue] = useState('')
@@ -759,146 +714,6 @@ function SubscribeFilesPage() {
       toast.error(message)
       console.error('应用节点配置失败:', error)
     }
-  }
-
-  // DND Kit 卡片排序处理函数
-  const resolveTargetGroup = (overItem: DragOverEvent['over'] | DragEndEvent['over']) => {
-    if (!overItem) {
-      return null
-    }
-    const overId = String(overItem.id)
-    const ensureValidGroup = (groupName: string | null) =>
-      groupName && proxyGroups.some(group => group.name === groupName) ? groupName : null
-    if (overId.startsWith('drop-')) {
-      return ensureValidGroup(overId.replace('drop-', ''))
-    }
-    const overData = overItem.data?.current as { groupName?: string } | undefined
-    if (overData?.groupName) {
-      return ensureValidGroup(overData.groupName)
-    }
-    return ensureValidGroup(overId || null)
-  }
-
-  const handleCardDragStart = (event: DragStartEvent) => {
-    const activeId = String(event.active.id)
-
-    if (activeId.startsWith('group-title-')) {
-      const groupName = activeId.replace('group-title-', '')
-      handleDragStart(groupName, null, -1)
-      setActiveGroupTitle(groupName)
-    } else {
-      // 拖动整个卡片
-      const group = proxyGroups.find(g => g.name === activeId)
-      if (group) {
-        setActiveCard(group)
-      }
-    }
-  }
-
-  const handleCardDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-
-    // 清除拖动状态
-    setActiveCard(null)
-    setActiveGroupTitle(null)
-
-    if (!over) {
-      if (String(active.id).startsWith('group-title-')) {
-        handleDragEnd()
-      }
-      setDragOverGroup(null)
-      return
-    }
-
-    const activeId = String(active.id)
-
-    // 处理卡片排序（拖动卡片顶部按钮）
-    if (!activeId.startsWith('group-title-') && !activeId.startsWith('drop-')) {
-      if (active.id === over.id) {
-        return
-      }
-      setProxyGroups((groups) => {
-        const oldIndex = groups.findIndex((g) => g.name === active.id)
-        const newIndex = groups.findIndex((g) => g.name === over.id)
-        return arrayMove(groups, oldIndex, newIndex)
-      })
-      return
-    }
-
-    if (activeId.startsWith('group-title-')) {
-      const groupName = activeId.replace('group-title-', '')
-      const targetGroupName = resolveTargetGroup(over)
-
-      if (targetGroupName && targetGroupName !== groupName) {
-        setProxyGroups((groups) => {
-          return groups.map((group) => {
-            if (group.name === targetGroupName) {
-              if (!group.proxies.includes(groupName)) {
-                return {
-                  ...group,
-                  proxies: [...group.proxies, groupName],
-                }
-              }
-            }
-            return group
-          })
-        })
-      }
-
-      handleDragEnd()
-    }
-
-    setDragOverGroup(null)
-  }
-
-  // const handleCardDragOver = (event: DragOverEvent) => {
-  //   const { active, over } = event
-
-  //   if (!over) {
-  //     if (dragOverGroup) {
-  //       setDragOverGroup(null)
-  //     }
-  //     return
-  //   }
-
-  //   const activeId = String(active.id)
-  //   if (activeId.startsWith('group-title-')) {
-  //     const targetGroupName = resolveTargetGroup(over)
-  //     if (targetGroupName !== dragOverGroup) {
-  //       setDragOverGroup(targetGroupName)
-  //     }
-  //     return
-  //   }
-
-  //   if (dragOverGroup) {
-  //     setDragOverGroup(null)
-  //   }
-  // }
-
-  // DND Kit 节点排序处理函数（在同一个组内）
-  const handleNodeDragEnd = (groupName: string) => (event: DragEndEvent) => {
-    const { active, over } = event
-
-    if (!over || active.id === over.id) {
-      return
-    }
-
-    setProxyGroups((groups) => {
-      return groups.map((group) => {
-        if (group.name !== groupName) {
-          return group
-        }
-
-        const proxies = group.proxies || []
-        const oldIndex = proxies.findIndex((p) => `${groupName}-${p}` === active.id)
-        const newIndex = proxies.findIndex((p) => `${groupName}-${p}` === over.id)
-
-        return {
-          ...group,
-          proxies: arrayMove(proxies, oldIndex, newIndex),
-        }
-      })
-    })
   }
 
   const handleRemoveNodeFromGroup = (groupName: string, nodeIndex: number) => {
@@ -1644,22 +1459,9 @@ function SubscribeFilesPage() {
           isSaving={saveConfigMutation.isPending}
           showAllNodes={showAllNodes}
           onShowAllNodesChange={setShowAllNodes}
-          draggedNode={draggedNode}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          dragOverGroup={dragOverGroup}
-          onDragEnterGroup={handleDragEnterGroup}
-          onDragLeaveGroup={handleDragLeaveGroup}
-          onDrop={handleDrop}
-          onDropToAvailable={handleDropToAvailable}
           onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
-          handleCardDragStart={handleCardDragStart}
-          handleCardDragEnd={handleCardDragEnd}
-          handleNodeDragEnd={handleNodeDragEnd}
-          activeGroupTitle={activeGroupTitle}
-          activeCard={activeCard}
           saveButtonText='应用并保存'
         />
       ) : (

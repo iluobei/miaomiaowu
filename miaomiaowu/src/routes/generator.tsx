@@ -2,14 +2,11 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Layers, Activity, Upload } from 'lucide-react'
-import { type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
-import { arrayMove } from '@dnd-kit/sortable'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
-import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
@@ -170,69 +167,7 @@ function SubscriptionGeneratorPage() {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [proxyGroups, setProxyGroups] = useState<ProxyGroup[]>([])
   const [allProxies, setAllProxies] = useState<string[]>([])
-  const [activeCard, setActiveCard] = useState<{ name: string; type: string; proxies: string[] } | null>(null)
   const [showAllNodes, setShowAllNodes] = useState(true)
-  const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // 使用拖拽 hook (generator 需要过滤特殊节点)
-  const {
-    draggedNode: draggedItem,
-    activeGroupTitle,
-    setActiveGroupTitle,
-    handleDragStart: handleDragStartBase,
-    handleDragEnd: handleDragEndBase,
-    handleDragEnterGroup: handleDragEnterGroupBase,
-    handleDragLeaveGroup: handleDragLeaveGroupBase,
-    handleDrop: handleDropBase,
-    handleDropToAvailable: handleDropToAvailableBase
-  } = useNodeDragDrop({
-    proxyGroups,
-    onProxyGroupsChange: setProxyGroups,
-    specialNodesToFilter: ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
-  })
-
-  // 自定义 dragOverGroup 状态（用于防抖）
-  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
-
-  // 适配器函数：将 generator 的参数名适配到 hook
-  const handleDragStart = (proxy: string, sourceGroup: string | null, sourceIndex: number, filteredNodes?: string[]) => {
-    handleDragStartBase(proxy, sourceGroup, sourceIndex, filteredNodes)
-  }
-
-  const handleDrop = (targetGroupName: string, targetIndex?: number) => {
-    handleDropBase(targetGroupName, targetIndex)
-  }
-
-  const handleDropToAvailable = () => {
-    handleDropToAvailableBase()
-  }
-
-  const handleDragEnd = () => {
-    handleDragEndBase()
-    setDragOverGroup(null)
-  }
-
-  // 带防抖的拖拽进入/离开处理
-  const handleDragEnterGroup = (groupName: string) => {
-    // 清除之前的定时器
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current)
-    }
-    // 立即设置高亮状态
-    setDragOverGroup(groupName)
-    handleDragEnterGroupBase(groupName)
-  }
-
-  const handleDragLeaveGroup = () => {
-    // 使用防抖延迟清除高亮，避免在节点交界处抖动
-    if (dragTimeoutRef.current) {
-      clearTimeout(dragTimeoutRef.current)
-    }
-    dragTimeoutRef.current = setTimeout(() => {
-      setDragOverGroup(null)
-    }, 50)
-    handleDragLeaveGroupBase()
-  }
 
   // 缺失节点替换对话框状态
   const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
@@ -871,124 +806,6 @@ function SubscriptionGeneratorPage() {
     }
   }
 
-  // DND Kit 卡片排序处理函数
-  // DND Kit 辅助函数 - 解析放置目标
-  const resolveTargetGroup = (overItem: any) => {
-    if (!overItem) {
-      return null
-    }
-    const overId = String(overItem.id)
-    const ensureValidGroup = (groupName: string | null) =>
-      groupName && proxyGroups.some(group => group.name === groupName) ? groupName : null
-    if (overId.startsWith('drop-')) {
-      return ensureValidGroup(overId.replace('drop-', ''))
-    }
-    const overData = overItem.data?.current as { groupName?: string } | undefined
-    if (overData?.groupName) {
-      return ensureValidGroup(overData.groupName)
-    }
-    return ensureValidGroup(overId || null)
-  }
-
-  const handleCardDragStart = (event: DragStartEvent) => {
-    const activeId = String(event.active.id)
-
-    if (activeId.startsWith('group-title-')) {
-      const groupName = activeId.replace('group-title-', '')
-      handleDragStart(groupName, null, -1)
-      setActiveGroupTitle(groupName)
-    } else {
-      // 拖动整个卡片
-      const group = proxyGroups.find(g => g.name === activeId)
-      if (group) {
-        setActiveCard(group)
-      }
-    }
-  }
-
-  const handleCardDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-
-    // 清除拖动状态
-    setActiveCard(null)
-    setActiveGroupTitle(null)
-
-    if (!over) {
-      if (String(active.id).startsWith('group-title-')) {
-        handleDragEnd()
-      }
-      setDragOverGroup(null)
-      return
-    }
-
-    const activeId = String(active.id)
-
-    // 处理卡片排序（拖动卡片顶部按钮）
-    if (!activeId.startsWith('group-title-') && !activeId.startsWith('drop-')) {
-      if (active.id === over.id) {
-        return
-      }
-      setProxyGroups((groups) => {
-        const oldIndex = groups.findIndex((g) => g.name === active.id)
-        const newIndex = groups.findIndex((g) => g.name === over.id)
-        return arrayMove(groups, oldIndex, newIndex)
-      })
-      return
-    }
-
-    // 处理拖动代理组标题作为节点
-    if (activeId.startsWith('group-title-')) {
-      const groupName = activeId.replace('group-title-', '')
-      const targetGroupName = resolveTargetGroup(over)
-
-      if (targetGroupName && targetGroupName !== groupName) {
-        setProxyGroups((groups) => {
-          return groups.map((group) => {
-            if (group.name === targetGroupName) {
-              if (!group.proxies.includes(groupName)) {
-                return {
-                  ...group,
-                  proxies: [...group.proxies, groupName],
-                }
-              }
-            }
-            return group
-          })
-        })
-      }
-
-      handleDragEnd()
-    }
-
-    setDragOverGroup(null)
-  }
-
-  // DND Kit 节点排序处理函数（在同一个组内）
-  const handleNodeDragEnd = (groupName: string) => (event: DragEndEvent) => {
-    const { active, over } = event
-
-    if (!over || active.id === over.id) {
-      return
-    }
-
-    setProxyGroups((groups) => {
-      return groups.map((group) => {
-        if (group.name !== groupName) {
-          return group
-        }
-
-        const proxies = group.proxies || []
-        const oldIndex = proxies.findIndex((p) => `${groupName}-${p}` === active.id)
-        const newIndex = proxies.findIndex((p) => `${groupName}-${p}` === over.id)
-
-        return {
-          ...group,
-          proxies: arrayMove(proxies, oldIndex, newIndex),
-        }
-      })
-    })
-  }
-
   // 删除节点
   const handleRemoveProxy = (groupName: string, proxyIndex: number) => {
     setProxyGroups(groups =>
@@ -1142,7 +959,6 @@ function SubscriptionGeneratorPage() {
       setTimeout(() => {
         setProxyGroups([])
         setAllProxies([])
-        setActiveGroupTitle(null)
       }, 200)
     } else {
       setGroupDialogOpen(open)
@@ -1651,22 +1467,9 @@ function SubscriptionGeneratorPage() {
           onConfigureChainProxy={handleConfigureChainProxy}
           showAllNodes={showAllNodes}
           onShowAllNodesChange={setShowAllNodes}
-          draggedNode={draggedItem}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          dragOverGroup={dragOverGroup}
-          onDragEnterGroup={handleDragEnterGroup}
-          onDragLeaveGroup={handleDragLeaveGroup}
-          onDrop={handleDrop}
-          onDropToAvailable={handleDropToAvailable}
           onRemoveNodeFromGroup={handleRemoveProxy}
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
-          handleCardDragStart={handleCardDragStart}
-          handleCardDragEnd={handleCardDragEnd}
-          handleNodeDragEnd={handleNodeDragEnd}
-          activeGroupTitle={activeGroupTitle}
-          activeCard={activeCard}
           saveButtonText="确定"
         />
       ) : (
