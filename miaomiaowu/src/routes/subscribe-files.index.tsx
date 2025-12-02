@@ -8,18 +8,19 @@ import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
+import { DataTable } from '@/components/data-table'
+import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Wand2 } from 'lucide-react'
+import { Upload, Download, Plus, Edit, Settings, FileText, Save, GripVertical, X, Layers, Trash2 } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import {
   DndContext,
@@ -360,23 +361,6 @@ function SubscribeFilesPage() {
     },
   })
 
-  // 应用自定义规则 mutation
-  const applyCustomRulesMutation = useMutation({
-    mutationFn: async (yamlContent: string) => {
-      const response = await api.post('/api/admin/apply-custom-rules', {
-        yaml_content: yamlContent,
-      })
-      return response.data
-    },
-    onSuccess: (data) => {
-      setConfigContent(data.yaml_content)
-      toast.success('自定义规则已应用，请点击保存生效')
-    },
-    onError: (error) => {
-      handleServerError(error)
-    },
-  })
-
   const toggleAutoSyncMutation = useMutation({
     mutationFn: async (payload: { id: number; enabled: boolean }) => {
       const response = await api.patch(`/api/admin/subscribe-files/${payload.id}`, {
@@ -547,21 +531,6 @@ function SubscribeFilesPage() {
 
   const handleToggleAutoSync = (id: number, enabled: boolean) => {
     toggleAutoSyncMutation.mutate({ id, enabled })
-  }
-
-  const handleApplyCustomRules = () => {
-    if (!configContent) {
-      toast.error('配置内容为空')
-      return
-    }
-    try {
-      parseYAML(configContent)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'YAML 解析失败'
-      toast.error('应用失败，当前配置 YAML 格式错误：' + message)
-      return
-    }
-    applyCustomRulesMutation.mutate(configContent)
   }
 
   const handleEditNodes = (file: SubscribeFile) => {
@@ -1078,13 +1047,13 @@ function SubscribeFilesPage() {
             </p>
           </div>
 
-          <div className='flex gap-2'>
+          <div className='flex gap-1 sm:gap-2'>
             {/* 导入订阅 */}
             <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant='outline'>
-                  <Download className='mr-2 h-4 w-4' />
-                  导入订阅
+                <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
+                  <Download className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
+                  <span className='truncate'>导入订阅</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -1146,9 +1115,9 @@ function SubscribeFilesPage() {
             {/* 上传文件 */}
             <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant='outline'>
-                  <Upload className='mr-2 h-4 w-4' />
-                  上传文件
+                <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
+                  <Upload className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
+                  <span className='truncate'>上传文件</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -1208,9 +1177,9 @@ function SubscribeFilesPage() {
             </Dialog>
 
             {/* 生成订阅 */}
-            <Button variant='outline' onClick={() => navigate({ to: '/generator' })}>
-              <FileText className='mr-2 h-4 w-4' />
-              生成订阅
+            <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2' onClick={() => navigate({ to: '/generator' })}>
+              <FileText className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
+              <span className='truncate'>生成订阅</span>
             </Button>
 
             {/* 自定义代理组 - 保留入口 */}
@@ -1236,102 +1205,216 @@ function SubscribeFilesPage() {
                 暂无订阅，点击上方按钮添加
               </div>
             ) : (
-              <div className='rounded-md border'>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>订阅名称</TableHead>
-                      <TableHead>说明</TableHead>
-                      <TableHead>类型</TableHead>
-                      <TableHead>文件名</TableHead>
-                      <TableHead>最后更新</TableHead>
-                      <TableHead className='text-center'>版本</TableHead>
-                      <TableHead className='text-center'>自动同步规则</TableHead>
-                      <TableHead className='text-center'>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {files.map((file) => (
-                      <TableRow key={file.id}>
-                        <TableCell className='font-medium'>{file.name}</TableCell>
-                        <TableCell>
-                          <div className='max-w-[200px] truncate text-sm text-muted-foreground'>
-                            {file.description || '-'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant='outline' className={TYPE_COLORS[file.type]}>
-                            {TYPE_LABELS[file.type]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className='font-mono text-sm'>{file.filename}</TableCell>
-                        <TableCell className='text-sm text-muted-foreground'>
-                          {file.updated_at ? dateFormatter.format(new Date(file.updated_at)) : '-'}
-                        </TableCell>
-                        <TableCell className='text-center'>
-                          {file.latest_version ? (
-                            <Badge variant='secondary'>v{file.latest_version}</Badge>
-                          ) : (
-                            <span className='text-sm text-muted-foreground'>-</span>
+              <DataTable
+                data={files}
+                getRowKey={(file) => file.id}
+                emptyText='暂无订阅，点击上方按钮添加'
+
+                columns={[
+                  {
+                    header: '订阅名称',
+                    cell: (file) => file.name,
+                    cellClassName: 'font-medium'
+                  },
+                  {
+                    header: '说明',
+                    cell: (file) => (
+                      <div className='max-w-[200px] truncate text-sm text-muted-foreground'>
+                        {file.description || '-'}
+                      </div>
+                    )
+                  },
+                  {
+                    header: '类型',
+                    cell: (file) => (
+                      <Badge variant='outline' className={TYPE_COLORS[file.type]}>
+                        {TYPE_LABELS[file.type]}
+                      </Badge>
+                    )
+                  },
+                  {
+                    header: '文件名',
+                    cell: (file) => file.filename,
+                    cellClassName: 'font-mono text-sm'
+                  },
+                  {
+                    header: '最后更新',
+                    cell: (file) => (
+                      <span className='text-sm text-muted-foreground'>
+                        {file.updated_at ? dateFormatter.format(new Date(file.updated_at)) : '-'}
+                      </span>
+                    )
+                  },
+                  {
+                    header: '版本',
+                    cell: (file) => file.latest_version ? (
+                      <Badge variant='secondary'>v{file.latest_version}</Badge>
+                    ) : (
+                      <span className='text-sm text-muted-foreground'>-</span>
+                    ),
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center'
+                  },
+                  {
+                    header: '自动同步规则',
+                    cell: (file) => (
+                      <Switch
+                        checked={file.auto_sync_custom_rules || false}
+                        onCheckedChange={(checked) => handleToggleAutoSync(file.id, checked)}
+                      />
+                    ),
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center'
+                  },
+                  {
+                    header: '操作',
+                    cell: (file) => (
+                      <div className='flex items-center justify-center gap-2'>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => handleEditMetadata(file)}
+                          disabled={updateMetadataMutation.isPending}
+                        >
+                          <Settings className='mr-1 h-4 w-4' />
+                          编辑信息
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => handleEditConfig(file)}
+                        >
+                          <Edit className='mr-1 h-4 w-4' />
+                          编辑配置
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant='ghost' size='sm' disabled={deleteMutation.isPending}>
+                              删除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                确定要删除订阅 "{file.name}" 吗？此操作将同时删除对应的文件，不可撤销。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(file.id)}>
+                                删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    ),
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center'
+                  }
+                ] as DataTableColumn<SubscribeFile>[]}
+
+                mobileCard={{
+                  header: (file) => (
+                    <div className='flex items-center justify-between gap-2 mb-1'>
+                      <div className='flex items-center gap-2 flex-1 min-w-0'>
+                        <Badge variant='outline' className={TYPE_COLORS[file.type]}>
+                          {TYPE_LABELS[file.type]}
+                        </Badge>
+                        <div className='font-medium text-sm truncate'>{file.name}</div>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='size-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+                            disabled={deleteMutation.isPending}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Trash2 className='size-4' />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>确认删除</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              确定要删除订阅 "{file.name}" 吗？此操作将同时删除对应的文件，不可撤销。
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(file.id)}>
+                              删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ),
+                  fields: [
+                    {
+                      label: '描述',
+                      value: (file) => <span className='text-xs line-clamp-1'>{file.description}</span>,
+                      hidden: (file) => !file.description
+                    },
+                    {
+                      label: '文件',
+                      value: (file) => <span className='font-mono break-all'>{file.filename}</span>
+                    },
+                    {
+                      label: '更新时间',
+                      value: (file) => (
+                        <div className='flex items-center gap-2 flex-wrap'>
+                          <span>{file.updated_at ? dateFormatter.format(new Date(file.updated_at)) : '-'}</span>
+                          {file.latest_version && (
+                            <>
+                              <span className='text-muted-foreground'>·</span>
+                              <Badge variant='secondary' className='text-xs'>v{file.latest_version}</Badge>
+                            </>
                           )}
-                        </TableCell>
-                        <TableCell className='text-center'>
+                        </div>
+                      )
+                    },
+                    {
+                      label: '自动同步',
+                      value: (file) => (
+                        <div className='flex items-center gap-2'>
                           <Switch
                             checked={file.auto_sync_custom_rules || false}
                             onCheckedChange={(checked) => handleToggleAutoSync(file.id, checked)}
                           />
-                        </TableCell>
-                        <TableCell className='text-center'>
-                          <div className='flex items-center justify-center gap-2'>
-                            <Button
-                              variant='ghost'
-                              size='sm'
-                              onClick={() => handleEditMetadata(file)}
-                              disabled={updateMetadataMutation.isPending}
-                            >
-                              <Settings className='mr-1 h-4 w-4' />
-                              编辑信息
-                            </Button>
-                            <Button
-                              variant='ghost'
-                              size='sm'
-                              onClick={() => handleEditConfig(file)}
-                            >
-                              <Edit className='mr-1 h-4 w-4' />
-                              编辑配置
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  disabled={deleteMutation.isPending}
-                                >
-                                  删除
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    确定要删除订阅 "{file.name}" 吗？此操作将同时删除对应的文件，不可撤销。
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>取消</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDelete(file.id)}>
-                                    删除
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                          <span className='text-xs'>{file.auto_sync_custom_rules ? '已启用' : '未启用'}</span>
+                        </div>
+                      )
+                    }
+                  ],
+                  actions: (file) => (
+                    <>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='flex-1'
+                        onClick={() => handleEditMetadata(file)}
+                        disabled={updateMetadataMutation.isPending}
+                      >
+                        <Settings className='mr-1 h-4 w-4' />
+                        编辑信息
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='flex-1'
+                        onClick={() => handleEditConfig(file)}
+                      >
+                        <Edit className='mr-1 h-4 w-4' />
+                        编辑配置
+                      </Button>
+                    </>
+                  )
+                }}
+              />
             )}
           </CardContent>
         </Card>
@@ -1498,15 +1581,6 @@ function SubscribeFilesPage() {
               <Button
                 variant='outline'
                 size='sm'
-                onClick={handleApplyCustomRules}
-                disabled={applyCustomRulesMutation.isPending || !configContent}
-              >
-                <Wand2 className='mr-2 h-4 w-4' />
-                {applyCustomRulesMutation.isPending ? '应用中...' : '应用自定义规则'}
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
                 onClick={() => handleEditNodes(editingConfigFile!)}
               >
                 <Edit className='mr-2 h-4 w-4' />
@@ -1541,7 +1615,6 @@ function SubscribeFilesPage() {
             <div className='rounded-lg border bg-muted/50 p-4'>
               <h3 className='mb-2 font-semibold'>使用说明</h3>
               <ul className='space-y-1 text-sm text-muted-foreground'>
-                <li>• 点击"应用自定义规则"按钮可将自定义规则应用到配置中</li>
                 <li>• 点击"保存"按钮将修改保存到配置文件</li>
                 <li>• 支持直接编辑 YAML 内容</li>
                 <li>• 保存前会自动验证 YAML 格式</li>

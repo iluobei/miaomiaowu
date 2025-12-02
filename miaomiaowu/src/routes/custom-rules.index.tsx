@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 
+import { DataTable } from '@/components/data-table'
+import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import {
 	Card,
@@ -18,14 +20,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog'
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from '@/components/ui/table'
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -397,6 +391,19 @@ function CustomRulesPage() {
 		}
 	}
 
+	const getTypeBadgeClass = (type: string) => {
+		switch (type) {
+			case 'dns':
+				return 'bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30'
+			case 'rules':
+				return 'bg-green-500/10 text-green-700 border-green-500/20 dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/30'
+			case 'rule-providers':
+				return 'bg-purple-500/10 text-purple-700 border-purple-500/20 dark:bg-purple-500/20 dark:text-purple-400 dark:border-purple-500/30'
+			default:
+				return ''
+		}
+	}
+
 	const getModeLabel = (mode: string) => {
 		switch (mode) {
 			case 'replace':
@@ -450,78 +457,152 @@ function CustomRulesPage() {
 							<div className='text-center py-8 text-muted-foreground'>
 								加载中...
 							</div>
-						) : rules.length === 0 ? (
-							<div className='text-center py-8 text-muted-foreground'>
-								暂无规则
-							</div>
 						) : (
-							<Table>
-								<TableHeader>
-									<TableRow>
-										<TableHead>名称</TableHead>
-										<TableHead>类型</TableHead>
-										<TableHead>模式</TableHead>
-										<TableHead>状态</TableHead>
-										<TableHead>创建时间</TableHead>
-										<TableHead className='text-right'>操作</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{rules.map((rule) => (
-										<TableRow key={rule.id}>
-											<TableCell className='font-medium'>
-												{rule.name}
-											</TableCell>
-											<TableCell>
-												<Badge variant='outline'>
-													{getTypeLabel(rule.type)}
-												</Badge>
-											</TableCell>
-											<TableCell>
-												{getModeLabel(rule.mode)}
-											</TableCell>
-											<TableCell>
-												<div className='flex items-center gap-2'>
-													<Switch
-														checked={rule.enabled}
-														onCheckedChange={(checked) => {
-															toggleEnabledMutation.mutate({
-																id: rule.id,
-																enabled: checked,
-															})
-														}}
-														disabled={toggleEnabledMutation.isPending}
-													/>
-													<span className='text-sm text-muted-foreground'>
-														{rule.enabled ? '启用' : '禁用'}
-													</span>
-												</div>
-											</TableCell>
-											<TableCell className='text-sm text-muted-foreground'>
+							<DataTable
+								data={rules}
+								getRowKey={(rule) => rule.id}
+								emptyText='暂无规则'
+
+								columns={[
+									{
+										header: '名称',
+										cell: (rule) => rule.name,
+										cellClassName: 'font-medium'
+									},
+									{
+										header: '类型',
+										cell: (rule) => (
+											<Badge variant='outline' className={getTypeBadgeClass(rule.type)}>
+												{getTypeLabel(rule.type)}
+											</Badge>
+										)
+									},
+									{
+										header: '模式',
+										cell: (rule) => getModeLabel(rule.mode)
+									},
+									{
+										header: '状态',
+										cell: (rule) => (
+											<div className='flex items-center gap-2'>
+												<Switch
+													checked={rule.enabled}
+													onCheckedChange={(checked) => {
+														toggleEnabledMutation.mutate({
+															id: rule.id,
+															enabled: checked,
+														})
+													}}
+													disabled={toggleEnabledMutation.isPending}
+												/>
+												<span className='text-sm text-muted-foreground'>
+													{rule.enabled ? '启用' : '禁用'}
+												</span>
+											</div>
+										)
+									},
+									{
+										header: '创建时间',
+										cell: (rule) => (
+											<span className='text-sm text-muted-foreground'>
 												{new Date(rule.created_at).toLocaleString('zh-CN')}
-											</TableCell>
-											<TableCell className='text-right'>
-												<div className='flex justify-end gap-2'>
-													<Button
-														variant='ghost'
-														size='icon'
-														onClick={() => handleEdit(rule)}
-													>
-														<Pencil className='h-4 w-4' />
-													</Button>
-													<Button
-														variant='ghost'
-														size='icon'
-														onClick={() => handleDelete(rule.id)}
-													>
-														<Trash2 className='h-4 w-4' />
-													</Button>
+											</span>
+										)
+									},
+									{
+										header: '操作',
+										cell: (rule) => (
+											<div className='flex justify-end gap-2'>
+												<Button
+													variant='ghost'
+													size='icon'
+													onClick={() => handleEdit(rule)}
+												>
+													<Pencil className='h-4 w-4' />
+												</Button>
+												<Button
+													variant='ghost'
+													size='icon'
+													onClick={() => handleDelete(rule.id)}
+												>
+													<Trash2 className='h-4 w-4' />
+												</Button>
+											</div>
+										),
+										headerClassName: 'text-right',
+										cellClassName: 'text-right'
+									}
+								] as DataTableColumn<CustomRule>[]}
+
+								mobileCard={{
+									header: (rule) => (
+										<div className='space-y-1'>
+											{/* 第一行：标签 + 名称 + 删除按钮 */}
+											<div className='flex items-start justify-between gap-2'>
+												<div className='flex items-center gap-2 flex-1 min-w-0'>
+													<Badge variant='outline' className={`${getTypeBadgeClass(rule.type)} shrink-0`}>
+														{getTypeLabel(rule.type)}
+													</Badge>
+													<div className='font-medium text-sm truncate flex-1 min-w-0'>{rule.name}</div>
 												</div>
-											</TableCell>
-										</TableRow>
-									))}
-								</TableBody>
-							</Table>
+												<Button
+													variant='outline'
+													size='icon'
+													className='size-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+													onClick={(e) => {
+														e.stopPropagation()
+														handleDelete(rule.id)
+													}}
+												>
+													<Trash2 className='size-4' />
+												</Button>
+											</div>
+
+											{/* 第二行：模式 + 状态 */}
+											<div className='flex items-center justify-between gap-4 text-xs'>
+												<div className='flex items-center gap-2 min-w-0'>
+													<span className='text-muted-foreground shrink-0'>模式:</span>
+													<span className='truncate'>{getModeLabel(rule.mode)}</span>
+												</div>
+												<div className='flex items-center gap-2 shrink-0'>
+													<span className='text-muted-foreground shrink-0'>状态:</span>
+													<div className='flex items-center gap-2'>
+														<Switch
+															checked={rule.enabled}
+															onCheckedChange={(checked) => {
+																toggleEnabledMutation.mutate({
+																	id: rule.id,
+																	enabled: checked,
+																})
+															}}
+															disabled={toggleEnabledMutation.isPending}
+														/>
+														<span>{rule.enabled ? '启用' : '禁用'}</span>
+													</div>
+												</div>
+											</div>
+
+											{/* 第三行：创建时间 */}
+											<div className='flex items-center gap-2 text-xs'>
+												<span className='text-muted-foreground shrink-0'>创建时间:</span>
+												<span>{new Date(rule.created_at).toLocaleString('zh-CN')}</span>
+											</div>
+										</div>
+									),
+									fields: [],
+									actions: (rule) => (
+										<Button
+											variant='outline'
+											size='sm'
+											className='w-full'
+											onClick={() => handleEdit(rule)}
+										>
+											<Pencil className='mr-1 h-4 w-4' />
+											编辑
+										</Button>
+									)
+								}}
+							/>
 						)}
 					</CardContent>
 				</Card>

@@ -9,6 +9,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { useNodeDragDrop } from '@/hooks/use-node-drag-drop'
+import { DataTable } from '@/components/data-table'
+import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,14 +31,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -1301,72 +1295,139 @@ function SubscriptionGeneratorPage() {
                     </div>
                   )}
 
-                  <div className='rounded-md border max-h-[440px] overflow-y-auto'>
-                  <Table>
-                    <TableHeader className='sticky top-0 bg-background z-10'>
-                      <TableRow>
-                        <TableHead className='w-[50px]'>
+                  <DataTable
+                    data={filteredNodes}
+                    getRowKey={(node) => node.id}
+                    emptyText='没有找到匹配的节点'
+                    containerClassName='max-h-[440px] overflow-y-auto'
+                    onRowClick={(node) => handleToggleNode(node.id)}
+                    rowClassName={(node) => selectedNodeIds.has(node.id) ? 'bg-accent' : ''}
+
+                    columns={[
+                      {
+                        header: (
                           <Checkbox
                             checked={filteredNodes.length > 0 && filteredNodes.every(n => selectedNodeIds.has(n.id))}
                             onCheckedChange={handleToggleAll}
                           />
-                        </TableHead>
-                        <TableHead>节点名称</TableHead>
-                        <TableHead className='w-[100px]'>协议</TableHead>
-                        <TableHead className='min-w-[150px]'>服务器地址</TableHead>
-                        <TableHead className='w-[100px]'>标签</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredNodes.map((node) => {
-                        // 从 clash_config 中提取服务器地址
-                        let serverAddress = '-'
-                        try {
-                          if (node.clash_config) {
-                            const clashConfig = JSON.parse(node.clash_config)
-                            if (clashConfig.server) {
-                              const port = clashConfig.port ? `:${clashConfig.port}` : ''
-                              serverAddress = `${clashConfig.server}${port}`
+                        ),
+                        cell: (node) => (
+                          <Checkbox
+                            checked={selectedNodeIds.has(node.id)}
+                            onCheckedChange={() => handleToggleNode(node.id)}
+                          />
+                        ),
+                        width: '50px'
+                      },
+                      {
+                        header: '节点名称',
+                        cell: (node) => node.node_name,
+                        cellClassName: 'font-medium'
+                      },
+                      {
+                        header: '协议',
+                        cell: (node) => (
+                          <Badge variant='outline'>{node.protocol.toUpperCase()}</Badge>
+                        ),
+                        width: '100px'
+                      },
+                      {
+                        header: '服务器地址',
+                        cell: (node) => {
+                          let serverAddress = '-'
+                          try {
+                            if (node.clash_config) {
+                              const clashConfig = JSON.parse(node.clash_config)
+                              if (clashConfig.server) {
+                                const port = clashConfig.port ? `:${clashConfig.port}` : ''
+                                serverAddress = `${clashConfig.server}${port}`
+                              }
                             }
+                          } catch (e) {
+                            // 解析失败，使用默认值
                           }
-                        } catch (e) {
-                          // 解析失败，使用默认值
-                        }
+                          return <span className='font-mono text-sm'>{serverAddress}</span>
+                        },
+                        headerClassName: 'min-w-[150px]'
+                      },
+                      {
+                        header: '标签',
+                        cell: (node) => (
+                          <div className='flex flex-wrap gap-1'>
+                            {node.tag && (
+                              <Badge variant='secondary' className='text-xs'>
+                                {node.tag}
+                              </Badge>
+                            )}
+                            {node.probe_server && (
+                              <Badge variant='secondary' className='text-xs flex items-center gap-1'>
+                                <Activity className='size-3' />
+                                {node.probe_server}
+                              </Badge>
+                            )}
+                          </div>
+                        ),
+                        width: '100px'
+                      }
+                    ] as DataTableColumn<SavedNode>[]}
 
-                        return (
-                        <TableRow key={node.id}>
-                          <TableCell>
+                    mobileCard={{
+                      header: (node) => (
+                        <div className='space-y-1'>
+                          {/* 第一行：协议类型 + 节点名称 */}
+                          <div className='flex items-center gap-2'>
                             <Checkbox
+                              className='hidden md:flex shrink-0'
                               checked={selectedNodeIds.has(node.id)}
                               onCheckedChange={() => handleToggleNode(node.id)}
                             />
-                          </TableCell>
-                          <TableCell className='font-medium'>{node.node_name}</TableCell>
-                          <TableCell>
-                            <Badge variant='outline'>{node.protocol.toUpperCase()}</Badge>
-                          </TableCell>
-                          <TableCell className='font-mono text-sm'>{serverAddress}</TableCell>
-                          <TableCell>
-                            <div className='flex flex-wrap gap-1'>
-                              {node.tag && (
-                                <Badge variant='secondary' className='text-xs'>
-                                  {node.tag}
-                                </Badge>
-                              )}
-                              {node.probe_server && (
-                                <Badge variant='secondary' className='text-xs flex items-center gap-1'>
-                                  <Activity className='size-3' />
-                                  {node.probe_server}
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                  </div>
+                            <Badge variant='outline' className='shrink-0'>{node.protocol.toUpperCase()}</Badge>
+                            <div className='font-medium text-sm truncate flex-1 min-w-0'>{node.node_name}</div>
+                          </div>
+
+                          {/* 第二行：标签 + 服务器地址 */}
+                          <div className='flex items-center gap-2 text-xs'>
+                            {/* 标签部分 */}
+                            {(node.tag || node.probe_server) && (
+                              <div className='flex items-center gap-1 shrink-0'>
+                                {node.tag && (
+                                  <Badge variant='secondary' className='text-xs'>
+                                    {node.tag}
+                                  </Badge>
+                                )}
+                                {node.probe_server && (
+                                  <Badge variant='secondary' className='text-xs flex items-center gap-1'>
+                                    <Activity className='size-3' />
+                                    {node.probe_server}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 地址部分 */}
+                            <span className='font-mono text-muted-foreground truncate flex-1 min-w-0'>
+                              {(() => {
+                                let serverAddress = '-'
+                                try {
+                                  if (node.clash_config) {
+                                    const clashConfig = JSON.parse(node.clash_config)
+                                    if (clashConfig.server) {
+                                      const port = clashConfig.port ? `:${clashConfig.port}` : ''
+                                      serverAddress = `${clashConfig.server}${port}`
+                                    }
+                                  }
+                                } catch (e) {
+                                  // 解析失败，使用默认值
+                                }
+                                return serverAddress
+                              })()}
+                            </span>
+                          </div>
+                        </div>
+                      ),
+                      fields: []
+                    }}
+                  />
                 </>
               )}
 
@@ -1410,30 +1471,30 @@ function SubscriptionGeneratorPage() {
                       模板为静态文件模板(源代码rule_templates目录中)，不会提交节点到转换后端，放心使用。
                     </p>
                   </div>
-                  <div className='flex gap-2'>
-                    <div className='flex-1'>
-                      <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                        <SelectTrigger id='template-select'>
-                          <SelectValue placeholder='请选择模板' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {templates.map((template) => (
-                            <SelectItem key={template} value={template}>
-                              {template}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button
-                      variant='outline'
-                      onClick={() => setUploadDialogOpen(true)}
-                    >
-                      <Upload className='mr-2 h-4 w-4' />
-                      上传
-                    </Button>
-                    <div className='flex items-end'>
+                  <div className='space-y-2'>
+                    <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                      <SelectTrigger id='template-select'>
+                        <SelectValue placeholder='请选择模板' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map((template) => (
+                          <SelectItem key={template} value={template}>
+                            {template}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className='flex gap-2'>
+                      <Button
+                        variant='outline'
+                        className='flex-1'
+                        onClick={() => setUploadDialogOpen(true)}
+                      >
+                        <Upload className='mr-2 h-4 w-4' />
+                        上传
+                      </Button>
                       <div
+                        className='flex-1'
                         onClick={() => {
                           if (selectedNodeIds.size === 0) {
                             toast.error('请先选择节点')
@@ -1443,6 +1504,7 @@ function SubscriptionGeneratorPage() {
                         }}
                       >
                         <Button
+                          className='w-full'
                           onClick={handleLoadTemplate}
                           disabled={loading || selectedNodeIds.size === 0 || !selectedTemplate}
                         >

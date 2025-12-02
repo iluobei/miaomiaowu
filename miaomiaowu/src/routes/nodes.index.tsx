@@ -1392,124 +1392,149 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     </Card>
                   ) : (
                     filteredNodes.map(node => (
-                      <Card key={node.id} className='overflow-hidden'>
-                        <CardContent className='p-4 space-y-3'>
-                          {/* 头部：复选框、协议、已保存标签 */}
-                          <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-2'>
-                              {node.isSaved && node.dbId && (
-                                <Checkbox
-                                  checked={selectedNodeIds.has(node.dbId)}
-                                  onCheckedChange={(checked) => {
-                                    const newSet = new Set(selectedNodeIds)
-                                    if (checked) {
-                                      newSet.add(node.dbId!)
-                                    } else {
-                                      newSet.delete(node.dbId!)
+                      <Card
+                        key={node.id}
+                        className={`overflow-hidden cursor-pointer ${node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-accent' : ''}`}
+                        onClick={() => {
+                          if (node.isSaved && node.dbId) {
+                            const newSet = new Set(selectedNodeIds)
+                            if (selectedNodeIds.has(node.dbId)) {
+                              newSet.delete(node.dbId)
+                            } else {
+                              newSet.add(node.dbId)
+                            }
+                            setSelectedNodeIds(newSet)
+                          }
+                        }}
+                      >
+                        <CardContent className='p-3 space-y-2'>
+                          {/* 头部：协议、节点名称、已保存标签 */}
+                          <div className='flex items-start justify-between gap-2'>
+                            <div className='flex-1 min-w-0'>
+                              <div className='flex items-center gap-2 mb-1'>
+                                {node.isSaved && node.dbId && (
+                                  <Checkbox
+                                    className='hidden md:flex'
+                                    checked={selectedNodeIds.has(node.dbId)}
+                                    onCheckedChange={(checked) => {
+                                      const newSet = new Set(selectedNodeIds)
+                                      if (checked) {
+                                        newSet.add(node.dbId!)
+                                      } else {
+                                        newSet.delete(node.dbId!)
+                                      }
+                                      setSelectedNodeIds(newSet)
+                                    }}
+                                  />
+                                )}
+                                {node.parsed ? (
+                                  <Badge
+                                    variant='outline'
+                                    className={
+                                      node.dbNode?.protocol?.includes('⇋')
+                                        ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
+                                        : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
                                     }
-                                    setSelectedNodeIds(newSet)
-                                  }}
-                                />
-                              )}
-                              {node.parsed ? (
-                                <Badge
-                                  variant='outline'
-                                  className={
-                                    node.dbNode?.protocol?.includes('⇋')
-                                      ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                      : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                  }
-                                >
-                                  {node.dbNode?.protocol?.includes('⇋')
-                                    ? node.dbNode.protocol.toUpperCase()
-                                    : node.parsed.type.toUpperCase()}
-                                </Badge>
-                              ) : (
-                                <Badge variant='destructive'>解析失败</Badge>
-                              )}
-                            </div>
-                            {node.isSaved && (
-                              <Badge variant='secondary' className='text-xs'>已保存</Badge>
-                            )}
-                          </div>
-
-                          {/* 节点名称（可编辑） */}
-                          <div className='space-y-2'>
-                            <Label className='text-xs text-muted-foreground'>节点名称</Label>
-                            {editingNode?.id === node.id ? (
-                              <div className='flex items-center gap-2'>
-                                <Input
-                                  value={editingNode.value}
-                                  onChange={(event) => handleNameEditChange(event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Enter') {
-                                      event.preventDefault()
-                                      handleNameEditSubmit(node)
-                                    } else if (event.key === 'Escape') {
-                                      event.preventDefault()
-                                      handleNameEditCancel()
-                                    }
-                                  }}
-                                  className='h-8'
-                                  autoFocus
-                                />
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  className='size-8 text-emerald-600 shrink-0'
-                                  onClick={() => handleNameEditSubmit(node)}
-                                  disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
-                                >
-                                  <Check className='size-4' />
-                                </Button>
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  className='size-8 text-muted-foreground shrink-0'
-                                  onClick={handleNameEditCancel}
-                                >
-                                  <X className='size-4' />
-                                </Button>
+                                  >
+                                    {node.dbNode?.protocol?.includes('⇋')
+                                      ? node.dbNode.protocol.toUpperCase()
+                                      : node.parsed.type.toUpperCase()}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant='destructive'>解析失败</Badge>
+                                )}
+                                {node.isSaved && (
+                                  <Badge variant='secondary' className='text-xs'>已保存</Badge>
+                                )}
                               </div>
-                            ) : (
-                              <div className='flex items-center gap-2 flex-wrap'>
-                                <span className='font-medium break-all'>{node.name || '未知'}</span>
-                                <div className='flex items-center gap-1'>
+                              {/* 节点名称 */}
+                              {editingNode?.id === node.id ? (
+                                <div className='flex items-center gap-2' onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    value={editingNode.value}
+                                    onChange={(event) => handleNameEditChange(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') {
+                                        event.preventDefault()
+                                        handleNameEditSubmit(node)
+                                      } else if (event.key === 'Escape') {
+                                        event.preventDefault()
+                                        handleNameEditCancel()
+                                      }
+                                    }}
+                                    className='h-8'
+                                    autoFocus
+                                  />
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                    onClick={() => handleNameEditStart(node)}
+                                    className='size-8 text-emerald-600 shrink-0'
+                                    onClick={() => handleNameEditSubmit(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
-                                    <Pencil className='size-4' />
+                                    <Check className='size-4' />
                                   </Button>
-                                  {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-muted-foreground hover:text-foreground shrink-0'
-                                      onClick={() => {
-                                        setSourceNodeForExchange(node.dbNode)
-                                        setExchangeDialogOpen(true)
-                                      }}
-                                    >
-                                      <img
-                                        src={ExchangeIcon}
-                                        alt='交换'
-                                        className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                      />
-                                    </Button>
-                                  )}
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='size-8 text-muted-foreground shrink-0'
+                                    onClick={handleNameEditCancel}
+                                  >
+                                    <X className='size-4' />
+                                  </Button>
                                 </div>
+                              ) : (
+                                <div className='font-medium text-sm break-all line-clamp-2'>{node.name || '未知'}</div>
+                              )}
+                            </div>
+                            {/* 编辑和交换按钮 */}
+                            {editingNode?.id !== node.id && (
+                              <div className='flex items-center gap-1 shrink-0' onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                  onClick={() => handleNameEditStart(node)}
+                                  disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                >
+                                  <Pencil className='size-4' />
+                                </Button>
+                                {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='size-7 text-muted-foreground hover:text-foreground'
+                                    onClick={() => {
+                                      setSourceNodeForExchange(node.dbNode)
+                                      setExchangeDialogOpen(true)
+                                    }}
+                                  >
+                                    <img
+                                      src={ExchangeIcon}
+                                      alt='交换'
+                                      className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                    />
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </div>
 
-                          {/* 标签 */}
-                          <div className='space-y-2'>
-                            <Label className='text-xs text-muted-foreground'>标签</Label>
-                            <div className='flex flex-wrap gap-1'>
+                          {/* 服务器地址和标签 */}
+                          <div className='space-y-1.5'>
+                            {node.parsed && (
+                              <div className='flex items-center gap-2 flex-wrap text-xs'>
+                                <span className='text-muted-foreground shrink-0'>地址:</span>
+                                <span className='font-mono break-all'>{node.parsed.server}:{node.parsed.port}</span>
+                                {node.parsed.network && node.parsed.network !== 'tcp' && (
+                                  <Badge variant='outline' className='text-xs'>
+                                    {node.parsed.network}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                            <div className='flex items-center gap-2 flex-wrap text-xs'>
+                              <span className='text-muted-foreground shrink-0'>标签:</span>
                               <Badge variant='secondary' className='text-xs'>
                                 {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
                               </Badge>
@@ -1522,27 +1547,13 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             </div>
                           </div>
 
-                          {/* 服务器地址 */}
-                          {node.parsed && (
-                            <div className='space-y-2'>
-                              <Label className='text-xs text-muted-foreground'>服务器地址</Label>
-                              <div className='flex items-center gap-2 flex-wrap'>
-                                <span className='font-mono text-sm break-all'>{node.parsed.server}:{node.parsed.port}</span>
-                                {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                  <Badge variant='outline' className='text-xs'>
-                                    {node.parsed.network}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
                           {/* 操作按钮组 */}
-                          <div className='flex items-center gap-2 pt-2 border-t flex-wrap'>
+                          <div className='flex items-center justify-center gap-2 pt-2 border-t' onClick={(e) => e.stopPropagation()}>
                             {node.clash && (
                               <Button
                                 variant='outline'
                                 size='sm'
+                                className='flex-1'
                                 onClick={() => {
                                   if (node.isSaved && node.dbNode) {
                                     handleEditClashConfig(node.dbNode)
@@ -1559,6 +1570,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               <Button
                                 variant='outline'
                                 size='sm'
+                                className='flex-1'
                                 onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
                               >
                                 <Copy className='size-4 mr-1' />
@@ -1568,10 +1580,10 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
-                                  variant='ghost'
+                                  variant='outline'
                                   size='sm'
+                                  className='flex-1 text-destructive hover:text-destructive hover:bg-destructive/10'
                                   disabled={node.isSaved && deleteMutation.isPending}
-                                  className='text-destructive hover:text-destructive'
                                 >
                                   删除
                                 </Button>
@@ -2157,7 +2169,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
       }}>
         <DialogContent className='max-w-2xl max-h-[80vh] overflow-y-auto'>
           <DialogHeader>
-            <DialogTitle>创建链式代理节点</DialogTitle>
+            <DialogTitle>选择中转节点</DialogTitle>
             <DialogDescription>
               选择目标节点与 "{sourceNodeForExchange?.node_name}" 创建链式代理
             </DialogDescription>

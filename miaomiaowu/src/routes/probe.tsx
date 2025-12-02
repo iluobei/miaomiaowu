@@ -9,6 +9,8 @@ import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { profileQueryFn } from '@/lib/profile'
 import { useAuthStore } from '@/stores/auth-store'
+import { DataTable } from '@/components/data-table'
+import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -542,7 +544,117 @@ function ProbeManagePage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className='overflow-x-auto max-h-[600px] overflow-y-auto'>
+              {/* 移动端卡片视图 */}
+              <div className='md:hidden space-y-3'>
+                {formState.servers.length === 0 ? (
+                  <Card>
+                    <CardContent className='text-center text-muted-foreground py-8'>
+                      尚未配置服务器，请点击右上角按钮添加。
+                    </CardContent>
+                  </Card>
+                ) : (
+                  formState.servers.map((server, index) => {
+                    const numericMonthly =
+                      typeof server.monthly_traffic_gb === 'number'
+                        ? server.monthly_traffic_gb
+                        : typeof server.monthly_traffic_gb === 'string'
+                          ? Number(server.monthly_traffic_gb)
+                          : NaN
+                    const monthlyInvalid = !Number.isFinite(numericMonthly) || numericMonthly <= 0
+
+                    return (
+                      <Card key={server.key} className='overflow-hidden'>
+                        <CardContent className='p-3 space-y-2'>
+                          {/* 头部：显示名称和删除按钮 */}
+                          <div className='flex items-center justify-between'>
+                            <div className='font-medium truncate flex-1 mr-2'>{server.name || '未命名服务器'}</div>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='icon'
+                              className='size-8 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0'
+                              onClick={() => handleRemoveServer(index)}
+                            >
+                              <Trash2 className='size-4' />
+                            </Button>
+                          </div>
+
+                          {/* 只读信息 - 紧凑单行显示 */}
+                          <div className='text-xs'>
+                            <div className='flex items-start gap-2'>
+                              <span className='text-muted-foreground shrink-0 min-w-[60px]'>服务器ID:</span>
+                              <span className='flex-1 min-w-0 font-mono break-all'>{server.server_id}</span>
+                            </div>
+                          </div>
+
+                          {/* 可编辑字段 - 流量统计和月流量在同一行 */}
+                          <div className='grid grid-cols-2 gap-2 pt-1'>
+                            <div className='space-y-1.5'>
+                              <Label className='text-xs text-muted-foreground'>流量统计</Label>
+                              <Select
+                                value={server.traffic_method}
+                                onValueChange={(value) =>
+                                  handleServerChange(index, 'traffic_method', value)
+                                }
+                              >
+                                <SelectTrigger className='h-9'>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {TRAFFIC_METHODS.map((item) => (
+                                    <SelectItem key={item.value} value={item.value}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className='space-y-1.5'>
+                              <Label className='text-xs text-muted-foreground'>
+                                月流量 (GB) <span className='text-destructive'>*</span>
+                              </Label>
+                              <Input
+                                type='number'
+                                inputMode='decimal'
+                                min={0}
+                                step='0.01'
+                                value={
+                                  typeof server.monthly_traffic_gb === 'number'
+                                    ? server.monthly_traffic_gb
+                                    : server.monthly_traffic_gb ?? ''
+                                }
+                                onChange={(event) =>
+                                  handleServerChange(
+                                    index,
+                                    'monthly_traffic_gb',
+                                    event.target.value
+                                  )
+                                }
+                                className={
+                                  monthlyInvalid
+                                    ? 'h-9 border-destructive focus-visible:ring-destructive/80 focus-visible:ring-2'
+                                    : 'h-9'
+                                }
+                                aria-invalid={monthlyInvalid}
+                                placeholder='必填'
+                                required
+                                title='请填写服务器的月流量（GB）'
+                              />
+                            </div>
+                          </div>
+                          {monthlyInvalid && (
+                            <p className='text-xs font-semibold text-destructive'>请输入该服务器的月流量（GB）</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* 桌面端表格视图 */}
+              <div className='hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto'>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -644,9 +756,9 @@ function ProbeManagePage() {
                            <TableCell className='text-right'>
                              <Button
                                type='button'
-                               variant='ghost'
+                               variant='outline'
                                size='icon'
-                               className='text-destructive hover:text-destructive'
+                               className='text-destructive hover:text-destructive hover:bg-destructive/10'
                                onClick={() => handleRemoveServer(index)}
                              >
                                <Trash2 className='size-4' />

@@ -133,7 +133,7 @@ export function DataTable<T>({
     <>
       {/* 移动端卡片视图 */}
       {mobileCard && (
-        <div className='md:hidden space-y-3'>
+        <div className='md:hidden space-y-2'>
           {data.length === 0 ? (
             <Card>
               <CardContent className='text-center text-muted-foreground py-8'>
@@ -144,31 +144,35 @@ export function DataTable<T>({
             data.map((item, index) => (
               <Card
                 key={getRowKey(item, index)}
-                className={`overflow-hidden ${mobileCard.cardClassName || ''}`}
+                className={`overflow-hidden ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(item) || ''} ${mobileCard.cardClassName || ''}`}
                 onClick={() => onRowClick?.(item)}
               >
-                <CardContent className={`p-4 space-y-3 ${mobileCard.contentClassName || ''}`}>
+                <CardContent className={`p-3 space-y-2 ${mobileCard.contentClassName || ''}`}>
                   {/* 卡片头部 */}
                   {mobileCard.header && (
                     <div>{mobileCard.header(item)}</div>
                   )}
 
-                  {/* 卡片字段 */}
-                  {mobileCard.fields?.map((field, fieldIndex) => {
-                    if (field.hidden?.(item)) {
-                      return null
-                    }
-                    return (
-                      <div key={fieldIndex} className={`space-y-2 ${field.className || ''}`}>
-                        <div className='text-xs text-muted-foreground'>{field.label}</div>
-                        <div>{field.value(item)}</div>
-                      </div>
-                    )
-                  })}
+                  {/* 卡片字段 - 紧凑单行布局 */}
+                  {mobileCard.fields && mobileCard.fields.length > 0 && (
+                    <div className='space-y-1.5'>
+                      {mobileCard.fields.map((field, fieldIndex) => {
+                        if (field.hidden?.(item)) {
+                          return null
+                        }
+                        return (
+                          <div key={fieldIndex} className={`flex items-start gap-2 text-xs ${field.className || ''}`}>
+                            <span className='text-muted-foreground shrink-0 min-w-[60px]'>{field.label}:</span>
+                            <div className='flex-1 min-w-0'>{field.value(item)}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
 
                   {/* 卡片操作按钮 */}
                   {mobileCard.actions && (
-                    <div className='flex items-center gap-2 pt-2 border-t flex-wrap'>
+                    <div className='flex items-center justify-center gap-2 pt-2 border-t' onClick={(e) => e.stopPropagation()}>
                       {mobileCard.actions(item)}
                     </div>
                   )}

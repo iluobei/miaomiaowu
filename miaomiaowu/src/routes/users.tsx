@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Topbar } from '@/components/layout/topbar'
+import { DataTable } from '@/components/data-table'
+import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,16 +24,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { profileQueryFn } from '@/lib/profile'
@@ -326,31 +321,133 @@ function UsersPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className='overflow-x-auto'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className='w-[160px]'>用户名</TableHead>
-                    <TableHead className='w-[160px]'>昵称</TableHead>
-                    <TableHead className='w-[200px]'>邮箱</TableHead>
-                    <TableHead className='w-[100px] text-center'>角色</TableHead>
-                    <TableHead className='w-[100px] text-center'>状态</TableHead>
-                    <TableHead className='w-[280px] text-right'>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => {
+            <DataTable
+              data={users}
+              getRowKey={(user) => user.username}
+              emptyText='当前没有可显示的用户'
+
+              columns={[
+                {
+                  header: '用户名',
+                  cell: (user) => user.username,
+                  cellClassName: 'font-medium',
+                  width: '160px'
+                },
+                {
+                  header: '昵称',
+                  cell: (user) => user.nickname || '—',
+                  width: '160px'
+                },
+                {
+                  header: '邮箱',
+                  cell: (user) => user.email || '—',
+                  cellClassName: 'text-muted-foreground',
+                  width: '200px'
+                },
+                {
+                  header: '角色',
+                  cell: (user) => {
+                    const isAdminRow = user.role === 'admin'
+                    return <span className='text-sm font-medium'>{isAdminRow ? '管理员' : '普通用户'}</span>
+                  },
+                  headerClassName: 'text-center',
+                  cellClassName: 'text-center',
+                  width: '100px'
+                },
+                {
+                  header: '状态',
+                  cell: (user) => {
                     const isSelf = user.username === profile?.username
                     const isAdminRow = user.role === 'admin'
                     return (
-                      <TableRow key={user.username}>
-                        <TableCell className='font-medium'>{user.username}</TableCell>
-                        <TableCell>{user.nickname || '—'}</TableCell>
-                        <TableCell className='text-muted-foreground'>{user.email || '—'}</TableCell>
-                        <TableCell className='text-center'>
-                          <span className='text-sm font-medium'>{isAdminRow ? '管理员' : '普通用户'}</span>
-                        </TableCell>
-                        <TableCell className='text-center'>
+                      <Switch
+                        checked={user.is_active}
+                        disabled={statusMutation.isPending || isSelf || isAdminRow}
+                        onCheckedChange={(checked) =>
+                          statusMutation.mutate({
+                            username: user.username,
+                            is_active: checked,
+                          })
+                        }
+                      />
+                    )
+                  },
+                  headerClassName: 'text-center',
+                  cellClassName: 'text-center',
+                  width: '100px'
+                },
+                {
+                  header: '操作',
+                  cell: (user) => {
+                    const isAdminRow = user.role === 'admin'
+                    return isAdminRow ? (
+                      <span className='text-sm text-muted-foreground'>—</span>
+                    ) : (
+                      <div className='flex items-center justify-end gap-2'>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={resetMutation.isPending}
+                          onClick={() =>
+                            setResetState({
+                              username: user.username,
+                              password: generatePassword(),
+                            })
+                          }
+                        >
+                          重置密码
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          onClick={() =>
+                            setSubscriptionManageState({
+                              username: user.username,
+                              selectedIds: [],
+                              initialized: false,
+                            })
+                          }
+                        >
+                          管理订阅
+                        </Button>
+                      </div>
+                    )
+                  },
+                  headerClassName: 'text-right',
+                  cellClassName: 'text-right',
+                  width: '280px'
+                }
+              ] as DataTableColumn<UserRow>[]}
+
+              mobileCard={{
+                header: (user) => {
+                  const isAdminRow = user.role === 'admin'
+                  return (
+                    <div>
+                      <div className='flex items-center justify-between mb-1'>
+                        <div className='font-medium text-sm'>{user.username}</div>
+                        <Badge variant={isAdminRow ? 'default' : 'secondary'} className='text-xs'>
+                          {isAdminRow ? '管理员' : '普通用户'}
+                        </Badge>
+                      </div>
+                      {user.nickname && (
+                        <div className='text-xs text-muted-foreground line-clamp-1'>{user.nickname}</div>
+                      )}
+                    </div>
+                  )
+                },
+                fields: [
+                  {
+                    label: '邮箱',
+                    value: (user) => <span className='break-all'>{user.email || '—'}</span>
+                  },
+                  {
+                    label: '状态',
+                    value: (user) => {
+                      const isSelf = user.username === profile?.username
+                      const isAdminRow = user.role === 'admin'
+                      return (
+                        <div className='flex items-center gap-2'>
                           <Switch
                             checked={user.is_active}
                             disabled={statusMutation.isPending || isSelf || isAdminRow}
@@ -361,51 +458,53 @@ function UsersPage() {
                               })
                             }
                           />
-                        </TableCell>
-                        <TableCell className='text-right'>
-                          {isAdminRow ? (
-                            <span className='text-sm text-muted-foreground'>—</span>
-                          ) : (
-                            <div className='flex items-center justify-end gap-2'>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                disabled={resetMutation.isPending}
-                                onClick={() =>
-                                  setResetState({
-                                    username: user.username,
-                                    password: generatePassword(),
-                                  })
-                                }
-                              >
-                                重置密码
-                              </Button>
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                onClick={() =>
-                                  setSubscriptionManageState({
-                                    username: user.username,
-                                    selectedIds: [],
-                                    initialized: false,
-                                  })
-                                }
-                              >
-                                管理订阅
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {users.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className='py-10 text-center text-muted-foreground'>
-                        当前没有可显示的用户。
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
+                          <span>{user.is_active ? '启用' : '禁用'}</span>
+                        </div>
+                      )
+                    }
+                  }
+                ],
+                actions: (user) => {
+                  const isAdminRow = user.role === 'admin'
+                  return isAdminRow ? null : (
+                    <>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='flex-1'
+                        disabled={resetMutation.isPending}
+                        onClick={() =>
+                          setResetState({
+                            username: user.username,
+                            password: generatePassword(),
+                          })
+                        }
+                      >
+                        重置密码
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        className='flex-1'
+                        onClick={() =>
+                          setSubscriptionManageState({
+                            username: user.username,
+                            selectedIds: [],
+                            initialized: false,
+                          })
+                        }
+                      >
+                        管理订阅
+                      </Button>
+                    </>
+                  )
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+      </main>
+
       <Dialog open={createOpen} onOpenChange={(open) => setCreateOpen(open)}>
         <DialogContent className='sm:max-w-lg max-h-[90vh] overflow-y-auto'>
           <DialogHeader>
@@ -521,12 +620,6 @@ function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </main>
 
       <Dialog open={Boolean(resetState)} onOpenChange={(open) => (open ? null : setResetState(null))}>
         <DialogContent className='sm:max-w-md'>
