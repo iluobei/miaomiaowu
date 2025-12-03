@@ -17,9 +17,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Upload, Download, Edit, Settings, FileText, Save, Trash2 } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 
@@ -55,6 +56,29 @@ const TYPE_LABELS = {
   create: '创建',
   import: '导入',
   upload: '上传',
+}
+
+type ExternalSubscription = {
+  id: number
+  name: string
+  url: string
+  user_agent: string
+  node_count: number
+  last_sync_at: string | null
+  upload: number
+  download: number
+  total: number
+  expire: string | null
+  created_at: string
+  updated_at: string
+}
+
+// 格式化流量
+function formatTraffic(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 function SubscribeFilesPage() {
@@ -127,6 +151,9 @@ function SubscribeFilesPage() {
     filename: '',
   })
 
+  // 外部订阅卡片折叠状态 - 默认折叠
+  const [isExternalSubsExpanded, setIsExternalSubsExpanded] = useState(false)
+
   // 获取订阅文件列表
   const { data: filesData, isLoading } = useQuery({
     queryKey: ['subscribe-files'],
@@ -138,6 +165,41 @@ function SubscribeFilesPage() {
   })
 
   const files = filesData?.files ?? []
+
+  // 获取外部订阅列表
+  const { data: externalSubsData, isLoading: isExternalSubsLoading } = useQuery({
+    queryKey: ['external-subscriptions'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/external-subscriptions')
+      return response.data as ExternalSubscription[]
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+
+  const externalSubs = externalSubsData ?? []
+
+  // 获取所有节点（用于在外部订阅卡片中显示节点名称）
+  const { data: allNodesData } = useQuery({
+    queryKey: ['all-nodes-with-tags'],
+    queryFn: async () => {
+      const response = await api.get('/api/admin/nodes')
+      return response.data as { nodes: Array<{ id: number; node_name: string; tag: string }> }
+    },
+    enabled: Boolean(auth.accessToken && isExternalSubsExpanded),
+  })
+
+  // 按 tag 分组的节点名称
+  const nodesByTag = useMemo(() => {
+    const nodes = allNodesData?.nodes ?? []
+    const grouped: Record<string, string[]> = {}
+    for (const node of nodes) {
+      if (!grouped[node.tag]) {
+        grouped[node.tag] = []
+      }
+      grouped[node.tag].push(node.node_name)
+    }
+    return grouped
+  }, [allNodesData])
 
   // 导入订阅
   const importMutation = useMutation({
@@ -221,6 +283,36 @@ function SubscribeFilesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '更新失败')
+    },
+  })
+
+  // 删除外部订阅
+  const deleteExternalSubMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/api/user/external-subscriptions?id=${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      toast.success('外部订阅已删除')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '删除失败')
+    },
+  })
+
+  // 同步外部订阅
+  const syncExternalSubsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/api/admin/sync-external-subscriptions')
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('外部订阅同步成功')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '同步失败')
     },
   })
 
@@ -1235,6 +1327,249 @@ function SubscribeFilesPage() {
               />
             )}
           </CardContent>
+        </Card>
+
+        {/* 外部订阅卡片 - 默认折叠 */}
+        <Card>
+          <CardHeader className='cursor-pointer' onClick={() => setIsExternalSubsExpanded(!isExternalSubsExpanded)}>
+            <div className='flex items-center justify-between'>
+              <div>
+                <CardTitle className='flex items-center gap-2'>
+                  <ExternalLink className='h-5 w-5' />
+                  外部订阅 ({externalSubs.length})
+                </CardTitle>
+                <CardDescription>管理已添加的外部订阅源，用于从第三方订阅同步节点</CardDescription>
+              </div>
+              {isExternalSubsExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
+            </div>
+          </CardHeader>
+          {isExternalSubsExpanded && (
+            <CardContent>
+              {/* 同步按钮 */}
+              <div className='flex justify-end mb-4'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => syncExternalSubsMutation.mutate()}
+                  disabled={syncExternalSubsMutation.isPending || externalSubs.length === 0}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${syncExternalSubsMutation.isPending ? 'animate-spin' : ''}`} />
+                  {syncExternalSubsMutation.isPending ? '同步中...' : '同步所有订阅'}
+                </Button>
+              </div>
+
+              {isExternalSubsLoading ? (
+                <div className='text-center py-8 text-muted-foreground'>加载中...</div>
+              ) : externalSubs.length === 0 ? (
+                <div className='text-center py-8 text-muted-foreground'>
+                  暂无外部订阅，请在"生成订阅"页面添加
+                </div>
+              ) : (
+                <DataTable
+                  data={externalSubs}
+                  getRowKey={(sub) => sub.id}
+                  emptyText='暂无外部订阅'
+
+                  columns={[
+                    {
+                      header: '名称',
+                      cell: (sub) => sub.name,
+                      cellClassName: 'font-medium'
+                    },
+                    {
+                      header: '订阅链接',
+                      cell: (sub) => (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className='max-w-[200px] truncate text-sm text-muted-foreground font-mono cursor-help'>
+                              {sub.url}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className='max-w-md break-all font-mono text-xs'>
+                            {sub.url}
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    },
+                    {
+                      header: '节点数',
+                      cell: (sub) => {
+                        const nodes = nodesByTag[sub.name] ?? []
+                        // 优先使用实际查询到的节点数量，如果还没加载则使用数据库存储的数量
+                        const nodeCount = allNodesData ? nodes.length : sub.node_count
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant='secondary' className='cursor-help'>
+                                {nodeCount}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-64 max-h-60 overflow-y-auto p-2'>
+                              <div className='text-xs font-medium mb-1'>{sub.name} 的节点</div>
+                              {nodes.length > 0 ? (
+                                <ul className='space-y-0.5'>
+                                  {nodes.map((nodeName, idx) => (
+                                    <li key={idx} className='text-xs truncate'>
+                                      {nodeName}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className='text-xs'>暂无节点</div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      },
+                      headerClassName: 'text-center',
+                      cellClassName: 'text-center'
+                    },
+                    {
+                      header: '流量使用',
+                      cell: (sub) => sub.total > 0 ? (
+                        <div className='text-sm'>
+                          <span>{formatTraffic(sub.upload + sub.download)}</span>
+                          <span className='text-muted-foreground'> / {formatTraffic(sub.total)}</span>
+                        </div>
+                      ) : (
+                        <span className='text-sm text-muted-foreground'>-</span>
+                      )
+                    },
+                    {
+                      header: '到期时间',
+                      cell: (sub) => sub.expire ? (
+                        <span className='text-sm'>
+                          {dateFormatter.format(new Date(sub.expire))}
+                        </span>
+                      ) : (
+                        <span className='text-sm text-muted-foreground'>-</span>
+                      )
+                    },
+                    {
+                      header: '最后同步',
+                      cell: (sub) => (
+                        <span className='text-sm text-muted-foreground'>
+                          {sub.last_sync_at ? dateFormatter.format(new Date(sub.last_sync_at)) : '-'}
+                        </span>
+                      )
+                    },
+                    {
+                      header: '操作',
+                      cell: (sub) => (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant='ghost' size='sm' disabled={deleteExternalSubMutation.isPending}>
+                              删除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
+                                删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ),
+                      headerClassName: 'text-center',
+                      cellClassName: 'text-center'
+                    }
+                  ] as DataTableColumn<ExternalSubscription>[]}
+
+                  mobileCard={{
+                    header: (sub) => {
+                      const nodes = nodesByTag[sub.name] ?? []
+                      // 优先使用实际查询到的节点数量，如果还没加载则使用数据库存储的数量
+                      const nodeCount = allNodesData ? nodes.length : sub.node_count
+                      return (
+                      <div className='flex items-center justify-between gap-2 mb-1'>
+                        <div className='flex items-center gap-2 flex-1 min-w-0'>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant='secondary' className='cursor-help'>
+                                {nodeCount} 节点
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-64 max-h-60 overflow-y-auto p-2'>
+                              <div className='text-xs font-medium mb-1'>{sub.name} 的节点</div>
+                              {nodes.length > 0 ? (
+                                <ul className='space-y-0.5'>
+                                  {nodes.map((nodeName, idx) => (
+                                    <li key={idx} className='text-xs truncate'>
+                                      {nodeName}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className='text-xs'>暂无节点</div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                          <div className='font-medium text-sm truncate'>{sub.name}</div>
+                        </div>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant='outline'
+                              size='icon'
+                              className='size-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+                              disabled={deleteExternalSubMutation.isPending}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Trash2 className='size-4' />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
+                                删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )},
+                    fields: [
+                      {
+                        label: '链接',
+                        value: (sub) => <span className='font-mono text-xs break-all'>{sub.url}</span>
+                      },
+                      {
+                        label: '流量',
+                        value: (sub) => sub.total > 0 ? (
+                          <span>{formatTraffic(sub.upload + sub.download)} / {formatTraffic(sub.total)}</span>
+                        ) : (
+                          <span className='text-muted-foreground'>-</span>
+                        )
+                      },
+                      {
+                        label: '到期',
+                        value: (sub) => sub.expire ? dateFormatter.format(new Date(sub.expire)) : '-'
+                      },
+                      {
+                        label: '最后同步',
+                        value: (sub) => sub.last_sync_at ? dateFormatter.format(new Date(sub.last_sync_at)) : '-'
+                      }
+                    ]
+                  }}
+                />
+              )}
+            </CardContent>
+          )}
         </Card>
       </section>
 
