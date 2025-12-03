@@ -658,16 +658,16 @@ function ProbeManagePage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className='w-[200px]'>服务器 ID</TableHead>
-                      <TableHead className='w-[200px]'>显示名称</TableHead>
-                      <TableHead className='w-[160px]'>流量统计</TableHead>
-                      <TableHead className='w-[160px]'>
+                      <TableHead className='min-w-[120px]'>服务器 ID</TableHead>
+                      <TableHead className='min-w-[120px]'>显示名称</TableHead>
+                      <TableHead className='min-w-[100px] w-[120px]'>流量统计</TableHead>
+                      <TableHead className='min-w-[120px] w-[150px]'>
                         <span className='flex items-center gap-1'>
                           月流量 (GB)
                           <span className='text-destructive'>*</span>
                         </span>
                       </TableHead>
-                      <TableHead className='w-[80px]' />
+                      <TableHead className='w-[60px]' />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -743,14 +743,12 @@ function ProbeManagePage() {
                                    : undefined
                                }
                                aria-invalid={monthlyInvalid}
-                               placeholder='必填，单位 GB'
+                               placeholder='必填'
                                required
                                title='请填写服务器的月流量（GB）'
                              />
-                             {monthlyInvalid ? (
-                               <p className='mt-1 text-xs font-semibold text-destructive'>请输入该服务器的月流量（GB）</p>
-                             ) : (
-                               <p className='mt-1 text-xs text-muted-foreground'>单位：GB</p>
+                             {monthlyInvalid && (
+                               <p className='mt-1 text-xs font-semibold text-destructive'>请输入月流量</p>
                              )}
                            </TableCell>
                            <TableCell className='text-right'>

@@ -4,6 +4,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDraggable,
@@ -167,11 +168,17 @@ export function EditNodesDialog({
     return filtered
   }, [availableNodes, nodeNameFilter, nodeTagFilter, nodeTagMap])
 
-  // 统一的传感器配置
+  // 统一的传感器配置 - 同时支持鼠标和触摸
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 100,
+        tolerance: 5,
       },
     })
   )
@@ -192,6 +199,10 @@ export function EditNodesDialog({
     const { active } = event
     const data = active.data.current as DragItemData
 
+    // 锁定 body 滚动，防止 iPad 上拖拽时背景滚动
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+
     setActiveDragItem({
       id: String(active.id),
       data
@@ -201,6 +212,11 @@ export function EditNodesDialog({
   // 统一的拖拽结束处理
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
+
+    // 恢复 body 滚动
+    document.body.style.overflow = ''
+    document.body.style.touchAction = ''
+
     setActiveDragItem(null)
 
     if (!over) return
@@ -531,6 +547,7 @@ export function EditNodesDialog({
     const style: React.CSSProperties = {
       transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
       opacity: isDragging ? 0.5 : 1,
+      touchAction: 'none',
     }
 
     return (
@@ -565,6 +582,7 @@ export function EditNodesDialog({
     const style: React.CSSProperties = {
       transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
       opacity: isDragging ? 0.5 : 1,
+      touchAction: 'none',
     }
 
     return (
@@ -655,7 +673,7 @@ export function EditNodesDialog({
 
     return (
       <div ref={setNodeRef} style={style} className='flex items-center gap-2 group/title'>
-        <div {...attributes} {...listeners} className='cursor-move'>
+        <div {...attributes} {...listeners} className='cursor-move' style={{ touchAction: 'none' }}>
           <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
         </div>
         {isEditing ? (
@@ -736,6 +754,7 @@ export function EditNodesDialog({
       transform: CSS.Transform.toString(transform),
       transition: transition || 'transform 150ms ease-out',
       opacity: isDragging ? 0.5 : 1,
+      touchAction: 'none',
     }
 
     return (
@@ -747,19 +766,21 @@ export function EditNodesDialog({
         <div
           ref={setNodeRef}
           style={style}
-          className={`flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item ${
+          {...attributes}
+          {...listeners}
+          className={`flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item cursor-move ${
             showDropIndicator ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30' : ''
           }`}
           data-proxy-item
         >
-          <div {...attributes} {...listeners} className='cursor-move touch-none'>
-            <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-          </div>
+          <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
           <span className='text-sm truncate flex-1'>{proxy}</span>
           <Button
             variant='ghost'
             size='sm'
             className='h-6 w-6 p-0 flex-shrink-0'
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation()
               wrappedRemoveNodeFromGroup(groupName, index)
@@ -825,8 +846,9 @@ export function EditNodesDialog({
           {/* 顶部居中拖动按钮 */}
           <div
             className={`flex justify-center -mt-2 mb-2 ${
-              isEditing ? 'cursor-not-allowed opacity-50' : 'cursor-move touch-none'
+              isEditing ? 'cursor-not-allowed opacity-50' : 'cursor-move'
             }`}
+            style={isEditing ? {} : { touchAction: 'none' }}
             {...(isEditing ? {} : attributes)}
             {...(isEditing ? {} : listeners)}
           >

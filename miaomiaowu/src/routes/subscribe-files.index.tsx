@@ -865,11 +865,11 @@ function SubscribeFilesPage() {
             </p>
           </div>
 
-          <div className='flex gap-1 sm:gap-2'>
+          <div className='flex gap-1 sm:gap-2 md:justify-start'>
             {/* 导入订阅 */}
             <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
+                <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
                   <Download className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
                   <span className='truncate'>导入订阅</span>
                 </Button>
@@ -933,7 +933,7 @@ function SubscribeFilesPage() {
             {/* 上传文件 */}
             <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
+                <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
                   <Upload className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
                   <span className='truncate'>上传文件</span>
                 </Button>
@@ -995,7 +995,7 @@ function SubscribeFilesPage() {
             </Dialog>
 
             {/* 生成订阅 */}
-            <Button variant='outline' className='flex-1 text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2' onClick={() => navigate({ to: '/generator' })}>
+            <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2' onClick={() => navigate({ to: '/generator' })}>
               <FileText className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
               <span className='truncate'>生成订阅</span>
             </Button>
@@ -1395,11 +1395,11 @@ function SubscribeFilesPage() {
             <DialogDescription>
               {editingConfigFile?.filename}
             </DialogDescription>
-            <div className='flex gap-2'>
+            <div className='flex gap-2 md:justify-start'>
               <Button
                 variant='outline'
                 size='sm'
-                className='flex-1'
+                className='flex-1 md:flex-none'
                 onClick={() => handleEditNodes(editingConfigFile!)}
               >
                 <Edit className='mr-2 h-4 w-4' />
@@ -1407,7 +1407,7 @@ function SubscribeFilesPage() {
               </Button>
               <Button
                 size='sm'
-                className='flex-1'
+                className='flex-1 md:flex-none'
                 onClick={handleSaveConfig}
                 disabled={saveConfigMutation.isPending}
               >
