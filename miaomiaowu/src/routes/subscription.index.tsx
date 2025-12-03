@@ -109,18 +109,6 @@ function SubscriptionPage() {
   // 为每个订阅文件保存当前显示的URL
   const [displayURLs, setDisplayURLs] = useState<Record<number, string>>({})
 
-  const { data: tokenData } = useQuery({
-    queryKey: ['user-token'],
-    queryFn: async () => {
-      const response = await api.get('/api/user/token')
-      return response.data as { token: string }
-    },
-    enabled: Boolean(auth.accessToken),
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const userToken = tokenData?.token ?? ''
-
   const { data: subscribeFilesData } = useQuery({
     queryKey: ['user-subscriptions'],
     queryFn: async () => {
@@ -133,6 +121,19 @@ function SubscriptionPage() {
 
   const subscribeFiles = subscribeFilesData?.subscriptions ?? []
   const userShortCode = subscribeFilesData?.user_short_code ?? ''
+
+  // 只有当订阅数据已加载且 userShortCode 为空时（短链接未启用）才需要获取 token
+  const { data: tokenData } = useQuery({
+    queryKey: ['user-token'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/token')
+      return response.data as { token: string }
+    },
+    enabled: Boolean(auth.accessToken) && subscribeFilesData !== undefined && !userShortCode,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const userToken = tokenData?.token ?? ''
 
   const dateFormatter = useMemo(
     () =>
