@@ -734,7 +734,7 @@ function CustomRulesPage() {
 								const templates = RULE_TEMPLATES[formData.type as keyof typeof RULE_TEMPLATES]
 								const template = templates[value as keyof typeof templates] as { name: string; content: string } | undefined
 
-if (template) {
+								if (template) {
 									setSelectedTemplate(value)
 
 									// 检查当前名称是否为空或是某个模板的名称

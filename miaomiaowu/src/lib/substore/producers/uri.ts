@@ -274,11 +274,13 @@ export default function URI_Producer(): Producer {
                 break;
             case 'ss':
                 const userinfo = `${proxy.cipher}:${proxy.password}`;
-                result = `ss://${
-                    proxy.cipher?.startsWith('2022-blake3-')
-                        ? `${encodeURIComponent(
-                              proxy.cipher,
-                          )}:${encodeURIComponent(proxy.password || '')}` : Base64.encode(userinfo)
+                // result = `ss://${
+                //     proxy.cipher?.startsWith('2022-blake3-')
+                //         ? `${encodeURIComponent(
+                //               proxy.cipher,
+                //           )}:${encodeURIComponent(proxy.password || '')}` : Base64.encode(userinfo)
+                // }@${proxy.server}:${proxy.port}${proxy.plugin ? '/' : ''}`;
+                result = `ss://${Base64.encode(userinfo)
                 }@${proxy.server}:${proxy.port}${proxy.plugin ? '/' : ''}`;
                 if (proxy.plugin) {
                     result += '?plugin=';
