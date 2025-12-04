@@ -46,6 +46,25 @@ import type { PredefinedRuleSetType, CustomRule } from '@/lib/sublink/types'
 import type { ProxyConfig } from '@/lib/sublink/types'
 import yaml from 'js-yaml'
 
+// 协议颜色映射
+const PROTOCOL_COLORS: Record<string, string> = {
+  vmess: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  vless: 'bg-purple-500/10 text-purple-700 dark:text-purple-400',
+  trojan: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  ss: 'bg-green-500/10 text-green-700 dark:text-green-400',
+  socks5: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  hysteria: 'bg-pink-500/10 text-pink-700 dark:text-pink-400',
+  hysteria2: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
+  tuic: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400',
+  anytls: 'bg-teal-500/10 text-teal-700 dark:text-teal-400',
+}
+
+// 获取协议颜色（支持链式代理）
+function getProtocolColor(protocol: string): string {
+  const normalizedProtocol = protocol.toLowerCase().split('⇋')[0].trim()
+  return PROTOCOL_COLORS[normalizedProtocol] || ''
+}
+
 // 确保 short-id 字段始终作为字符串处理
 function ensureShortIdAsString(obj: any): any {
   if (typeof obj !== 'object' || obj === null) {
@@ -557,6 +576,30 @@ function SubscriptionGeneratorPage() {
         ...group,
         proxies: group.proxies.filter((p): p is string => p !== undefined)
       }))
+
+      // 收集所有代理组中使用的节点名称
+      const usedNodeNames = new Set<string>()
+      proxyGroups.forEach(group => {
+        group.proxies.forEach(proxy => {
+          // 只添加实际节点（不是特殊节点，也不是其他代理组）
+          if (!['DIRECT', 'REJECT', 'PROXY', 'no-resolve', '♻️ 自动选择', '🚀 节点选择'].includes(proxy) &&
+              !proxyGroups.some(g => g.name === proxy)) {
+            usedNodeNames.add(proxy)
+          }
+        })
+      })
+
+      // 过滤 proxies，只保留被使用的节点
+      if (parsedConfig.proxies && Array.isArray(parsedConfig.proxies)) {
+        const originalCount = parsedConfig.proxies.length
+        parsedConfig.proxies = parsedConfig.proxies.filter((proxy: any) =>
+          usedNodeNames.has(proxy.name)
+        )
+        const removedCount = originalCount - parsedConfig.proxies.length
+        if (removedCount > 0) {
+          console.log(`[handleApplyGrouping] 已删除 ${removedCount} 个未使用的节点`)
+        }
+      }
 
       // 处理链式代理：给落地节点组中的节点添加 dialer-proxy 参数
       const landingGroup = proxyGroups.find(g => g.name === '🌄 落地节点')
@@ -1128,7 +1171,7 @@ function SubscriptionGeneratorPage() {
                       {
                         header: '协议',
                         cell: (node) => (
-                          <Badge variant='outline'>{node.protocol.toUpperCase()}</Badge>
+                          <Badge variant='outline' className={getProtocolColor(node.protocol)}>{node.protocol.toUpperCase()}</Badge>
                         ),
                         width: '100px'
                       },
@@ -1182,7 +1225,7 @@ function SubscriptionGeneratorPage() {
                               checked={selectedNodeIds.has(node.id)}
                               onCheckedChange={() => handleToggleNode(node.id)}
                             />
-                            <Badge variant='outline' className='shrink-0'>{node.protocol.toUpperCase()}</Badge>
+                            <Badge variant='outline' className={`shrink-0 ${getProtocolColor(node.protocol)}`}>{node.protocol.toUpperCase()}</Badge>
                             <div className='font-medium text-sm truncate flex-1 min-w-0'>{node.node_name}</div>
                           </div>
 

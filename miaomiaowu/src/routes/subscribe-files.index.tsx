@@ -1123,50 +1123,47 @@ function SubscribeFilesPage() {
                 columns={[
                   {
                     header: '订阅名称',
-                    cell: (file) => file.name,
-                    cellClassName: 'font-medium'
+                    cell: (file) => (
+                      <div className='flex items-center gap-2 flex-wrap'>
+                        <Badge variant='outline' className={TYPE_COLORS[file.type]}>
+                          {TYPE_LABELS[file.type]}
+                        </Badge>
+                        <span className='font-medium'>{file.name}</span>
+                        {file.latest_version && (
+                          <Badge variant='secondary'>v{file.latest_version}</Badge>
+                        )}
+                      </div>
+                    ),
                   },
                   {
                     header: '说明',
-                    cell: (file) => (
-                      <div className='max-w-[200px] truncate text-sm text-muted-foreground'>
-                        {file.description || '-'}
-                      </div>
-                    )
-                  },
-                  {
-                    header: '类型',
-                    cell: (file) => (
-                      <Badge variant='outline' className={TYPE_COLORS[file.type]}>
-                        {TYPE_LABELS[file.type]}
-                      </Badge>
-                    )
-                  },
-                  {
-                    header: '文件名',
-                    cell: (file) => file.filename,
-                    cellClassName: 'font-mono text-sm'
+                    cell: (file) => file.description ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className='text-sm text-muted-foreground truncate block cursor-help'>
+                            {file.description}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className='max-w-xs'>
+                          {file.description}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className='text-sm text-muted-foreground'>-</span>
+                    ),
+                    cellClassName: 'max-w-[200px]'
                   },
                   {
                     header: '最后更新',
                     cell: (file) => (
-                      <span className='text-sm text-muted-foreground'>
+                      <span className='text-sm text-muted-foreground whitespace-nowrap'>
                         {file.updated_at ? dateFormatter.format(new Date(file.updated_at)) : '-'}
                       </span>
-                    )
-                  },
-                  {
-                    header: '版本',
-                    cell: (file) => file.latest_version ? (
-                      <Badge variant='secondary'>v{file.latest_version}</Badge>
-                    ) : (
-                      <span className='text-sm text-muted-foreground'>-</span>
                     ),
-                    headerClassName: 'text-center',
-                    cellClassName: 'text-center'
+                    width: '160px'
                   },
                   {
-                    header: '自动同步规则',
+                    header: '自动同步',
                     cell: (file) => (
                       <Switch
                         checked={file.auto_sync_custom_rules || false}
@@ -1174,33 +1171,37 @@ function SubscribeFilesPage() {
                       />
                     ),
                     headerClassName: 'text-center',
-                    cellClassName: 'text-center'
+                    cellClassName: 'text-center',
+                    width: '90px'
                   },
                   {
                     header: '操作',
                     cell: (file) => (
-                      <div className='flex items-center justify-center gap-2'>
+                      <div className='flex items-center gap-1'>
                         <Button
                           variant='ghost'
                           size='sm'
                           onClick={() => handleEditMetadata(file)}
                           disabled={updateMetadataMutation.isPending}
                         >
-                          <Settings className='mr-1 h-4 w-4' />
-                          编辑信息
+                          <Settings className='h-4 w-4' />
                         </Button>
                         <Button
                           variant='ghost'
                           size='sm'
                           onClick={() => handleEditConfig(file)}
                         >
-                          <Edit className='mr-1 h-4 w-4' />
-                          编辑配置
+                          <Edit className='h-4 w-4' />
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant='ghost' size='sm' disabled={deleteMutation.isPending}>
-                              删除
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='text-destructive hover:text-destructive'
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className='h-4 w-4' />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -1221,7 +1222,8 @@ function SubscribeFilesPage() {
                       </div>
                     ),
                     headerClassName: 'text-center',
-                    cellClassName: 'text-center'
+                    cellClassName: 'text-center',
+                    width: '120px'
                   }
                 ] as DataTableColumn<SubscribeFile>[]}
 

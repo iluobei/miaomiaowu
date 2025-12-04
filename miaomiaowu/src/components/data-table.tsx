@@ -185,7 +185,7 @@ export function DataTable<T>({
 
       {/* 桌面端表格视图 */}
       <div className={`hidden md:block rounded-md border overflow-auto ${containerClassName}`}>
-        <Table>
+        <Table className='w-full'>
           <TableHeader>
             <TableRow>
               {columns.map((column, index) => (

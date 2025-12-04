@@ -22,5 +22,9 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, '../internal/web/dist'),
     emptyOutDir: true,
+    sourcemap: true,
+  },
+  css: {
+    devSourcemap: true,
   },
 })

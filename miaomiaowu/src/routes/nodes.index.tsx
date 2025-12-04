@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
 import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp } from 'lucide-react'
@@ -1615,10 +1616,10 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
 
                 {/* 桌面端表格视图 */}
                 <div className='hidden md:block rounded-md border overflow-auto'>
-                  <Table>
+                  <Table className='w-full'>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className='w-[50px]'>
+                        <TableHead style={{ width: '50px' }}>
                           <Checkbox
                             checked={
                               filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
@@ -1634,12 +1635,12 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             }}
                           />
                         </TableHead>
-                        <TableHead className='w-[100px]'>协议</TableHead>
-                        <TableHead className='w-[200px]'>节点名称</TableHead>
-                        <TableHead className='w-[120px]'>标签</TableHead>
-                        <TableHead className='w-[250px]'>服务器地址</TableHead>
-                        <TableHead className='w-[80px] text-center'>配置</TableHead>
-                        <TableHead className='w-[100px] text-center'>操作</TableHead>
+                        <TableHead style={{ width: '90px' }}>协议</TableHead>
+                        <TableHead>节点名称</TableHead>
+                        <TableHead style={{ width: '120px' }}>标签</TableHead>
+                        <TableHead>服务器地址</TableHead>
+                        <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
+                        <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1727,7 +1728,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 </div>
                               ) : (
                                 <div className='flex items-center gap-2 min-w-0'>
-                                  <span className='truncate flex-1 min-w-0'>{node.name || '未知'}</span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className='truncate flex-1 min-w-0 cursor-help'>{node.name || '未知'}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className='max-w-xs'>
+                                      {node.name || '未知'}
+                                    </TooltipContent>
+                                  </Tooltip>
                                   {node.isSaved && (
                                     <Badge variant='secondary' className='text-xs shrink-0'>已保存</Badge>
                                   )}
@@ -1762,12 +1770,19 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             </TableCell>
                             <TableCell>
                               <div className='flex flex-wrap gap-1'>
-                                <Badge
-                                  variant='secondary'
-                                  className='text-xs'
-                                >
-                                  {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
-                                </Badge>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant='secondary'
+                                      className='text-xs max-w-[120px] truncate cursor-help'
+                                    >
+                                      {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                                  </TooltipContent>
+                                </Tooltip>
                                 {node.isSaved && node.dbNode?.probe_server && (
                                   <Badge variant='secondary' className='text-xs flex items-center gap-1'>
                                     <Activity className='size-3' />
@@ -1781,7 +1796,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 {node.parsed ? (
                                   <div className='flex items-center gap-2 min-w-0'>
                                     <div className='min-w-0 flex-1'>
-                                      <div className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</div>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className='font-mono truncate cursor-help'>{node.parsed.server}:{node.parsed.port}</div>
+                                        </TooltipTrigger>
+                                        <TooltipContent className='max-w-md font-mono'>
+                                          {node.parsed.server}:{node.parsed.port}
+                                        </TooltipContent>
+                                      </Tooltip>
                                       {node.parsed.network && node.parsed.network !== 'tcp' && (
                                         <div className='text-xs mt-1'>
                                           <Badge variant='outline' className='text-xs'>

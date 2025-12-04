@@ -194,19 +194,41 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 		return
 	}
 
-	run := func() {
+	// 带重试的流量收集函数
+	runWithRetry := func() {
 		log.Printf("[Traffic Collector] Starting daily traffic collection at %s", time.Now().Format("2006-01-02 15:04:05"))
-		runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
 
-		if err := trafficHandler.RecordDailyUsage(runCtx); err != nil {
-			log.Printf("[Traffic Collector] Daily traffic collection failed: %v", err)
-		} else {
-			log.Printf("[Traffic Collector] Daily traffic collection completed successfully")
+		maxRetries := 3
+		retryDelay := 30 * time.Second
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			err := trafficHandler.RecordDailyUsage(runCtx)
+			cancel()
+
+			if err == nil {
+				log.Printf("[Traffic Collector] Daily traffic collection completed successfully")
+				return
+			}
+
+			log.Printf("[Traffic Collector] Daily traffic collection failed (attempt %d/%d): %v", attempt, maxRetries, err)
+
+			if attempt < maxRetries {
+				log.Printf("[Traffic Collector] Retrying in %v...", retryDelay)
+				select {
+				case <-ctx.Done():
+					log.Printf("[Traffic Collector] Retry cancelled due to shutdown")
+					return
+				case <-time.After(retryDelay):
+					// 继续重试
+				}
+			}
 		}
+
+		log.Printf("[Traffic Collector] Daily traffic collection failed after %d attempts", maxRetries)
 	}
 
-	run()
+	runWithRetry()
 
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
@@ -219,7 +241,7 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 			log.Printf("[Traffic Collector] Scheduler stopped")
 			return
 		case <-ticker.C:
-			run()
+			runWithRetry()
 		}
 	}
 }
