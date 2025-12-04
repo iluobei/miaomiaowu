@@ -24,7 +24,7 @@ dns:
       - "https://dns.google/dns-query"
 proxies:
 proxy-groups:
-  - name: 🚀 手动选择
+  - name: 🚀 节点选择
     type: select
     proxies:
       - ♻️ 自动选择
@@ -64,7 +64,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
   - name: 🌐 社交媒体
     type: select
     proxies:
@@ -81,7 +81,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🚀 GitHub
     type: select
@@ -99,7 +99,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🤖 ChatGPT
@@ -118,7 +118,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🤖 Copilot
     type: select
@@ -136,7 +136,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🤖 AI服务
@@ -155,7 +155,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎶 TikTok
     type: select
@@ -173,7 +173,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 📹 YouTube
@@ -192,7 +192,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎥 Netflix
     type: select
@@ -210,7 +210,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎥 DisneyPlus
     type: select
@@ -228,7 +228,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎥 HBO
     type: select
@@ -246,7 +246,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🎥 PrimeVideo
@@ -265,7 +265,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🎥 AppleTV+
@@ -284,7 +284,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🎥 Emby
@@ -303,7 +303,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🎻 Spotify
@@ -322,14 +322,14 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 📺 Bahamut
     type: select
     proxies:
       - 🇼🇸 台湾节点
-      - 🚀 手动选择
+      - 🚀 节点选择
       - 🎯 全球直连
   - name: 🌎 国外媒体
     type: select
@@ -347,7 +347,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🛒 国外电商
@@ -366,7 +366,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 📢 谷歌FCM
@@ -385,7 +385,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🇬 谷歌服务
@@ -404,7 +404,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🍎 苹果服务
@@ -424,7 +424,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: Ⓜ️ 微软服务
     type: select
@@ -443,7 +443,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎮 游戏平台
     type: select
@@ -462,7 +462,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🎮 Steam
     type: select
@@ -481,7 +481,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🚀 测速工具
     type: select
@@ -500,7 +500,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
   - name: 🐟 漏网之鱼
     type: select
@@ -518,7 +518,7 @@ proxy-groups:
       - 🇳🇱 荷兰节点
       - 🇹🇷 土耳其节点
       - 🌐 其他地区
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
   - name: 🔀 非标端口
@@ -628,7 +628,7 @@ rules:
   - GEOSITE,private,🎯 全球直连
   - GEOIP,private,🎯 全球直连,no-resolve
   - RULE-SET,Custom_Direct_Classical,🎯 全球直连
-  - RULE-SET,Custom_Proxy_Classical,🚀 手动选择
+  - RULE-SET,Custom_Proxy_Classical,🚀 节点选择
   - GEOSITE,google-cn,🎯 全球直连
   - GEOSITE,category-games@cn,🎯 全球直连
   - RULE-SET,Steam_CDN_Classical,🎯 全球直连
@@ -659,7 +659,7 @@ rules:
   - GEOSITE,category-games,🎮 游戏平台
   - GEOSITE,category-entertainment,🌎 国外媒体
   - GEOSITE,category-ecommerce,🛒 国外电商
-  - GEOSITE,gfw,🚀 手动选择
+  - GEOSITE,gfw,🚀 节点选择
   - GEOIP,telegram,💬 即时通讯,no-resolve
   - GEOIP,twitter,🌐 社交媒体,no-resolve
   - GEOIP,facebook,🌐 社交媒体,no-resolve

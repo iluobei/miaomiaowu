@@ -124,7 +124,7 @@ export const RULE_PROVIDER_RULES = {
 export const RULE_TEMPLATES = {
 	dns: {
 		proxy: {
-			name: '使用代理解析DNS',
+			name: '使用♻️ 自动选择解析DNS',
 			content: `enable: true
 nameserver:
   - https://8.8.8.8/dns-query#♻️ 自动选择
@@ -149,6 +149,36 @@ default-nameserver:
   - https://1.1.1.1/dns-query#♻️ 自动选择
 fallback:
   - https://1.1.1.1/dns-query#♻️ 自动选择
+  - https://120.53.53.53/dns-query
+  - https://223.5.5.5/dns-query
+use-hosts: true`
+		},
+    node_select_proxy: {
+			name: '使用🚀 节点选择解析DNS',
+			content: `enable: true
+nameserver:
+  - https://8.8.8.8/dns-query#🚀 节点选择
+direct-nameserver:
+  - https://1.12.12.12/dns-query
+nameserver-policy:
+  geosite:gfw,greatfire:
+    - https://8.8.8.8/dns-query#🚀 节点选择
+  geosite:cn,apple,private,steam,onedrive:
+    - https://1.12.12.12/dns-query
+  geosite:category-games@cn:
+    - https://1.12.12.12/dns-query
+  geosite:google:
+    - https://1.0.0.1/dns-query#🚀 节点选择
+  geosite:geolocation-!cn:
+    - https://1.0.0.1/dns-query#🚀 节点选择
+proxy-server-nameserver:
+  - https://1.12.12.12/dns-query
+ipv6: false
+listen: 0.0.0.0:7874
+default-nameserver:
+  - https://1.1.1.1/dns-query#🚀 节点选择
+fallback:
+  - https://1.1.1.1/dns-query#🚀 节点选择
   - https://120.53.53.53/dns-query
   - https://223.5.5.5/dns-query
 use-hosts: true`

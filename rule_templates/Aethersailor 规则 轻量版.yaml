@@ -24,7 +24,7 @@ dns:
       - "https://dns.google/dns-query"
 proxies:
 proxy-groups:
-  - name: 🚀 手动选择
+  - name: 🚀 节点选择
     type: select
     proxies:
       - ♻️ 自动选择
@@ -50,7 +50,7 @@ proxy-groups:
   - name: 🚀 GitHub
     type: select
     proxies:
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
       - 🇭🇰 香港节点
@@ -69,7 +69,7 @@ proxy-groups:
   - name: 📢 谷歌FCM
     type: select
     proxies:
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
       - 🇭🇰 香港节点
@@ -88,7 +88,7 @@ proxy-groups:
   - name: 🇬 谷歌服务
     type: select
     proxies:
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
       - 🇭🇰 香港节点
@@ -108,7 +108,7 @@ proxy-groups:
     type: select
     proxies:
       - 🎯 全球直连
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🇭🇰 香港节点
       - 🇺🇸 美国节点
@@ -127,7 +127,7 @@ proxy-groups:
     type: select
     proxies:
       - 🎯 全球直连
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🇭🇰 香港节点
       - 🇺🇸 美国节点
@@ -146,7 +146,7 @@ proxy-groups:
     type: select
     proxies:
       - 🎯 全球直连
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🇭🇰 香港节点
       - 🇺🇸 美国节点
@@ -165,7 +165,7 @@ proxy-groups:
     type: select
     proxies:
       - 🎯 全球直连
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🇭🇰 香港节点
       - 🇺🇸 美国节点
@@ -184,7 +184,7 @@ proxy-groups:
     type: select
     proxies:
       - 🎯 全球直连
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🇭🇰 香港节点
       - 🇺🇸 美国节点
@@ -202,7 +202,7 @@ proxy-groups:
   - name: 🐟 漏网之鱼
     type: select
     proxies:
-      - 🚀 手动选择
+      - 🚀 节点选择
       - ♻️ 自动选择
       - 🎯 全球直连
       - 🇭🇰 香港节点
@@ -325,7 +325,7 @@ rules:
   - GEOSITE,private,🎯 全球直连
   - GEOIP,private,🎯 全球直连,no-resolve
   - RULE-SET,Custom_Direct_Classical,🎯 全球直连
-  - RULE-SET,Custom_Proxy_Classical,🚀 手动选择
+  - RULE-SET,Custom_Proxy_Classical,🚀 节点选择
   - GEOSITE,google-cn,🎯 全球直连
   - GEOSITE,category-games@cn,🎯 全球直连
   - RULE-SET,Steam_CDN_Classical,🎯 全球直连
@@ -338,7 +338,7 @@ rules:
   - GEOSITE,microsoft,Ⓜ️ 微软服务
   - GEOSITE,googlefcm,📢 谷歌FCM
   - GEOSITE,google,🇬 谷歌服务
-  - GEOSITE,gfw,🚀 手动选择
+  - GEOSITE,gfw,🚀 节点选择
   - GEOSITE,category-games,🎮 游戏平台
   - GEOIP,google,🇬 谷歌服务,no-resolve
   - GEOSITE,cn,🎯 全球直连
