@@ -1737,7 +1737,7 @@ function SubscribeFilesPage() {
             <DialogDescription>
               {editingConfigFile?.filename}
             </DialogDescription>
-            <div className='flex gap-2 md:justify-start'>
+            <div className='flex gap-2 justify-center md:justify-end'>
               <Button
                 variant='outline'
                 size='sm'
