@@ -12,12 +12,12 @@ if [ "$PUID" != "1000" ] || [ "$PGID" != "1000" ]; then
     echo "Updating appuser UID to $PUID and GID to $PGID"
 
     # Remove existing user/group
-    deluser appuser 2>/dev/null || true
-    delgroup appuser 2>/dev/null || true
+    userdel appuser 2>/dev/null || true
+    groupdel appuser 2>/dev/null || true
 
     # Create new user/group with specified IDs
-    addgroup -g "$PGID" appuser
-    adduser -D -u "$PUID" -G appuser appuser
+    groupadd -g "$PGID" appuser
+    useradd -u "$PUID" -g appuser -m appuser
 fi
 
 # Create and fix permissions for mounted data directories
@@ -26,6 +26,6 @@ mkdir -p /app/data /app/subscribes /app/rule_templates
 echo "Fixing permissions for mounted volumes..."
 chown -R appuser:appuser /app/data /app/subscribes /app/rule_templates
 
-# Use su-exec to drop privileges and run the application as appuser
+# Use gosu to drop privileges and run the application as appuser
 echo "Starting application as appuser..."
-exec su-exec appuser "$@"
+exec gosu appuser "$@"

@@ -1,5 +1,5 @@
 # Build stage for frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:20-slim AS frontend-builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY miaomiaowu/ ./
 RUN npm run build
 
 # Build stage for backend
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.24-bookworm AS backend-builder
 
 # Declare build arguments for multi-platform support
 ARG TARGETOS
@@ -25,8 +25,12 @@ ARG TARGETARCH
 
 WORKDIR /app
 
-# Install build dependencies (gcc and musl-dev needed for CGO)
-RUN apk add --no-cache git gcc musl-dev
+# Install build dependencies (gcc needed for CGO)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -48,20 +52,22 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build \
     -o /app/server \
     ./cmd/server
 
-# Final stage
-FROM alpine:3.19
+# Final stage - use Debian slim for better QEMU compatibility
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS requests, libc for CGO-compiled binary, and su-exec
-# Split into separate commands to work around QEMU emulation issues on ARM64
-RUN apk --no-cache add ca-certificates tzdata
-RUN apk --no-cache add libc6-compat || true
-RUN apk --no-cache add su-exec
+# Install ca-certificates for HTTPS requests and gosu for privilege dropping
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    gosu \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN groupadd -g 1000 appuser && \
+    useradd -u 1000 -g appuser -m appuser
 
 # Copy binary from builder
 COPY --from=backend-builder /app/server /app/server
