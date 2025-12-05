@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -1049,126 +1050,132 @@ function NodesPage() {
             </p>
           </div>
 
-          <Card>
-            <CardHeader className='cursor-pointer' onClick={() => setIsInputCardExpanded(!isInputCardExpanded)}>
-              <div className='flex items-center justify-between'>
-                <CardTitle>导入节点</CardTitle>
-                {isInputCardExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
-              </div>
-            </CardHeader>
-            {isInputCardExpanded && <CardContent>
-              <Tabs defaultValue='manual' className='w-full'>
-                <TabsList className='grid w-full grid-cols-2'>
-                  <TabsTrigger value='manual'>手动输入</TabsTrigger>
-                  <TabsTrigger value='subscription'>订阅导入</TabsTrigger>
-                </TabsList>
+          <Collapsible open={isInputCardExpanded} onOpenChange={setIsInputCardExpanded}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className='cursor-pointer'>
+                  <div className='flex items-center justify-between'>
+                    <CardTitle>导入节点</CardTitle>
+                    {isInputCardExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent className='CollapsibleContent'>
+                <CardContent>
+                  <Tabs defaultValue='manual' className='w-full'>
+                    <TabsList className='grid w-full grid-cols-2'>
+                      <TabsTrigger value='manual'>手动输入</TabsTrigger>
+                      <TabsTrigger value='subscription'>订阅导入</TabsTrigger>
+                    </TabsList>
 
-                <TabsContent value='manual' className='space-y-4 mt-4'>
-                  <Textarea
-                    placeholder={`vmess://eyJwcyI6IuWPsOa5vualviIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoidXVpZCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0bHMiOiJ0bHMifQ==
+                    <TabsContent value='manual' className='space-y-4 mt-4'>
+                      <Textarea
+                        placeholder={`vmess://eyJwcyI6IuWPsOa5vualviIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoidXVpZCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0bHMiOiJ0bHMifQ==
 vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 trojan://password@example.com:443?sni=example.com#Trojan节点
 anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节点`}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    className='min-h-[200px] font-mono text-sm'
-                  />
-                  <div className='space-y-2'>
-                    <Label htmlFor='manual-tag' className='text-sm font-medium'>
-                      节点标签
-                    </Label>
-                    <Input
-                      id='manual-tag'
-                      placeholder='手动输入'
-                      value={manualTag}
-                      onChange={(e) => setManualTag(e.target.value)}
-                      className='font-mono text-sm'
-                    />
-                    <p className='text-xs text-muted-foreground'>
-                      为这些节点设置标签，用于节点管理中的分类和筛选
-                    </p>
-                  </div>
-                  <div className='flex justify-end gap-2'>
-                    <Button onClick={handleParse} disabled={!input.trim()} variant='outline'>
-                      解析节点
-                    </Button>
-                    <Button
-                      onClick={handleSave}
-                      disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
-                    >
-                      {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
-                    </Button>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value='subscription' className='space-y-4 mt-4'>
-                  <div className='space-y-2'>
-                    <Input
-                      placeholder='https://example.com/api/clash/subscribe?token=xxx'
-                      value={subscriptionUrl}
-                      onChange={handleSubscriptionUrlChange}
-                      className='font-mono text-sm'
-                    />
-                    <p className='text-xs text-muted-foreground'>
-                      请输入 Clash 订阅链接，系统将自动获取并解析节点
-                    </p>
-                  </div>
-                  <div className='flex items-center gap-2'>
-                    <Label htmlFor='user-agent' className='whitespace-nowrap'>User-Agent:</Label>
-                    <Select value={userAgent} onValueChange={handleUserAgentChange}>
-                      <SelectTrigger id='user-agent' className='w-[200px]'>
-                        <SelectValue placeholder='选择 User-Agent' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='clash.meta'>clash.meta</SelectItem>
-                        <SelectItem value='clash-verge/v1.5.1'>clash-verge/v1.5.1</SelectItem>
-                        <SelectItem value='Clash'>Clash</SelectItem>
-                        <SelectItem value='手动输入'>手动输入</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {userAgent === '手动输入' && (
-                      <Input
-                        placeholder='输入自定义 User-Agent'
-                        value={customUserAgent}
-                        onChange={handleCustomUserAgentChange}
-                        className='font-mono text-sm flex-1'
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        className='min-h-[200px] font-mono text-sm'
                       />
-                    )}
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='subscription-tag' className='text-sm font-medium'>
-                      节点标签
-                    </Label>
-                    <Input
-                      id='subscription-tag'
-                      placeholder='默认使用服务器地址作为标签'
-                      value={subscriptionTag}
-                      onChange={(e) => setSubscriptionTag(e.target.value)}
-                      className='font-mono text-sm'
-                    />
-                    <p className='text-xs text-muted-foreground'>
-                      为订阅导入的节点设置标签，留空将使用服务器地址作为标签
-                    </p>
-                  </div>
-                  <div className='flex justify-end gap-2'>
-                    <Button
-                      onClick={handleFetchSubscription}
-                      disabled={!subscriptionUrl.trim() || fetchSubscriptionMutation.isPending}
-                      variant='outline'
-                    >
-                      {fetchSubscriptionMutation.isPending ? '导入中...' : '导入节点'}
-                    </Button>
-                    <Button
-                      onClick={handleSave}
-                      disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
-                    >
-                      {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
-                    </Button>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>}
-          </Card>
+                      <div className='space-y-2'>
+                        <Label htmlFor='manual-tag' className='text-sm font-medium'>
+                          节点标签
+                        </Label>
+                        <Input
+                          id='manual-tag'
+                          placeholder='手动输入'
+                          value={manualTag}
+                          onChange={(e) => setManualTag(e.target.value)}
+                          className='font-mono text-sm'
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          为这些节点设置标签，用于节点管理中的分类和筛选
+                        </p>
+                      </div>
+                      <div className='flex justify-end gap-2'>
+                        <Button onClick={handleParse} disabled={!input.trim()} variant='outline'>
+                          解析节点
+                        </Button>
+                        <Button
+                          onClick={handleSave}
+                          disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
+                        >
+                          {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
+                        </Button>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value='subscription' className='space-y-4 mt-4'>
+                      <div className='space-y-2'>
+                        <Input
+                          placeholder='https://example.com/api/clash/subscribe?token=xxx'
+                          value={subscriptionUrl}
+                          onChange={handleSubscriptionUrlChange}
+                          className='font-mono text-sm'
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          请输入 Clash 订阅链接，系统将自动获取并解析节点
+                        </p>
+                      </div>
+                      <div className='flex items-center gap-2'>
+                        <Label htmlFor='user-agent' className='whitespace-nowrap'>User-Agent:</Label>
+                        <Select value={userAgent} onValueChange={handleUserAgentChange}>
+                          <SelectTrigger id='user-agent' className='w-[200px]'>
+                            <SelectValue placeholder='选择 User-Agent' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='clash.meta'>clash.meta</SelectItem>
+                            <SelectItem value='clash-verge/v1.5.1'>clash-verge/v1.5.1</SelectItem>
+                            <SelectItem value='Clash'>Clash</SelectItem>
+                            <SelectItem value='手动输入'>手动输入</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {userAgent === '手动输入' && (
+                          <Input
+                            placeholder='输入自定义 User-Agent'
+                            value={customUserAgent}
+                            onChange={handleCustomUserAgentChange}
+                            className='font-mono text-sm flex-1'
+                          />
+                        )}
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='subscription-tag' className='text-sm font-medium'>
+                          节点标签
+                        </Label>
+                        <Input
+                          id='subscription-tag'
+                          placeholder='默认使用服务器地址作为标签'
+                          value={subscriptionTag}
+                          onChange={(e) => setSubscriptionTag(e.target.value)}
+                          className='font-mono text-sm'
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          为订阅导入的节点设置标签，留空将使用服务器地址作为标签
+                        </p>
+                      </div>
+                      <div className='flex justify-end gap-2'>
+                        <Button
+                          onClick={handleFetchSubscription}
+                          disabled={!subscriptionUrl.trim() || fetchSubscriptionMutation.isPending}
+                          variant='outline'
+                        >
+                          {fetchSubscriptionMutation.isPending ? '导入中...' : '导入节点'}
+                        </Button>
+                        <Button
+                          onClick={handleSave}
+                          disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
+                        >
+                          {batchCreateMutation.isPending ? '保存中...' : '保��节点'}
+                        </Button>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           {displayNodes.length > 0 && (
             <Card>

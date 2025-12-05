@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
@@ -1332,21 +1333,24 @@ function SubscribeFilesPage() {
         </Card>
 
         {/* 外部订阅卡片 - 默认折叠 */}
-        <Card>
-          <CardHeader className='cursor-pointer' onClick={() => setIsExternalSubsExpanded(!isExternalSubsExpanded)}>
-            <div className='flex items-center justify-between'>
-              <div>
-                <CardTitle className='flex items-center gap-2'>
-                  <ExternalLink className='h-5 w-5' />
-                  外部订阅 ({externalSubs.length})
-                </CardTitle>
-                <CardDescription>管理已添加的外部订阅源，用于从第三方订阅同步节点</CardDescription>
-              </div>
-              {isExternalSubsExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
-            </div>
-          </CardHeader>
-          {isExternalSubsExpanded && (
-            <CardContent>
+        <Collapsible open={isExternalSubsExpanded} onOpenChange={setIsExternalSubsExpanded}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className='cursor-pointer'>
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <CardTitle className='flex items-center gap-2'>
+                      <ExternalLink className='h-5 w-5' />
+                      外部订阅 ({externalSubs.length})
+                    </CardTitle>
+                    <CardDescription>管理已添加的外部订阅源，用于从第三方订阅同步节点</CardDescription>
+                  </div>
+                  {isExternalSubsExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent className='CollapsibleContent'>
+              <CardContent>
               {/* 同步按钮 */}
               <div className='flex justify-end mb-4'>
                 <Button
@@ -1570,9 +1574,10 @@ function SubscribeFilesPage() {
                   }}
                 />
               )}
-            </CardContent>
-          )}
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </section>
 
       {/* 编辑文件 Dialog */}
