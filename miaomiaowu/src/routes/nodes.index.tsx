@@ -77,9 +77,10 @@ const PROTOCOL_COLORS: Record<string, string> = {
   hysteria2: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
   tuic: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400',
   anytls: 'bg-teal-500/10 text-teal-700 dark:text-teal-400',
+  wireguard: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
 }
 
-const PROTOCOLS = ['vmess', 'vless', 'trojan', 'ss', 'socks5', 'hysteria', 'hysteria2', 'tuic', 'anytls']
+const PROTOCOLS = ['vmess', 'vless', 'trojan', 'ss', 'socks5', 'hysteria', 'hysteria2', 'tuic', 'anytls', 'wireguard']
 
 // 检查是否是IP地址（IPv4或IPv6）
 function isIpAddress(hostname: string): boolean {
@@ -1044,7 +1045,7 @@ function NodesPage() {
           <div>
             <h1 className='text-3xl font-semibold tracking-tight'>节点管理</h1>
             <p className='text-muted-foreground mt-2'>
-              输入代理节点信息，每行一个节点，支持 VMess、VLESS、Trojan、Shadowsocks、Hysteria、Socks、TUIC、AnyTLS 协议。
+              输入代理节点信息，每行一个节点，支持 VMess、VLESS、Trojan、Shadowsocks、Hysteria、Socks、TUIC、AnyTLS、WireGuard 协议。
             </p>
           </div>
 

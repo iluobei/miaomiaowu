@@ -221,11 +221,17 @@ function vless(proxy: Proxy): string {
         }
     }
 
+    // UDP
+    let udpParam = '';
+    if (proxy.udp !== undefined) {
+        udpParam = `&udp=${proxy.udp ? '1' : '0'}`;
+    }
+
     return `vless://${proxy.uuid}@${proxy.server}:${
         proxy.port
     }?security=${encodeURIComponent(
         security,
-    )}${vlessTransport}${alpn}${allowInsecure}${sni}${fp}${flow}${sid}${spx}${pbk}${mode}${extra}${pqv}${encryption}#${encodeURIComponent(
+    )}${vlessTransport}${alpn}${allowInsecure}${sni}${fp}${flow}${sid}${spx}${pbk}${mode}${extra}${pqv}${encryption}${udpParam}#${encodeURIComponent(
         proxy.name,
     )}`;
 }
@@ -266,11 +272,15 @@ export default function URI_Producer(): Producer {
         }
         switch (proxy.type) {
             case 'socks5':
+                let socks5Params = '';
+                if (proxy.udp !== undefined) {
+                    socks5Params = `?udp=${proxy.udp ? '1' : '0'}`;
+                }
                 result = `socks://${encodeURIComponent(
                     Base64.encode(
                         `${proxy.username ?? ''}:${proxy.password ?? ''}`,
                     ),
-                )}@${proxy.server}:${proxy.port}#${proxy.name}`;
+                )}@${proxy.server}:${proxy.port}${socks5Params}#${encodeURIComponent(proxy.name)}`;
                 break;
             case 'ss':
                 const userinfo = `${proxy.cipher}:${proxy.password}`;
@@ -318,6 +328,11 @@ export default function URI_Producer(): Producer {
                     result = `${result}${
                         proxy.plugin || proxy['udp-over-tcp'] ? '&' : '?'
                     }tfo=1`;
+                }
+                // UDP
+                if (proxy.udp !== undefined) {
+                    const hasParams = proxy.plugin || proxy['udp-over-tcp'] || proxy.tfo;
+                    result = `${result}${hasParams ? '&' : '?'}udp=${proxy.udp ? '1' : '0'}`;
                 }
                 result += `#${encodeURIComponent(proxy.name)}`;
                 break;
@@ -368,6 +383,10 @@ export default function URI_Producer(): Producer {
                 };
                 if (proxy.tls && proxy.sni) {
                     vmessResult.sni = proxy.sni;
+                }
+                // UDP
+                if (proxy.udp !== undefined) {
+                    vmessResult.udp = proxy.udp;
                 }
                 // obfs
                 if (proxy.network) {
@@ -515,11 +534,16 @@ export default function URI_Producer(): Producer {
                         trojanMode = `&mode=${encodeURIComponent(proxy._mode)}`;
                     }
                 }
+                // UDP
+                let trojanUdp = '';
+                if (proxy.udp !== undefined) {
+                    trojanUdp = `&udp=${proxy.udp ? '1' : '0'}`;
+                }
                 result = `trojan://${proxy.password}@${proxy.server}:${
                     proxy.port
                 }?sni=${encodeURIComponent(proxy.sni || proxy.server)}${
                     proxy['skip-cert-verify'] ? '&allowInsecure=1' : ''
-                }${trojanTransport}${trojanAlpn}${trojanFp}${trojanSecurity}${trojanSid}${trojanPbk}${trojanSpx}${trojanMode}${trojanExtra}#${encodeURIComponent(
+                }${trojanTransport}${trojanAlpn}${trojanFp}${trojanSecurity}${trojanSid}${trojanPbk}${trojanSpx}${trojanMode}${trojanExtra}${trojanUdp}#${encodeURIComponent(
                     proxy.name,
                 )}`;
                 break;
@@ -565,6 +589,10 @@ export default function URI_Producer(): Producer {
                 }
                 if (proxy.tfo) {
                     hysteria2params.push(`fastopen=1`);
+                }
+                // UDP
+                if (proxy.udp !== undefined) {
+                    hysteria2params.push(`udp=${proxy.udp ? '1' : '0'}`);
                 }
                 result = `hysteria2://${encodeURIComponent(proxy.password || '')}@${
                     proxy.server
@@ -612,6 +640,9 @@ export default function URI_Producer(): Producer {
                             hysteriaParams.push(`obfsParam=${proxy[key]}`);
                         } else if (['sni'].includes(key)) {
                             hysteriaParams.push(`peer=${proxy[key]}`);
+                        } else if (['udp'].includes(key)) {
+                            // UDP: 转换为 1/0
+                            hysteriaParams.push(`udp=${proxy[key] ? '1' : '0'}`);
                         } else if (proxy[key] && !/^_/i.test(key)) {
                             hysteriaParams.push(
                                 `${i}=${encodeURIComponent(proxy[key])}`,
@@ -675,6 +706,9 @@ export default function URI_Producer(): Producer {
                                 tuicParams.push(
                                     `congestion_control=${proxy[key]}`,
                                 );
+                            } else if (['udp'].includes(key)) {
+                                // UDP: 转换为 1/0
+                                tuicParams.push(`udp=${proxy[key] ? '1' : '0'}`);
                             } else if (proxy[key] && !/^_/i.test(key)) {
                                 tuicParams.push(
                                     `${i.replace(
@@ -720,8 +754,8 @@ export default function URI_Producer(): Producer {
                 }
 
                 // UDP
-                if (proxy.udp) {
-                    anytlsParams.push('udp=true');
+                if (proxy.udp !== undefined) {
+                    anytlsParams.push(`udp=${proxy.udp ? '1' : '0'}`);
                 }
 
                 // idle session 相关参数（anytls 特有）
@@ -758,9 +792,8 @@ export default function URI_Producer(): Producer {
                         if (['public-key'].includes(key)) {
                             wireguardParams.push(`publickey=${proxy[key]}`);
                         } else if (['udp'].includes(key)) {
-                            if (proxy[key]) {
-                                wireguardParams.push(`${key}=1`);
-                            }
+                            // UDP: 转换为 1/0
+                            wireguardParams.push(`udp=${proxy[key] ? '1' : '0'}`);
                         } else if (proxy[key] && !/^_/i.test(key)) {
                             wireguardParams.push(
                                 `${key}=${encodeURIComponent(proxy[key])}`,

@@ -57,6 +57,7 @@ const PROTOCOL_COLORS: Record<string, string> = {
   hysteria2: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
   tuic: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400',
   anytls: 'bg-teal-500/10 text-teal-700 dark:text-teal-400',
+  wireguard: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
 }
 
 // 获取协议颜色（支持链式代理）

@@ -134,6 +134,13 @@ function parseVmess(url: string): ProxyNode | null {
       }
     }
 
+    // UDP - 如果配置中明确指定了 udp 参数，使用配置的值；否则默认为 true
+    if (config.udp !== undefined) {
+      node.udp = config.udp === true || config.udp === 'true' || config.udp === '1' || config.udp === 1
+    } else {
+      node.udp = true
+    }
+
     return node
   } catch (e) {
     toast(`'Parse VMess error: '${e instanceof Error ? e.message : String(e)}`)
@@ -196,6 +203,8 @@ function parseShadowsocksR(url: string): ProxyNode | null {
     if (protoParam) {
       node['protocol-param'] = protoParam
     }
+
+    node.udp = true  // SSR 协议默认支持 UDP
 
     return node
   } catch (e) {
@@ -265,7 +274,7 @@ function parseShadowsocks(url: string): ProxyNode | null {
       port = parseInt(serverPart.substring(lastColonIndex + 1)) || 0
     }
 
-    return {
+    const node: ProxyNode = {
       name,
       type: 'ss',
       server,
@@ -273,6 +282,11 @@ function parseShadowsocks(url: string): ProxyNode | null {
       cipher: method,
       password
     }
+
+    // SS 协议默认支持 UDP
+    node.udp = true
+
+    return node
   } catch (e) {
     toast(`'Parse Shadowsocks error:' ${e instanceof Error ? e.message : String(e)}`)
     return null
@@ -310,7 +324,8 @@ function parseSocks(url: string): ProxyNode | null {
       server,
       port,
       username,
-      password
+      password,
+      udp: true  // SOCKS5 默认支持 UDP
     }
   } catch (e) {
     toast(`'Parse SOCKS error:' ${e instanceof Error ? e.message : String(e)}`)
@@ -496,6 +511,13 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
           node.fp = queryParams.fp
         }
         node.skipCertVerify = queryParams.allowInsecure === '1' || queryParams['skip-cert-verify'] === '1'
+
+        // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true
+        if (queryParams.udp !== undefined) {
+          node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
+        } else {
+          node.udp = true
+        }
         break
 
       case 'vless':
@@ -551,6 +573,13 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         if (queryParams.headerType) {
           node.headerType = queryParams.headerType
         }
+
+        // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true
+        if (queryParams.udp !== undefined) {
+          node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
+        } else {
+          node.udp = true
+        }
         break
 
       case 'hysteria':
@@ -570,6 +599,13 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         if (queryParams.fp) {
           node.fp = queryParams.fp
         }
+
+        // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true（基于 QUIC）
+        if (queryParams.udp !== undefined) {
+          node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
+        } else {
+          node.udp = true
+        }
         break
 
       case 'tuic':
@@ -580,6 +616,13 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         node.skipCertVerify = queryParams.allowInsecure === '1'
         node['congestion-controller'] = queryParams.congestion_control || 'bbr'
         node['udp-relay-mode'] = queryParams.udp_relay_mode || 'native'
+
+        // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true（基于 QUIC）
+        if (queryParams.udp !== undefined) {
+          node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
+        } else {
+          node.udp = true
+        }
         break
 
       case 'anytls':
@@ -591,8 +634,10 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         if (queryParams.fp) {
           node.fp = queryParams.fp
         }
-        // UDP 支持
-        if (queryParams.udp === 'true' || queryParams.udp === '1') {
+        // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true
+        if (queryParams.udp !== undefined) {
+          node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
+        } else {
           node.udp = true
         }
         // anytls 特有参数 - idle session 相关
@@ -611,6 +656,129 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
     return node
   } catch (e) {
     toast(`Parse ${protocol} error: ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  }
+}
+
+/**
+ * 检查是否是 IPv4 地址
+ */
+function isIPv4(str: string): boolean {
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/
+  if (!ipv4Regex.test(str)) return false
+  const parts = str.split('.')
+  return parts.every(part => {
+    const num = parseInt(part, 10)
+    return num >= 0 && num <= 255
+  })
+}
+
+/**
+ * 检查是否是 IPv6 地址
+ */
+function isIPv6(str: string): boolean {
+  // 简化的 IPv6 检测
+  return /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(str) ||
+         /^::([0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$/.test(str) ||
+         /^([0-9a-fA-F]{1,4}:){1,6}:$/.test(str) ||
+         /^::$/.test(str)
+}
+
+/**
+ * 解析 WireGuard 协议
+ * 格式: wireguard://privateKey@server:port/?publickey=xxx&address=xxx&reserved=xxx#name
+ * 或: wg://privateKey@server:port/?publickey=xxx&address=xxx&reserved=xxx#name
+ */
+function parseWireGuard(url: string): ProxyNode | null {
+  try {
+    // 移除协议前缀
+    const content = url.replace(/^(wireguard|wg):\/\//, '')
+
+    // 使用正则解析 URL 各部分
+    const match = /^((.*?)@)?(.*?)(:(\d+))?\/?(\?(.*?))?(?:#(.*?))?$/.exec(content)
+    if (!match) return null
+
+    let privateKey = match[2] || ''
+    const server = match[3] || ''
+    let port = parseInt(match[5], 10)
+    const addons = match[7] || ''
+    let name = match[8]
+
+    // 默认端口
+    if (isNaN(port)) {
+      port = 51820
+    }
+
+    // 解码私钥
+    privateKey = decodeURIComponent(privateKey)
+
+    // 解码名称
+    if (name != null) {
+      name = decodeURIComponent(name)
+    }
+    name = name ?? `WireGuard ${server}:${port}`
+
+    const node: ProxyNode = {
+      type: 'wireguard',
+      name,
+      server,
+      port,
+      'private-key': privateKey,
+      udp: true,
+    }
+
+    // 解析附加参数
+    for (const addon of addons.split('&')) {
+      if (addon) {
+        let [key, value] = addon.split('=')
+        key = key.replace(/_/g, '-')
+        value = decodeURIComponent(value || '')
+
+        if (['reserved'].includes(key)) {
+          // reserved 参数是一个数组，格式：reserved=1,2,3
+          const parsed = value
+            .split(',')
+            .map(i => parseInt(i.trim(), 10))
+            .filter(i => Number.isInteger(i))
+          if (parsed.length === 3) {
+            node[key] = parsed
+          }
+        } else if (['address', 'ip'].includes(key)) {
+          // address 参数可能包含 IPv4 和 IPv6，格式：address=10.0.0.1/32,fd00::1/128
+          value.split(',').forEach(i => {
+            const ip = i
+              .trim()
+              .replace(/\/\d+$/, '')  // 移除 CIDR 后缀
+              .replace(/^\[/, '')     // 移除 IPv6 方括号
+              .replace(/\]$/, '')
+            if (isIPv4(ip)) {
+              node.ip = ip
+            } else if (isIPv6(ip)) {
+              node.ipv6 = ip
+            }
+          })
+        } else if (['mtu'].includes(key)) {
+          const parsed = parseInt(value.trim(), 10)
+          if (Number.isInteger(parsed)) {
+            node[key] = parsed
+          }
+        } else if (/publickey/i.test(key)) {
+          node['public-key'] = value
+        } else if (/privatekey/i.test(key)) {
+          node['private-key'] = value
+        } else if (['udp'].includes(key)) {
+          // UDP 参数：支持 true/1 或 false/0
+          node.udp = /(true)|1/i.test(value)
+        } else if (!['name', 'type', 'server', 'port', 'private-key', 'flag'].includes(key)) {
+          // 其他未知参数直接添加
+          node[key] = value
+        }
+      }
+    }
+
+    return node
+  } catch (e) {
+    toast(`Parse WireGuard error: ${e instanceof Error ? e.message : String(e)}`)
     return null
   }
 }
@@ -649,6 +817,8 @@ export function parseProxyUrl(url: string): ProxyNode | null {
     return parseGenericProtocol(url, 'tuic')
   } else if (url.startsWith('anytls://')) {
     return parseGenericProtocol(url, 'anytls')
+  } else if (url.startsWith('wireguard://') || url.startsWith('wg://')) {
+    return parseWireGuard(url)
   }
 
   return null
