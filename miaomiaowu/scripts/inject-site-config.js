@@ -9,6 +9,9 @@ const __dirname = path.dirname(__filename)
 const siteConfigPath = path.resolve(__dirname, '../site.json')
 const siteConfig = JSON.parse(fs.readFileSync(siteConfigPath, 'utf-8'))
 
+// 如果 url 为空或为 "auto"，使用空字符串（让浏览器使用当前 URL）
+const siteUrl = siteConfig.url && siteConfig.url !== 'auto' ? siteConfig.url : ''
+
 // 读取 index.html（构建输出在 ../internal/web/dist）
 const indexPath = path.resolve(__dirname, '../../internal/web/dist/index.html')
 let html = fs.readFileSync(indexPath, 'utf-8')
@@ -35,7 +38,7 @@ html = html
   // 替换 Open Graph URL
   .replace(
     /<meta property="og:url" content=".*?" \/>/g,
-    `<meta property="og:url" content="${siteConfig.url}" />`
+    `<meta property="og:url" content="${siteUrl}" />`
   )
   // 替换 Open Graph title
   .replace(
@@ -55,12 +58,12 @@ html = html
   // 替换 Twitter card
   .replace(
     /<meta property="twitter:card" content=".*?" \/>/g,
-    `<meta property="twitter:card" content="${siteConfig.url}${siteConfig.previewImage}" />`
+    `<meta property="twitter:card" content="${siteUrl}${siteConfig.previewImage}" />`
   )
   // 替换 Twitter URL
   .replace(
     /<meta property="twitter:url" content=".*?" \/>/g,
-    `<meta property="twitter:url" content="${siteConfig.url}" />`
+    `<meta property="twitter:url" content="${siteUrl}" />`
   )
   // 替换 Twitter title
   .replace(
@@ -88,5 +91,5 @@ fs.writeFileSync(indexPath, html, 'utf-8')
 
 console.log('✅ Site configuration injected successfully!')
 console.log(`   Name: ${siteConfig.name}`)
-console.log(`   URL: ${siteConfig.url}`)
+console.log(`   URL: ${siteUrl || '(auto - using relative paths)'}`)
 console.log(`   Description: ${siteConfig.description}`)
