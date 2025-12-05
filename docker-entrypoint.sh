@@ -26,6 +26,6 @@ mkdir -p /app/data /app/subscribes /app/rule_templates
 echo "Fixing permissions for mounted volumes..."
 chown -R appuser:appuser /app/data /app/subscribes /app/rule_templates
 
-# Use gosu to drop privileges and run the application as appuser
+# Use su-exec to drop privileges and run the application as appuser
 echo "Starting application as appuser..."
-exec gosu appuser "$@"
+exec su-exec appuser "$@"

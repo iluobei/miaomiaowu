@@ -53,11 +53,11 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS requests, libc for CGO-compiled binary, and gosu
+# Install ca-certificates for HTTPS requests, libc for CGO-compiled binary, and su-exec
 # Split into separate commands to work around QEMU emulation issues on ARM64
 RUN apk --no-cache add ca-certificates tzdata
 RUN apk --no-cache add libc6-compat || true
-RUN apk --no-cache add gosu
+RUN apk --no-cache add su-exec
 
 # Create non-root user
 RUN addgroup -g 1000 appuser && \
