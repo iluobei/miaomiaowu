@@ -162,6 +162,15 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/install.sh |
 curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/install.sh | sudo bash -s update
 ```
 
+**卸载服务：**
+```bash
+# 卸载 systemd 服务（保留数据）
+curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/install.sh | sudo bash -s uninstall
+
+# 卸载后如需完全清除数据，手动删除数据目录
+sudo rm -rf ./data ./subscribes ./rule_templates
+```
+
 **简易安装（手动运行）：**
 ```bash
 # 一键下载安装
@@ -169,6 +178,15 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-instal
 
 # 运行服务
 ./mmw
+```
+
+**卸载服务：**
+```bash
+# 卸载 systemd 服务（保留数据）
+curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-install.sh | sudo bash -s uninstall
+
+# 卸载后如需完全清除数据，手动删除数据目录
+sudo rm -rf /etc/mmw
 ```
 
 **更新简易安装版本：**
@@ -239,6 +257,13 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.2.4 (2025-12-05)
+- 🌈 支持wireguard协议
+- 🌈 获取探针流量增加重试
+- 🌈 增加一个DNS类型模板，统一节点选择名称
+- 🌈 生成订阅页面节点未被任何代理组使用时自动移除
+- 🛠️ fix:解析节点时没有解析udp参数
+- 🛠️ fix:开启短链接后还是会请求获取token
 ### v0.2.3 (2025-12-03)
 - 🌈 脚本增加端口号选择与卸载
 - 🌈 自定义规则和系统管理移动到菜单栏
