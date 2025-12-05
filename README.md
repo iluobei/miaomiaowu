@@ -138,7 +138,7 @@ docker-compose down
 **重要提示**：请确保定期备份这两个目录的数据。
 
 ### 方式 2：一键安装（Linux）
-#### ⚠ 注意：0.1.1版本修改了服务名称，无法通过脚本更新，只能重新安装
+#### ⚠⚠⚠ 注意：0.1.1版本修改了服务名称，无法通过脚本更新，只能重新安装
 #### 先执行以下命令卸载及转移数据
 旧服务卸载及备份转移
 ```
@@ -168,7 +168,7 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/install.sh |
 curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/install.sh | sudo bash -s uninstall
 
 # 卸载后如需完全清除数据，手动删除数据目录
-sudo rm -rf ./data ./subscribes ./rule_templates
+sudo rm -rf /etc/mmw
 ```
 
 **简易安装（手动运行）：**
@@ -186,26 +186,13 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-instal
 curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-install.sh | sudo bash -s uninstall
 
 # 卸载后如需完全清除数据，手动删除数据目录
-sudo rm -rf /etc/mmw
+sudo rm -rf ./data ./subscribes ./rule_templates
 ```
 
 **更新简易安装版本：**
 ```bash
 # 更新到最新版本
 curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-install.sh | bash -s update
-```
-### 方式 3：二进制文件部署
-
-**Linux：**
-```bash
-# 下载二进制文件（修改版本号为所需版本）
-wget https://github.com/Jimleerx/miaomiaowu/releases/download/v0.0.2/mmw-linux-amd64
-
-# 添加执行权限
-chmod +x mmw-linux-amd64
-
-# 运行
-./mmw-linux-amd64
 ```
 
 **Windows：**
