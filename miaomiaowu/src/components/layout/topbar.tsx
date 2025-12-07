@@ -231,9 +231,13 @@ export function Topbar() {
             rel='noopener noreferrer'
             aria-label='Telegram 交流群组'
             title='Telegram 交流群组'
-            className='pixel-button inline-flex items-center justify-center h-9 w-9 px-2 py-2 text-sm font-semibold bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all'
+            className='pixel-button inline-flex items-center justify-center h-9 w-9 px-2 py-2 text-sm font-semibold bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all relative animate-pulse'
           >
-            <Send className='size-[18px]' />
+            <Send className='size-[18px] animate-bounce' />
+            <span className='absolute -top-1 -right-1 flex h-3 w-3'>
+              <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75'></span>
+              <span className='relative inline-flex rounded-full h-3 w-3 bg-primary'></span>
+            </span>
           </a>
           <ThemeSwitch />
           <UserMenu />
