@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Link as LinkIcon, Radar, Users, Files, Zap, Network, Menu, FileCode, Settings } from 'lucide-react'
+import { Activity, Link as LinkIcon, Radar, Users, Files, Zap, Network, Menu, FileCode, Settings, Send } from 'lucide-react'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UserMenu } from './user-menu'
 import { useAuthStore } from '@/stores/auth-store'
@@ -225,6 +225,16 @@ export function Topbar() {
         </div>
 
         <div className='flex items-center gap-2 sm:gap-3 pl-2 sm:pl-0'>
+          <a
+            href='https://t.me/miaomiaowux'
+            target='_blank'
+            rel='noopener noreferrer'
+            aria-label='Telegram 交流群组'
+            title='Telegram 交流群组'
+            className='pixel-button inline-flex items-center justify-center h-9 w-9 px-2 py-2 text-sm font-semibold bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all'
+          >
+            <Send className='size-[18px]' />
+          </a>
           <ThemeSwitch />
           <UserMenu />
         </div>
