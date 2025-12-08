@@ -13,6 +13,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// reorderProxyProperties reorders proxy map properties with name, type, server, port first
+// Returns a yaml.Node to preserve key order
+func reorderProxyToYAMLNode(proxy map[string]any) *yaml.Node {
+	priorityKeys := []string{"name", "type", "server", "port"}
+	node := &yaml.Node{
+		Kind: yaml.MappingNode,
+	}
+
+	// First add priority keys in order
+	for _, key := range priorityKeys {
+		if val, exists := proxy[key]; exists {
+			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key}
+			valNode := &yaml.Node{}
+			valNode.Encode(val)
+			node.Content = append(node.Content, keyNode, valNode)
+		}
+	}
+
+	// Then add remaining keys
+	for key, val := range proxy {
+		if key != "name" && key != "type" && key != "server" && key != "port" {
+			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key}
+			valNode := &yaml.Node{}
+			valNode.Encode(val)
+			node.Content = append(node.Content, keyNode, valNode)
+		}
+	}
+
+	return node
+}
+
 // TempSubscription represents a temporary subscription
 type TempSubscription struct {
 	ID           string    `json:"id"`
@@ -213,12 +244,24 @@ func (h *TempSubscriptionAccessHandler) ServeHTTP(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Generate YAML response with only proxies
-	config := map[string]any{
-		"proxies": sub.Proxies,
+	// Build YAML with ordered proxy properties using yaml.Node
+	rootNode := &yaml.Node{
+		Kind: yaml.MappingNode,
 	}
 
-	yamlData, err := yaml.Marshal(config)
+	// Add "proxies" key
+	proxiesKeyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "proxies"}
+	proxiesListNode := &yaml.Node{Kind: yaml.SequenceNode}
+
+	for _, proxy := range sub.Proxies {
+		if proxyMap, ok := proxy.(map[string]any); ok {
+			proxiesListNode.Content = append(proxiesListNode.Content, reorderProxyToYAMLNode(proxyMap))
+		}
+	}
+
+	rootNode.Content = append(rootNode.Content, proxiesKeyNode, proxiesListNode)
+
+	yamlData, err := MarshalYAMLWithIndent(rootNode)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errors.New("failed to generate subscription"))
 		return
