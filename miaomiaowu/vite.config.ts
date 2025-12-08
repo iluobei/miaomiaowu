@@ -27,4 +27,13 @@ export default defineConfig({
   css: {
     devSourcemap: true,
   },
+  server: {
+    proxy: {
+      // 临时订阅路径代理到后端（仅开发环境生效）
+      '/t/': {
+        target: process.env.VITE_API_URL || 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 })

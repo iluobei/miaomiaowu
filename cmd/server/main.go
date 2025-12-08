@@ -118,12 +118,22 @@ func main() {
 	// Short link reset endpoint (authenticated)
 	mux.Handle("/api/user/short-link", auth.RequireToken(tokenStore, handler.NewShortLinkResetHandler(repo)))
 
+	// Temporary subscription endpoints
+	mux.Handle("/api/admin/temp-subscription", auth.RequireAdmin(tokenStore, userRepo, handler.NewTempSubscriptionHandler()))
+	tempSubAccessHandler := handler.NewTempSubscriptionAccessHandler()
+
 	// Combined handler for short links and web app
 	// This catches any 6-character paths like /AbC123 and routes them to short link handler
+	// /t/{id} paths route to temporary subscription handler
 	// All other paths go to the web handler
 	shortLinkHandler := handler.NewShortLinkHandler(repo, subscriptionHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Trim(r.URL.Path, "/")
+		// Check if this is a temporary subscription access (starts with "t/" followed by 8 hex chars)
+		if strings.HasPrefix(path, "t/") && len(path) == 10 {
+			tempSubAccessHandler.ServeHTTP(w, r)
+			return
+		}
 		// Check if this looks like a short link (exactly 6 characters, alphanumeric)
 		if len(path) == 6 && isAlphanumeric(path) {
 			shortLinkHandler.ServeHTTP(w, r)

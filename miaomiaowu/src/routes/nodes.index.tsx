@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -22,7 +22,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
@@ -167,6 +167,14 @@ function NodesPage() {
   // URI 复制状态
   const [uriDialogOpen, setUriDialogOpen] = useState(false)
   const [uriContent, setUriContent] = useState<string>('')
+
+  // 临时订阅状态
+  const [tempSubDialogOpen, setTempSubDialogOpen] = useState(false)
+  const [tempSubMaxAccess, setTempSubMaxAccess] = useState<number>(1)
+  const [tempSubExpireSeconds, setTempSubExpireSeconds] = useState<number>(60)
+  const [tempSubUrl, setTempSubUrl] = useState<string>('')
+  const [tempSubGenerating, setTempSubGenerating] = useState(false)
+  const [tempSubSingleNodeId, setTempSubSingleNodeId] = useState<number | null>(null) // 单个节点模式
 
   // 优化的回调函数
   const handleUserAgentChange = useCallback((value: string) => {
@@ -702,6 +710,57 @@ function NodesPage() {
     },
   })
 
+  // 生成临时订阅 (支持单个节点或批量模式)
+  const generateTempSubscription = useCallback(async (singleNodeId?: number) => {
+    const nodeIds = singleNodeId !== undefined ? [singleNodeId] : Array.from(selectedNodeIds)
+    if (nodeIds.length === 0) {
+      toast.error('请先选择节点')
+      return
+    }
+
+    setTempSubGenerating(true)
+    try {
+      // 获取节点的 clash 配置
+      const nodesData = savedNodes.filter(n => nodeIds.includes(n.id))
+      const proxies = nodesData.map(node => {
+        try {
+          return JSON.parse(node.clash_config)
+        } catch {
+          return null
+        }
+      }).filter(Boolean)
+
+      if (proxies.length === 0) {
+        toast.error('无法解析节点的配置')
+        return
+      }
+
+      const response = await api.post('/api/admin/temp-subscription', {
+        proxies,
+        max_access: tempSubMaxAccess,
+        expire_seconds: tempSubExpireSeconds,
+      })
+
+      const fullUrl = `${window.location.origin}${response.data.url}`
+      setTempSubUrl(fullUrl)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '生成临时订阅失败')
+    } finally {
+      setTempSubGenerating(false)
+    }
+  }, [selectedNodeIds, savedNodes, tempSubMaxAccess, tempSubExpireSeconds])
+
+  // 自动生成临时订阅：Dialog 打开时或参数变化时自动生成
+  useEffect(() => {
+    if (tempSubDialogOpen) {
+      // 使用 setTimeout 来 debounce，避免频繁请求
+      const timer = setTimeout(() => {
+        generateTempSubscription(tempSubSingleNodeId ?? undefined)
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [tempSubDialogOpen, tempSubMaxAccess, tempSubExpireSeconds, tempSubSingleNodeId])
+
   // 创建链式代理节点
   const createRelayNodeMutation = useMutation({
     mutationFn: async ({ sourceNode, targetNode }: { sourceNode: ParsedNode; targetNode: ParsedNode }) => {
@@ -1226,6 +1285,17 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           onClick={() => setBatchTagDialogOpen(true)}
                         >
                           批量修改标签 ({selectedNodeIds.size})
+                        </Button>
+                        <Button
+                          variant='secondary'
+                          size='sm'
+                          onClick={() => {
+                            setTempSubSingleNodeId(null) // 批量模式
+                            setTempSubUrl('')
+                            setTempSubDialogOpen(true)
+                          }}
+                        >
+                          生成临时订阅 ({selectedNodeIds.size})
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -2042,6 +2112,21 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 >
                                   <Copy className='h-4 w-4' />
                                 </Button>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='h-8 w-8'
+                                  title='生成临时订阅'
+                                  onClick={() => {
+                                    if (node.isSaved && node.dbId) {
+                                      setTempSubSingleNodeId(node.dbId)
+                                      setTempSubUrl('')
+                                      setTempSubDialogOpen(true)
+                                    }
+                                  }}
+                                >
+                                  <Link2 className='h-4 w-4' />
+                                </Button>
                               </div>
                               ) : (
                                 <span className='text-xs text-muted-foreground'>-</span>
@@ -2461,6 +2546,109 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 disabled={batchRenameMutation.isPending || !batchRenameText.trim()}
               >
                 {batchRenameMutation.isPending ? '保存中...' : '确认修改'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 临时订阅对话框 */}
+      <Dialog
+        open={tempSubDialogOpen}
+        onOpenChange={(open) => {
+          setTempSubDialogOpen(open)
+          if (!open) {
+            setTempSubUrl('')
+            setTempSubSingleNodeId(null)
+          }
+        }}
+      >
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle>生成临时订阅</DialogTitle>
+            <DialogDescription>
+              {tempSubSingleNodeId !== null
+                ? `为节点 "${savedNodes.find(n => n.id === tempSubSingleNodeId)?.node_name || '未知'}" 生成临时订阅链接`
+                : `为选中的 ${selectedNodeIds.size} 个节点生成临时订阅链接`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-4'>
+            <div className='grid grid-cols-2 gap-4'>
+              <div className='space-y-2'>
+                <Label htmlFor='temp-sub-max-access' className='text-sm font-medium'>
+                  访问次数
+                </Label>
+                <Input
+                  id='temp-sub-max-access'
+                  type='number'
+                  min={1}
+                  max={100}
+                  value={tempSubMaxAccess}
+                  onChange={(e) => setTempSubMaxAccess(parseInt(e.target.value) || 1)}
+                  className='text-sm'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='temp-sub-expire' className='text-sm font-medium'>
+                  过期时间（秒）
+                </Label>
+                <Input
+                  id='temp-sub-expire'
+                  type='number'
+                  min={10}
+                  max={3600}
+                  value={tempSubExpireSeconds}
+                  onChange={(e) => setTempSubExpireSeconds(parseInt(e.target.value) || 60)}
+                  className='text-sm'
+                />
+              </div>
+            </div>
+            <div className='space-y-2'>
+              <Label className='text-sm font-medium'>临时订阅链接</Label>
+              <div className='flex gap-2'>
+                <Input
+                  value={tempSubGenerating ? '生成中...' : tempSubUrl}
+                  readOnly
+                  placeholder='自动生成中...'
+                  className='text-sm font-mono'
+                />
+                {tempSubUrl && !tempSubGenerating && (
+                  <Button
+                    variant='outline'
+                    size='icon'
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(tempSubUrl)
+                        toast.success('链接已复制')
+                        setTempSubDialogOpen(false)
+                        setTempSubUrl('')
+                        setTempSubSingleNodeId(null)
+                      } catch {
+                        toast.error('复制失败，请手动复制')
+                      }
+                    }}
+                  >
+                    <Copy className='h-4 w-4' />
+                  </Button>
+                )}
+              </div>
+              {tempSubUrl && !tempSubGenerating && (
+                <p className='text-xs text-muted-foreground'>
+                  链接将在 {tempSubExpireSeconds} 秒后或访问 {tempSubMaxAccess} 次后失效
+                </p>
+              )}
+            </div>
+            <div className='flex justify-end pt-2'>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setTempSubDialogOpen(false)
+                  setTempSubUrl('')
+                  setTempSubSingleNodeId(null)
+                }}
+              >
+                关闭
               </Button>
             </div>
           </div>
