@@ -229,6 +229,13 @@ func (h *TempSubscriptionAccessHandler) ServeHTTP(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Validate User-Agent: must contain ClashMetaForAndroid or Mihomo (case-insensitive)
+	userAgent := strings.ToLower(r.Header.Get("User-Agent"))
+	if !strings.Contains(userAgent, "clashmetaforandroid") && !strings.Contains(userAgent, "mihomo") {
+		http.Error(w, "Invalid client", http.StatusForbidden)
+		return
+	}
+
 	// Extract ID from URL path: /t/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/t/")
 	id := strings.TrimSuffix(path, "/")
