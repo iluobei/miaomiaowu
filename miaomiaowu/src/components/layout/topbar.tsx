@@ -70,6 +70,7 @@ export function Topbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navRef = useRef<HTMLElement>(null)
   const [iconOnlyCount, setIconOnlyCount] = useState(0)
+  const [hideLogoText, setHideLogoText] = useState(false)
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -90,28 +91,40 @@ export function Topbar() {
 
     // 直接获取窗口宽度
     const windowWidth = window.innerWidth
-    // 预留空间：logo区域约160px，右侧按钮约120px，左右padding约48px
-    const reservedSpace = 330
-    const availableWidth = windowWidth - reservedSpace
+    // 预留空间：logo图片约60px，右侧按钮区约200px，左右padding约48px，间距约24px
+    const logoTextWidth = 90 // "妙妙屋" 文字宽度
+    const baseReservedSpace = 340 // 不含logo文字的预留空间
 
-    // 每个带文字按钮约115px（4字+图标+padding），纯图标按钮约45px，gap约12px
+    // 每个带文字按钮约115px（4字+图标+padding），纯图标按钮约44px，gap约12px
     const fullButtonWidth = 115
-    const iconButtonWidth = 45
+    const iconButtonWidth = 44
     const gap = 12
 
     // 计算全部显示文字需要的宽度
     const fullWidth = totalLinks * (fullButtonWidth + gap) - gap
+    const availableWithLogoText = windowWidth - baseReservedSpace - logoTextWidth
 
-    if (fullWidth <= availableWidth) {
+    if (fullWidth <= availableWithLogoText) {
+      // 空间够，全部显示
+      setIconOnlyCount(0)
+      setHideLogoText(false)
+      return
+    }
+
+    // 空间不够，先隐藏"妙妙屋"文字
+    setHideLogoText(true)
+    const availableWithoutLogoText = windowWidth - baseReservedSpace
+
+    if (fullWidth <= availableWithoutLogoText) {
+      // 隐藏logo文字后空间够了
       setIconOnlyCount(0)
       return
     }
 
-    // 计算需要隐藏多少个按钮的文字
+    // 还不够，需要隐藏部分按钮文字
     const savedPerButton = fullButtonWidth - iconButtonWidth
-    const overflowWidth = fullWidth - availableWidth
+    const overflowWidth = fullWidth - availableWithoutLogoText
     const needed = Math.ceil(overflowWidth / savedPerButton)
-
     setIconOnlyCount(Math.min(needed, totalLinks))
   }, [totalLinks])
 
@@ -136,18 +149,18 @@ export function Topbar() {
 
   return (
     <header className='fixed top-0 left-0 right-0 z-50 border-b border-[color:rgba(241,140,110,0.22)] bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
-      <div className='flex h-16 items-center justify-between px-4 sm:px-6'>
-        <div className='flex items-center gap-4 sm:gap-6'>
+      <div className='flex h-16 items-center justify-between px-4 sm:px-6 overflow-hidden'>
+        <div className='flex items-center gap-4 sm:gap-6 min-w-0'>
           <Link
             to='/'
-            className='flex items-center gap-3 font-semibold text-lg tracking-tight transition hover:text-primary outline-none focus:outline-none'
+            className='flex items-center gap-3 font-semibold text-lg tracking-tight transition hover:text-primary outline-none focus:outline-none shrink-0'
           >
             <img
               src='/images/logo.webp'
               alt='妙妙屋 Logo'
-              className='h-10 w-10 border-2 border-[color:rgba(241,140,110,0.4)] shadow-[4px_4px_0_rgba(0,0,0,0.2)]'
+              className='h-10 w-10 border-2 border-[color:rgba(241,140,110,0.4)] shadow-[4px_4px_0_rgba(0,0,0,0.2)] shrink-0'
             />
-            <span className='hidden sm:inline pixel-text text-primary text-base'>妙妙屋</span>
+            {!hideLogoText && <span className='hidden md:inline pixel-text text-primary text-base whitespace-nowrap'>妙妙屋</span>}
           </Link>
 
           {/* Desktop Navigation - Base links + Admin links */}
@@ -162,7 +175,7 @@ export function Topbar() {
                   to={to}
                   aria-label={title}
                   title={title}
-                  className={`pixel-button inline-flex items-center gap-2 py-2 h-9 text-sm font-semibold uppercase tracking-widest bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all ${
+                  className={`pixel-button inline-flex items-center gap-2 py-2 h-9 text-sm font-semibold uppercase tracking-widest bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all whitespace-nowrap ${
                     showIconOnly ? 'justify-center px-2 w-9' : 'justify-start px-3'
                   }`}
                   activeProps={{

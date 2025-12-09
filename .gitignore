@@ -34,3 +34,4 @@ data/*
 .vscode
 VERSION.md
 miaomiaowu.db
+.idea
