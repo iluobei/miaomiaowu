@@ -1677,8 +1677,8 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   </div>
                 </div>
 
-                {/* 移动端卡片视图 (<640px) */}
-                <div className='sm:hidden space-y-3'>
+                {/* 移动端卡片视图 (<768px) */}
+                <div className='md:hidden space-y-3'>
                   {filteredNodes.length === 0 ? (
                     <Card>
                       <CardContent className='text-center text-muted-foreground py-8'>
@@ -1739,7 +1739,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   <Badge variant='destructive'>解析失败</Badge>
                                 )}
                                 {node.isSaved && (
-                                  <Badge variant='secondary' className='text-xs'>已保存</Badge>
+                                  <Check className='size-4 text-green-600' />
                                 )}
                               </div>
                               {/* 节点名称 */}
@@ -1938,52 +1938,85 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   )}
                 </div>
 
-                {/* 平板端卡片视图 (640-1024px) */}
-                <div className='hidden sm:block lg:hidden space-y-3'>
-                  {filteredNodes.length === 0 ? (
-                    <Card>
-                      <CardContent className='text-center text-muted-foreground py-8'>
-                        没有找到匹配的节点
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    filteredNodes.map(node => (
-                      <Card
-                        key={node.id}
-                        className={`overflow-hidden cursor-pointer ${node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-accent' : ''}`}
-                        onClick={() => {
-                          if (node.isSaved && node.dbId) {
-                            const newSet = new Set(selectedNodeIds)
-                            if (selectedNodeIds.has(node.dbId)) {
-                              newSet.delete(node.dbId)
-                            } else {
-                              newSet.add(node.dbId)
+                {/* 平板端表格视图 (768-1024px) - 和桌面一致，但服务器地址显示在节点名称下方 */}
+                <div className='hidden md:block lg:hidden rounded-md border overflow-auto'>
+                  <Table className='w-full'>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead style={{ width: '40px' }}>
+                          <Checkbox
+                            checked={
+                              filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
+                              filteredNodes.filter(n => n.isSaved && n.dbId).every(n => selectedNodeIds.has(n.dbId!))
                             }
-                            setSelectedNodeIds(newSet)
-                          }
-                        }}
-                      >
-                        <CardContent className='p-3'>
-                          <div className='flex items-start gap-3'>
-                            {/* 复选框 */}
-                            {node.isSaved && node.dbId && (
-                              <Checkbox
-                                className='mt-1'
-                                checked={selectedNodeIds.has(node.dbId)}
-                                onCheckedChange={(checked) => {
-                                  const newSet = new Set(selectedNodeIds)
-                                  if (checked) {
-                                    newSet.add(node.dbId!)
-                                  } else {
-                                    newSet.delete(node.dbId!)
-                                  }
-                                  setSelectedNodeIds(newSet)
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            )}
-                            {/* 协议 */}
-                            <div className='shrink-0 mt-0.5'>
+                            onCheckedChange={(checked) => {
+                              const savedNodes = filteredNodes.filter(n => n.isSaved && n.dbId)
+                              if (checked) {
+                                setSelectedNodeIds(new Set(savedNodes.map(n => n.dbId!)))
+                              } else {
+                                setSelectedNodeIds(new Set())
+                              }
+                            }}
+                          />
+                        </TableHead>
+                        <TableHead style={{ width: '60px' }}>协议</TableHead>
+                        <TableHead>节点名称</TableHead>
+                        <TableHead style={{ width: '100px' }}>标签</TableHead>
+                        <TableHead style={{ width: '70px' }} className='text-center'>配置</TableHead>
+                        <TableHead style={{ width: '70px' }} className='text-center'>操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredNodes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className='text-center text-muted-foreground py-8'>
+                            没有找到匹配的节点
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredNodes.map(node => (
+                          <TableRow
+                            key={node.id}
+                            className={node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-muted/50' : 'cursor-pointer hover:bg-muted/30'}
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement
+                              if (
+                                target.closest('button') ||
+                                target.closest('input') ||
+                                target.closest('[role="checkbox"]') ||
+                                target.closest('[role="menuitem"]') ||
+                                target.closest('[data-radix-collection-item]')
+                              ) {
+                                return
+                              }
+                              if (node.isSaved && node.dbId) {
+                                const newSet = new Set(selectedNodeIds)
+                                if (newSet.has(node.dbId)) {
+                                  newSet.delete(node.dbId)
+                                } else {
+                                  newSet.add(node.dbId)
+                                }
+                                setSelectedNodeIds(newSet)
+                              }
+                            }}
+                          >
+                            <TableCell>
+                              {node.isSaved && node.dbId && (
+                                <Checkbox
+                                  checked={selectedNodeIds.has(node.dbId)}
+                                  onCheckedChange={(checked) => {
+                                    const newSet = new Set(selectedNodeIds)
+                                    if (checked) {
+                                      newSet.add(node.dbId!)
+                                    } else {
+                                      newSet.delete(node.dbId!)
+                                    }
+                                    setSelectedNodeIds(newSet)
+                                  }}
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
                               {node.parsed ? (
                                 <Badge
                                   variant='outline'
@@ -2000,30 +2033,30 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               ) : (
                                 <Badge variant='destructive'>解析失败</Badge>
                               )}
-                            </div>
-                            {/* 节点名称 + 服务器地址 */}
-                            <div className='flex-1 min-w-0'>
+                            </TableCell>
+                            <TableCell className='font-medium'>
                               {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-2' onClick={(e) => e.stopPropagation()}>
+                                <div className='flex items-center gap-2'>
                                   <Input
                                     value={editingNode.value}
-                                    onChange={(event) => handleNameEditChange(event.target.value)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault()
+                                    onChange={(e) => handleNameEditChange(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault()
                                         handleNameEditSubmit(node)
-                                      } else if (event.key === 'Escape') {
-                                        event.preventDefault()
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault()
                                         handleNameEditCancel()
                                       }
                                     }}
-                                    className='h-8'
+                                    className='h-8 flex-1'
                                     autoFocus
+                                    onClick={(e) => e.stopPropagation()}
                                   />
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-emerald-600 shrink-0'
+                                    className='size-8 text-emerald-600'
                                     onClick={() => handleNameEditSubmit(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
@@ -2032,54 +2065,40 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-muted-foreground shrink-0'
+                                    className='size-8 text-muted-foreground'
                                     onClick={handleNameEditCancel}
                                   >
                                     <X className='size-4' />
                                   </Button>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div className='flex items-center gap-2'>
-                                    <span className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                    {node.isSaved && (
-                                      <Badge variant='secondary' className='text-xs shrink-0'>已保存</Badge>
-                                    )}
-                                  </div>
-                                  {/* 服务器地址显示在节点名称下方 */}
-                                  {node.parsed && (
-                                    <div className='flex items-center gap-2 mt-1 text-xs text-muted-foreground'>
-                                      <span className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</span>
-                                      {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                        <Badge variant='outline' className='text-xs shrink-0'>
-                                          {node.parsed.network}
-                                        </Badge>
-                                      )}
-                                    </div>
+                                  {node.isSaved && (
+                                    <Check className='size-4 text-green-600' />
                                   )}
                                 </div>
-                              )}
-                            </div>
-                            {/* 标签 */}
-                            <div className='shrink-0 flex flex-col items-end gap-1'>
-                              <Badge variant='secondary' className='text-xs'>
-                                {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
-                              </Badge>
-                              {node.isSaved && node.dbNode?.probe_server && (
-                                <Badge variant='secondary' className='text-xs flex items-center gap-1'>
-                                  <Activity className='size-3' />
-                                  {node.dbNode.probe_server}
-                                </Badge>
-                              )}
-                            </div>
-                            {/* 操作按钮组 */}
-                            <div className='flex items-center gap-1 shrink-0' onClick={(e) => e.stopPropagation()}>
-                              {editingNode?.id !== node.id && (
-                                <>
+                              ) : (
+                                <div className='flex items-center gap-2 min-w-0'>
+                                  <div className='flex-1 min-w-0'>
+                                    <div className='flex items-center gap-1'>
+                                      <span className='truncate'><Twemoji>{node.name || '未知'}</Twemoji></span>
+                                      {node.isSaved && (
+                                        <Check className='size-4 text-green-600 shrink-0' />
+                                      )}
+                                    </div>
+                                    {/* 服务器地址显示在节点名称下方 */}
+                                    {node.parsed && (
+                                      <div className='flex items-center gap-1 mt-0.5 text-xs text-muted-foreground'>
+                                        <span className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</span>
+                                        {node.parsed.network && node.parsed.network !== 'tcp' && (
+                                          <Badge variant='outline' className='text-xs shrink-0'>
+                                            {node.parsed.network}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                     onClick={() => handleNameEditStart(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
@@ -2089,7 +2108,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     <Button
                                       variant='ghost'
                                       size='icon'
-                                      className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                      className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                       onClick={() => {
                                         setSourceNodeForExchange(node.dbNode)
                                         setExchangeDialogOpen(true)
@@ -2102,27 +2121,13 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       />
                                     </Button>
                                   )}
-                                  {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                      onClick={() => {
-                                        setSelectedNodeForProbe(node.dbNode!)
-                                        setProbeBindingDialogOpen(true)
-                                        refetchProbeConfig()
-                                      }}
-                                    >
-                                      <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
-                                    </Button>
-                                  )}
                                   {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
                                           variant='ghost'
                                           size='icon'
-                                          className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                          className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                           onClick={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
                                           disabled={addingEmojiForNode === node.dbNode!.id}
                                         >
@@ -2132,69 +2137,90 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       <TooltipContent>添加地区 emoji</TooltipContent>
                                     </Tooltip>
                                   )}
-                                  {node.clash && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7'
-                                      onClick={() => {
-                                        if (node.isSaved && node.dbNode) {
-                                          handleEditClashConfig(node.dbNode)
-                                        } else if (!node.isSaved) {
-                                          handleEditClashConfig(node)
-                                        }
-                                      }}
-                                    >
-                                      <Eye className='size-4' />
-                                    </Button>
-                                  )}
-                                  {node.clash && node.isSaved && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7'
-                                      onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
-                                    >
-                                      <Copy className='size-4' />
-                                    </Button>
-                                  )}
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        variant='ghost'
-                                        size='icon'
-                                        className='size-7 text-destructive hover:text-destructive'
-                                        disabled={node.isSaved && deleteMutation.isPending}
-                                      >
-                                        <X className='size-4' />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          确定要删除节点 "{node.name || '未知'}" 吗？
-                                          {node.isSaved && '此操作不可撤销。'}
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>取消</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                        >
-                                          删除
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </>
+                                </div>
                               )}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
+                            </TableCell>
+                            <TableCell>
+                              <div className='flex flex-wrap gap-1'>
+                                <Badge variant='secondary' className='text-xs max-w-[90px] truncate'>
+                                  {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                                </Badge>
+                                {node.isSaved && node.dbNode?.probe_server && (
+                                  <Badge variant='secondary' className='text-xs flex items-center gap-1'>
+                                    <Activity className='size-3' />
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className='text-center'>
+                              {node.clash ? (
+                                <div className='flex gap-1 justify-center'>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-7 w-7'
+                                    onClick={() => {
+                                      if (node.isSaved && node.dbNode) {
+                                        handleEditClashConfig(node.dbNode)
+                                      } else if (!node.isSaved) {
+                                        handleEditClashConfig(node)
+                                      }
+                                    }}
+                                  >
+                                    <Eye className='h-4 w-4' />
+                                  </Button>
+                                  {node.isSaved && (
+                                    <Button
+                                      variant='ghost'
+                                      size='icon'
+                                      className='h-7 w-7'
+                                      title='复制 URI'
+                                      onClick={() => handleCopyUri(node.dbNode!)}
+                                    >
+                                      <Copy className='h-4 w-4' />
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className='text-xs text-muted-foreground'>-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className='text-center'>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    className='h-7 text-xs'
+                                    disabled={node.isSaved && deleteMutation.isPending}
+                                  >
+                                    删除
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      确定要删除节点 "{node.name || '未知'}" 吗？
+                                      {node.isSaved && '此操作不可撤销。'}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
+                                    >
+                                      删除
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {/* 桌面端表格视图 (>=1024px) */}
@@ -2332,7 +2358,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     <X className='size-4' />
                                   </Button>
                                   {node.isSaved && (
-                                    <Badge variant='secondary' className='text-xs'>已保存</Badge>
+                                    <Check className='size-4 text-green-600' />
                                   )}
                                 </div>
                               ) : (
@@ -2346,7 +2372,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     </TooltipContent>
                                   </Tooltip>
                                   {node.isSaved && (
-                                    <Badge variant='secondary' className='text-xs shrink-0'>已保存</Badge>
+                                    <Check className='size-4 text-green-600 shrink-0' />
                                   )}
                                   <Button
                                     variant='ghost'
