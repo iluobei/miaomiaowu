@@ -142,19 +142,54 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 // RecordDailyUsage fetches the latest traffic summary and persists the snapshot.
 func (h *TrafficSummaryHandler) RecordDailyUsage(ctx context.Context) error {
-	totalLimit, totalRemaining, totalUsed, err := h.fetchTotals(ctx, "")
-	if err != nil {
-		log.Printf("[Traffic Record] Failed to fetch traffic data: %v", err)
-		return err
+	var totalLimit, totalRemaining, totalUsed int64
+	var probeErr error
+
+	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, "")
+	if probeErr != nil {
+		if errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
+			log.Printf("[Traffic Record] Probe not configured, will use external subscription traffic only")
+		} else {
+			log.Printf("[Traffic Record] Failed to fetch probe traffic: %v", probeErr)
+		}
+		totalLimit, totalRemaining, totalUsed = 0, 0, 0
+	} else {
+		// Log fetched probe data
+		limitGB := roundUpTwoDecimals(bytesToGigabytes(totalLimit))
+		usedGB := roundUpTwoDecimals(bytesToGigabytes(totalUsed))
+		remainingGB := roundUpTwoDecimals(bytesToGigabytes(totalRemaining))
+		usagePercent := roundUpTwoDecimals(usagePercentage(totalUsed, totalLimit))
+
+		log.Printf("[Traffic Record] Fetched from probe - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB, Usage: %.2f%%",
+			limitGB, usedGB, remainingGB, usagePercent)
 	}
 
-	// Log fetched data
+	// Sync and add external subscription traffic
+	externalLimit, externalUsed := h.syncAndFetchExternalSubscriptionTraffic(ctx)
+	if externalLimit > 0 || externalUsed > 0 {
+		totalLimit += externalLimit
+		totalUsed += externalUsed
+		totalRemaining = totalLimit - totalUsed
+		if totalRemaining < 0 {
+			totalRemaining = 0
+		}
+
+		log.Printf("[Traffic Record] Added external subscription traffic - Limit: %.2f GB, Used: %.2f GB",
+			bytesToGigabytes(externalLimit), bytesToGigabytes(externalUsed))
+	}
+
+	// If no traffic data from either source, return error only if probe failed (not just not configured)
+	if totalLimit == 0 && totalUsed == 0 && probeErr != nil && !errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
+		return probeErr
+	}
+
+	// Log total traffic
 	limitGB := roundUpTwoDecimals(bytesToGigabytes(totalLimit))
 	usedGB := roundUpTwoDecimals(bytesToGigabytes(totalUsed))
 	remainingGB := roundUpTwoDecimals(bytesToGigabytes(totalRemaining))
 	usagePercent := roundUpTwoDecimals(usagePercentage(totalUsed, totalLimit))
 
-	log.Printf("[Traffic Record] Fetched from probe - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB, Usage: %.2f%%",
+	log.Printf("[Traffic Record] Total traffic - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB, Usage: %.2f%%",
 		limitGB, usedGB, remainingGB, usagePercent)
 
 	if err := h.recordSnapshot(ctx, totalLimit, totalUsed, totalRemaining); err != nil {
@@ -164,6 +199,126 @@ func (h *TrafficSummaryHandler) RecordDailyUsage(ctx context.Context) error {
 
 	log.Printf("[Traffic Record] Successfully saved snapshot to database")
 	return nil
+}
+
+// syncAndFetchExternalSubscriptionTraffic syncs traffic info from external subscriptions when sync_traffic is enabled (system-level setting)
+// Returns totalLimit and totalUsed from non-expired subscriptions
+func (h *TrafficSummaryHandler) syncAndFetchExternalSubscriptionTraffic(ctx context.Context) (int64, int64) {
+	if h.repo == nil {
+		return 0, 0
+	}
+
+	// Check if sync_traffic is enabled (system-level setting)
+	enabled, err := h.repo.IsSyncTrafficEnabled(ctx)
+	if err != nil {
+		log.Printf("[Traffic Record] Failed to check sync_traffic setting: %v", err)
+		return 0, 0
+	}
+
+	if !enabled {
+		log.Printf("[Traffic Record] sync_traffic is not enabled, skipping external subscription sync")
+		return 0, 0
+	}
+
+	// Get all external subscriptions from all users
+	subs, err := h.repo.ListAllExternalSubscriptions(ctx)
+	if err != nil {
+		log.Printf("[Traffic Record] Failed to get external subscriptions: %v", err)
+		return 0, 0
+	}
+
+	if len(subs) == 0 {
+		log.Printf("[Traffic Record] No external subscriptions found")
+		return 0, 0
+	}
+
+	log.Printf("[Traffic Record] Syncing %d external subscriptions", len(subs))
+
+	var totalLimit, totalUsed int64
+	now := time.Now()
+
+	for _, sub := range subs {
+		// Fetch and update traffic info from subscription URL
+		updatedSub, err := h.fetchExternalSubscriptionTrafficInfo(ctx, sub)
+		if err != nil {
+			log.Printf("[Traffic Record] Failed to fetch traffic for subscription %s: %v", sub.Name, err)
+			// Use existing data if fetch fails
+			updatedSub = sub
+		} else {
+			// Update subscription in database
+			if updateErr := h.repo.UpdateExternalSubscription(ctx, updatedSub); updateErr != nil {
+				log.Printf("[Traffic Record] Failed to update subscription %s: %v", sub.Name, updateErr)
+			}
+		}
+
+		// Skip expired subscriptions
+		if updatedSub.Expire != nil && updatedSub.Expire.Before(now) {
+			log.Printf("[Traffic Record] Skipping expired subscription: %s (expired at %s)",
+				updatedSub.Name, updatedSub.Expire.Format("2006-01-02 15:04:05"))
+			continue
+		}
+
+		// Add traffic from this subscription
+		totalLimit += updatedSub.Total
+		totalUsed += updatedSub.Upload + updatedSub.Download
+
+		if updatedSub.Expire == nil {
+			log.Printf("[Traffic Record] Added long-term subscription traffic: %s (limit=%.2f GB, used=%.2f GB)",
+				updatedSub.Name, bytesToGigabytes(updatedSub.Total), bytesToGigabytes(updatedSub.Upload+updatedSub.Download))
+		} else {
+			log.Printf("[Traffic Record] Added subscription traffic: %s (limit=%.2f GB, used=%.2f GB, expires=%s)",
+				updatedSub.Name, bytesToGigabytes(updatedSub.Total), bytesToGigabytes(updatedSub.Upload+updatedSub.Download),
+				updatedSub.Expire.Format("2006-01-02 15:04:05"))
+		}
+	}
+
+	log.Printf("[Traffic Record] Total external subscription traffic: limit=%.2f GB, used=%.2f GB",
+		bytesToGigabytes(totalLimit), bytesToGigabytes(totalUsed))
+
+	return totalLimit, totalUsed
+}
+
+// fetchExternalSubscriptionTrafficInfo fetches traffic info from external subscription URL
+func (h *TrafficSummaryHandler) fetchExternalSubscriptionTrafficInfo(ctx context.Context, sub storage.ExternalSubscription) (storage.ExternalSubscription, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sub.URL, nil)
+	if err != nil {
+		return sub, fmt.Errorf("create request: %w", err)
+	}
+
+	userAgent := sub.UserAgent
+	if userAgent == "" {
+		userAgent = "clash-meta/2.4.0"
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return sub, fmt.Errorf("fetch subscription: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return sub, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Parse subscription-userinfo header
+	userInfo := resp.Header.Get("subscription-userinfo")
+	if userInfo == "" {
+		return sub, nil // No traffic info available
+	}
+
+	// Parse traffic info
+	upload, download, total, expire := ParseTrafficInfoHeader(userInfo)
+
+	sub.Upload = upload
+	sub.Download = download
+	sub.Total = total
+	sub.Expire = expire
+
+	log.Printf("[Traffic Record] Parsed traffic for %s: upload=%.2f MB, download=%.2f MB, total=%.2f GB",
+		sub.Name, float64(upload)/(1024*1024), float64(download)/(1024*1024), float64(total)/(1024*1024*1024))
+
+	return sub, nil
 }
 
 func (h *TrafficSummaryHandler) fetchTotals(ctx context.Context, username string) (int64, int64, int64, error) {

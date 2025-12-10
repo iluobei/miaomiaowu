@@ -3396,6 +3396,59 @@ func (r *TrafficRepository) DeleteCustomRuleApplication(ctx context.Context, fil
 	return nil
 }
 
+// IsSyncTrafficEnabled checks if sync_traffic is enabled in any user_settings (system-level setting).
+func (r *TrafficRepository) IsSyncTrafficEnabled(ctx context.Context) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("traffic repository not initialized")
+	}
+
+	const query = `SELECT COUNT(*) FROM user_settings WHERE sync_traffic = 1 LIMIT 1`
+	var count int
+	err := r.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("check sync traffic setting: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+// ListAllExternalSubscriptions returns all external subscriptions from all users.
+func (r *TrafficRepository) ListAllExternalSubscriptions(ctx context.Context) ([]ExternalSubscription, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, created_at, updated_at FROM external_subscriptions ORDER BY created_at DESC`
+	rows, err := r.db.QueryContext(ctx, stmt)
+	if err != nil {
+		return nil, fmt.Errorf("list all external subscriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var subs []ExternalSubscription
+	for rows.Next() {
+		var sub ExternalSubscription
+		var lastSyncAt sql.NullTime
+		var expire sql.NullTime
+		if err := rows.Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan external subscription: %w", err)
+		}
+		if lastSyncAt.Valid {
+			sub.LastSyncAt = &lastSyncAt.Time
+		}
+		if expire.Valid {
+			sub.Expire = &expire.Time
+		}
+		subs = append(subs, sub)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate external subscriptions: %w", err)
+	}
+
+	return subs, nil
+}
+
 // GetSubscribeFilesWithAutoSync returns all subscribe files that have auto-sync enabled.
 func (r *TrafficRepository) GetSubscribeFilesWithAutoSync(ctx context.Context) ([]SubscribeFile, error) {
 	if r == nil || r.db == nil {
