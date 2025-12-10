@@ -25,6 +25,7 @@ import { Progress } from '@/components/ui/progress'
 import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
+import { Twemoji } from '@/components/twemoji'
 
 export const Route = createFileRoute('/subscribe-files/')({
   beforeLoad: () => {
@@ -1446,7 +1447,7 @@ function SubscribeFilesPage() {
                                 <ul className='space-y-0.5'>
                                   {nodes.map((nodeName, idx) => (
                                     <li key={idx} className='text-xs truncate'>
-                                      {nodeName}
+                                      <Twemoji>{nodeName}</Twemoji>
                                     </li>
                                   ))}
                                 </ul>
@@ -1580,7 +1581,7 @@ function SubscribeFilesPage() {
                                 <ul className='space-y-0.5'>
                                   {nodes.map((nodeName, idx) => (
                                     <li key={idx} className='text-xs truncate'>
-                                      {nodeName}
+                                      <Twemoji>{nodeName}</Twemoji>
                                     </li>
                                   ))}
                                 </ul>

@@ -701,7 +701,7 @@ export function EditNodesDialog({
               onClick={() => startEditingGroup(groupName)}
               title='点击编辑名称'
             >
-              {groupName}
+              <Twemoji>{groupName}</Twemoji>
             </CardTitle>
             <Button
               size='sm'
@@ -1083,7 +1083,7 @@ export function EditNodesDialog({
                       </div>
                       <div className='flex items-start justify-between gap-2'>
                         <div className='flex-1 min-w-0'>
-                          <CardTitle className='text-base truncate'>{activeDragItem.data.groupName}</CardTitle>
+                          <CardTitle className='text-base truncate'><Twemoji>{activeDragItem.data.groupName}</Twemoji></CardTitle>
                           <CardDescription className='text-xs'>
                             {group?.type || 'select'} ({group?.proxies.length || 0} 个节点)
                           </CardDescription>

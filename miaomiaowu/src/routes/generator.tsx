@@ -48,6 +48,13 @@ import type { ProxyConfig } from '@/lib/sublink/types'
 import { extractRegionFromNodeName, findRegionGroupName } from '@/lib/country-flag'
 import yaml from 'js-yaml'
 
+// YAML dump 配置：使用双引号风格
+const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
+  lineWidth: -1,
+  noRefs: true,
+  quotingType: '"',  // 使用双引号而不是单引号
+}
+
 // 协议颜色映射
 const PROTOCOL_COLORS: Record<string, string> = {
   vmess: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
@@ -99,7 +106,7 @@ function ensureShortIdAsString(obj: any): any {
   return result
 }
 
-// 修复 YAML 中的 short-id 空值显示
+// 修复 YAML 中的 short-id 值，确保始终有双引号
 function fixShortIdInYaml(yamlStr: string): string {
   let result = yamlStr
   // 1. 将 short-id: '' (单引号空字符串) 替换为 short-id: ""
@@ -108,6 +115,8 @@ function fixShortIdInYaml(yamlStr: string): string {
   result = result.replace(/^([ \t]*)short-id:[ \t]*$/gm, '$1short-id: ""')
   // 3. 将 short-id: 'value' (单引号非空值) 替换为 short-id: "value"
   result = result.replace(/^([ \t]*)short-id:[ \t]*'([^']*)'[ \t]*$/gm, '$1short-id: "$2"')
+  // 4. 将 short-id: value (无引号值，如纯数字) 替换为 short-id: "value"
+  result = result.replace(/^([ \t]*)short-id:[ \t]+([^"'\s][^\s]*)[ \t]*$/gm, '$1short-id: "$2"')
   return result
 }
 
@@ -367,10 +376,7 @@ function SubscriptionGeneratorPage() {
       const processedConfig = ensureShortIdAsString(templateConfig)
 
       // 转换回 YAML
-      let finalConfig = yaml.dump(processedConfig, {
-        lineWidth: -1,
-        noRefs: true,
-      })
+      let finalConfig = yaml.dump(processedConfig, YAML_DUMP_OPTIONS)
 
       // 修复 short-id 空值显示
       finalConfig = fixShortIdInYaml(finalConfig)
@@ -644,10 +650,7 @@ function SubscriptionGeneratorPage() {
       const processedConfig = ensureShortIdAsString(parsedConfig)
 
       // 转换回 YAML
-      let newConfig = yaml.dump(processedConfig, {
-        lineWidth: -1,
-        noRefs: true,
-      })
+      let newConfig = yaml.dump(processedConfig, YAML_DUMP_OPTIONS)
 
       // 修复 short-id 空值显示
       newConfig = fixShortIdInYaml(newConfig)
@@ -765,10 +768,7 @@ function SubscriptionGeneratorPage() {
       const processedConfigFinal = ensureShortIdAsString(parsedConfig)
 
       // 转换回 YAML
-      let finalConfig = yaml.dump(processedConfigFinal, {
-        lineWidth: -1,
-        noRefs: true,
-      })
+      let finalConfig = yaml.dump(processedConfigFinal, YAML_DUMP_OPTIONS)
 
       // 修复 short-id 空值显示
       finalConfig = fixShortIdInYaml(finalConfig)
@@ -852,7 +852,137 @@ function SubscriptionGeneratorPage() {
     }
   }
 
-  // 自动按地区分组
+  // 生成单个代理组的 YAML 字符串
+  const generateProxyGroupYaml = (group: { name: string; type: string; url?: string; interval?: number; tolerance?: number; proxies: string[] }, indent: string = '  '): string => {
+    const lines: string[] = []
+    lines.push(`${indent}- name: ${group.name}`)
+    lines.push(`${indent}  type: ${group.type}`)
+    if (group.url) {
+      lines.push(`${indent}  url: ${group.url}`)
+    }
+    if (group.interval !== undefined) {
+      lines.push(`${indent}  interval: ${group.interval}`)
+    }
+    if (group.tolerance !== undefined) {
+      lines.push(`${indent}  tolerance: ${group.tolerance}`)
+    }
+    lines.push(`${indent}  proxies:`)
+    for (const proxy of group.proxies) {
+      lines.push(`${indent}    - ${proxy}`)
+    }
+    return lines.join('\n')
+  }
+
+  // 在指定代理组后插入节点（字符串操作）
+  const insertProxiesIntoGroup = (yamlStr: string, groupName: string, newProxies: string[]): string => {
+    if (newProxies.length === 0) return yamlStr
+
+    const lines = yamlStr.split('\n')
+    const result: string[] = []
+    let inTargetGroup = false
+    let inProxiesSection = false
+    let groupIndent = ''
+    let proxiesInserted = false
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // 检测代理组开始 "  - name: xxx"
+      const groupMatch = line.match(/^(\s*)- name:\s*(.+)$/)
+      if (groupMatch) {
+        // 如果之前在目标组的 proxies 部分，现在遇到新组了，说明需要在这里插入
+        if (inTargetGroup && inProxiesSection && !proxiesInserted) {
+          for (const proxy of newProxies) {
+            result.push(`${groupIndent}    - ${proxy}`)
+          }
+          proxiesInserted = true
+        }
+
+        inTargetGroup = groupMatch[2].trim() === groupName
+        groupIndent = groupMatch[1]
+        inProxiesSection = false
+      }
+
+      // 检测 proxies: 开始
+      if (inTargetGroup && line.match(/^\s+proxies:\s*$/)) {
+        inProxiesSection = true
+        result.push(line)
+        continue
+      }
+
+      // 在 proxies 部分检测是否到了末尾（遇到非 "    - xxx" 格式的行）
+      if (inTargetGroup && inProxiesSection && !proxiesInserted) {
+        const proxyItemMatch = line.match(/^(\s+)-\s+(.+)$/)
+        if (!proxyItemMatch || proxyItemMatch[1].length <= groupIndent.length + 2) {
+          // 不是 proxy 项，在这里插入新节点
+          for (const proxy of newProxies) {
+            result.push(`${groupIndent}    - ${proxy}`)
+          }
+          proxiesInserted = true
+          inTargetGroup = false
+          inProxiesSection = false
+        }
+      }
+
+      result.push(line)
+    }
+
+    // 如果到文件末尾还没插入（目标组在最后）
+    if (inTargetGroup && inProxiesSection && !proxiesInserted) {
+      for (const proxy of newProxies) {
+        result.push(`${groupIndent}    - ${proxy}`)
+      }
+    }
+
+    return result.join('\n')
+  }
+
+  // 在指定代理组后插入新代理组（字符串操作）
+  const insertNewGroupsAfter = (yamlStr: string, afterGroupName: string, newGroupsYaml: string): string => {
+    const lines = yamlStr.split('\n')
+    const result: string[] = []
+    let foundGroup = false
+    let insertPosition = -1
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      result.push(line)
+
+      // 检测代理组开始 "  - name: xxx"
+      const groupMatch = line.match(/^(\s*)- name:\s*(.+)$/)
+      if (groupMatch) {
+        if (foundGroup && insertPosition === -1) {
+          // 找到了下一个组，在这之前插入
+          insertPosition = result.length - 1
+        }
+        if (groupMatch[2].trim() === afterGroupName) {
+          foundGroup = true
+        }
+      }
+    }
+
+    if (foundGroup && insertPosition === -1) {
+      // 目标组是最后一个，在文件末尾插入（在 proxy-groups 部分结束前）
+      // 找到 rules: 或其他顶级 key 的位置
+      for (let i = result.length - 1; i >= 0; i--) {
+        if (result[i].match(/^[a-zA-Z]/) && !result[i].startsWith(' ')) {
+          insertPosition = i
+          break
+        }
+      }
+      if (insertPosition === -1) {
+        insertPosition = result.length
+      }
+    }
+
+    if (insertPosition !== -1) {
+      result.splice(insertPosition, 0, newGroupsYaml)
+    }
+
+    return result.join('\n')
+  }
+
+  // 自动按地区分组（保留原始格式）
   const handleAutoGroupByRegion = () => {
     if (!clashConfig) {
       toast.error('请先生成配置')
@@ -860,8 +990,9 @@ function SubscriptionGeneratorPage() {
     }
 
     try {
+      // 用 yaml.load 只是为了获取结构信息，不用于输出
       const parsedConfig = yaml.load(clashConfig) as any
-      let groups = parsedConfig['proxy-groups'] as any[]
+      const groups = parsedConfig['proxy-groups'] as any[]
 
       if (!groups || groups.length === 0) {
         toast.error('配置中没有找到代理组')
@@ -891,12 +1022,50 @@ function SubscriptionGeneratorPage() {
         }
       }
 
-      // 获取现有代理组名称
+      // 获取现有代理组名称和节点
       const existingGroupNames = new Set(groups.map(g => g.name))
 
-      // 创建缺失的地区代理组
-      const newGroups: any[] = []
+      // 获取"自动选择"组中已有的节点
+      const autoSelectGroup = groups.find(g => g.name === '♻️ 自动选择')
+      const existingAutoSelectNodes = new Set(autoSelectGroup?.proxies || [])
+
+      let newConfig = clashConfig
+
+      // 1. 为已存在的地区代理组添加节点
+      for (const [groupName, nodes] of Object.entries(regionNodes)) {
+        if (existingGroupNames.has(groupName)) {
+          // 获取该组已有的节点，只添加不存在的
+          const existingGroup = groups.find(g => g.name === groupName)
+          const existingNodes = new Set(existingGroup?.proxies || [])
+          const newNodes = nodes.filter(n => !existingNodes.has(n))
+          if (newNodes.length > 0) {
+            newConfig = insertProxiesIntoGroup(newConfig, groupName, newNodes)
+          }
+        }
+      }
+
+      // 为"其他地区"组添加节点（如果存在）
+      if (existingGroupNames.has('🌐 其他地区')) {
+        const existingGroup = groups.find(g => g.name === '🌐 其他地区')
+        const existingNodes = new Set(existingGroup?.proxies || [])
+        const newNodes = otherNodes.filter(n => !existingNodes.has(n))
+        if (newNodes.length > 0) {
+          newConfig = insertProxiesIntoGroup(newConfig, '🌐 其他地区', newNodes)
+        }
+      }
+
+      // 为"自动选择"组添加节点（只添加不存在的）
+      if (existingGroupNames.has('♻️ 自动选择')) {
+        const newNodes = nodeNames.filter(n => !existingAutoSelectNodes.has(n))
+        if (newNodes.length > 0) {
+          newConfig = insertProxiesIntoGroup(newConfig, '♻️ 自动选择', newNodes)
+        }
+      }
+
+      // 2. 创建缺失的地区代理组
+      const newGroups: { name: string; type: string; url: string; interval: number; tolerance: number; proxies: string[] }[] = []
       const createdGroupNames: string[] = []
+
       for (const [groupName, nodes] of Object.entries(regionNodes)) {
         if (!existingGroupNames.has(groupName) && nodes.length > 0) {
           newGroups.push({
@@ -924,81 +1093,31 @@ function SubscriptionGeneratorPage() {
         createdGroupNames.push('🌐 其他地区')
       }
 
-      // 找到合适的位置插入新的地区代理组（在"节点选择"或"自动选择"之后）
+      // 插入新代理组
       if (newGroups.length > 0) {
-        const insertIndex = groups.findIndex(g =>
-          g.name === '🚀 节点选择' || g.name === '♻️ 自动选择'
-        )
-        if (insertIndex !== -1) {
-          // 找到最后一个"节点选择"或"自动选择"的位置
-          let lastSelectIndex = insertIndex
-          for (let i = insertIndex; i < groups.length; i++) {
-            if (groups[i].name === '🚀 节点选择' || groups[i].name === '♻️ 自动选择') {
-              lastSelectIndex = i
-            } else {
-              break
-            }
-          }
-          groups = [
-            ...groups.slice(0, lastSelectIndex + 1),
-            ...newGroups,
-            ...groups.slice(lastSelectIndex + 1)
-          ]
-        } else {
-          // 如果没找到，就放在开头
-          groups = [...newGroups, ...groups]
+        // 找到插入位置（在"自动选择"或"节点选择"之后）
+        let insertAfterGroup = '♻️ 自动选择'
+        if (!existingGroupNames.has(insertAfterGroup)) {
+          insertAfterGroup = '🚀 节点选择'
         }
+        if (!existingGroupNames.has(insertAfterGroup) && groups.length > 0) {
+          insertAfterGroup = groups[0].name
+        }
+
+        const newGroupsYaml = newGroups.map(g => generateProxyGroupYaml(g)).join('\n')
+        newConfig = insertNewGroupsAfter(newConfig, insertAfterGroup, newGroupsYaml)
       }
 
-      // 更新已存在的代理组
-      const updatedGroups = groups.map(group => {
-        // 地区代理组（已存在的）：添加对应地区的节点
-        if (regionNodes[group.name] && !createdGroupNames.includes(group.name)) {
-          // 保留原有的特殊节点（如 DIRECT），添加地区节点
-          const existingSpecialNodes = (group.proxies || []).filter((p: string) =>
-            ['DIRECT', 'REJECT', '♻️ 自动选择', '🚀 节点选择'].includes(p) ||
-            groups.some(g => g.name === p)
-          )
-          return {
-            ...group,
-            proxies: [...existingSpecialNodes, ...regionNodes[group.name]]
-          }
+      // 3. 把新创建的地区代理组添加到"🚀 节点选择"的 proxies 中
+      if (createdGroupNames.length > 0 && existingGroupNames.has('🚀 节点选择')) {
+        // 检查"节点选择"组中已有的 proxies，只添加不存在的
+        const nodeSelectGroup = groups.find(g => g.name === '🚀 节点选择')
+        const existingNodeSelectProxies = new Set(nodeSelectGroup?.proxies || [])
+        const newGroupsToAdd = createdGroupNames.filter(name => !existingNodeSelectProxies.has(name))
+        if (newGroupsToAdd.length > 0) {
+          newConfig = insertProxiesIntoGroup(newConfig, '🚀 节点选择', newGroupsToAdd)
         }
-        // "其他地区"组（已存在的）：添加未匹配的节点
-        if (group.name === '🌐 其他地区' && !createdGroupNames.includes('🌐 其他地区')) {
-          const existingSpecialNodes = (group.proxies || []).filter((p: string) =>
-            ['DIRECT', 'REJECT', '♻️ 自动选择', '🚀 节点选择'].includes(p) ||
-            groups.some(g => g.name === p)
-          )
-          return {
-            ...group,
-            proxies: [...existingSpecialNodes, ...otherNodes]
-          }
-        }
-        // "自动选择"组：添加所有节点
-        if (group.name === '♻️ 自动选择') {
-          return {
-            ...group,
-            proxies: [...nodeNames]
-          }
-        }
-        return group
-      })
-
-      // 更新配置
-      parsedConfig['proxy-groups'] = updatedGroups
-
-      // 确保 short-id 字段始终作为字符串
-      const processedConfig = ensureShortIdAsString(parsedConfig)
-
-      // 转换回 YAML
-      let newConfig = yaml.dump(processedConfig, {
-        lineWidth: -1,
-        noRefs: true,
-      })
-
-      // 修复 short-id 空值显示
-      newConfig = fixShortIdInYaml(newConfig)
+      }
 
       setClashConfig(newConfig)
       setHasManuallyGrouped(true)
@@ -1107,7 +1226,7 @@ function SubscriptionGeneratorPage() {
         const processedParsedConfig = ensureShortIdAsString(parsedConfig)
 
         // 转换回YAML并更新待处理配置
-        let newConfig = yaml.dump(processedParsedConfig, { lineWidth: -1, noRefs: true })
+        let newConfig = yaml.dump(processedParsedConfig, YAML_DUMP_OPTIONS)
 
         // 修复 short-id 空值显示
         newConfig = fixShortIdInYaml(newConfig)
@@ -1154,7 +1273,7 @@ function SubscriptionGeneratorPage() {
         const processedCurrentConfig = ensureShortIdAsString(parsedConfig)
 
         // 转换回YAML并更新当前配置
-        let newConfig = yaml.dump(processedCurrentConfig, { lineWidth: -1, noRefs: true })
+        let newConfig = yaml.dump(processedCurrentConfig, YAML_DUMP_OPTIONS)
 
         // 修复 short-id 空值显示
         newConfig = fixShortIdInYaml(newConfig)
@@ -1590,8 +1709,9 @@ function SubscriptionGeneratorPage() {
                 <div className='rounded-lg border bg-muted/30'>
                   <Textarea
                     value={clashConfig}
-                    readOnly
+                    onChange={(e) => setClashConfig(e.target.value)}
                     className='min-h-[400px] resize-none border-0 bg-transparent font-mono text-xs'
+                    placeholder='生成配置后显示在这里...'
                   />
                 </div>
                 <div className='mt-4 flex justify-end gap-2'>
