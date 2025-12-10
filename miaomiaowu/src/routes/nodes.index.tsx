@@ -1226,7 +1226,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           onClick={handleSave}
                           disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
                         >
-                          {batchCreateMutation.isPending ? '保存中...' : '保��节点'}
+                          {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
                         </Button>
                       </div>
                     </TabsContent>

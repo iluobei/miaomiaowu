@@ -32,7 +32,9 @@ function SystemSettingsPage() {
   const queryClient = useQueryClient()
   const { auth } = useAuthStore()
   const [forceSyncExternal, setForceSyncExternal] = useState(false)
-  const [matchRule, setMatchRule] = useState<'node_name' | 'server_port'>('node_name')
+  const [matchRule, setMatchRule] = useState<'node_name' | 'server_port' | 'type_server_port'>('node_name')
+  const [syncScope, setSyncScope] = useState<'saved_only' | 'all'>('saved_only')
+  const [keepNodeName, setKeepNodeName] = useState(true)
   const [cacheExpireMinutes, setCacheExpireMinutes] = useState(0)
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
@@ -45,6 +47,8 @@ function SystemSettingsPage() {
       return response.data as {
         force_sync_external: boolean
         match_rule: string
+        sync_scope: string
+        keep_node_name: boolean
         cache_expire_minutes: number
         sync_traffic: boolean
         enable_probe_binding: boolean
@@ -58,7 +62,9 @@ function SystemSettingsPage() {
   useEffect(() => {
     if (userConfig) {
       setForceSyncExternal(userConfig.force_sync_external)
-      setMatchRule(userConfig.match_rule as 'node_name' | 'server_port')
+      setMatchRule(userConfig.match_rule as 'node_name' | 'server_port' | 'type_server_port')
+      setSyncScope((userConfig.sync_scope as 'saved_only' | 'all') || 'saved_only')
+      setKeepNodeName(userConfig.keep_node_name !== false) // 默认为 true
       setCacheExpireMinutes(userConfig.cache_expire_minutes)
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
@@ -70,6 +76,8 @@ function SystemSettingsPage() {
     mutationFn: async (data: {
       force_sync_external: boolean
       match_rule: string
+      sync_scope: string
+      keep_node_name: boolean
       cache_expire_minutes: number
       sync_traffic: boolean
       enable_probe_binding: boolean
@@ -84,7 +92,9 @@ function SystemSettingsPage() {
         queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
       }
       setForceSyncExternal(variables.force_sync_external)
-      setMatchRule(variables.match_rule as 'node_name' | 'server_port')
+      setMatchRule(variables.match_rule as 'node_name' | 'server_port' | 'type_server_port')
+      setSyncScope(variables.sync_scope as 'saved_only' | 'all')
+      setKeepNodeName(variables.keep_node_name)
       setCacheExpireMinutes(variables.cache_expire_minutes)
       setSyncTraffic(variables.sync_traffic)
       setEnableProbeBinding(variables.enable_probe_binding)
@@ -130,6 +140,8 @@ function SystemSettingsPage() {
                     updateConfigMutation.mutate({
                       force_sync_external: forceSyncExternal,
                       match_rule: matchRule,
+                      sync_scope: syncScope,
+                      keep_node_name: keepNodeName,
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: checked,
                       enable_probe_binding: enableProbeBinding,
@@ -155,6 +167,8 @@ function SystemSettingsPage() {
                     updateConfigMutation.mutate({
                       force_sync_external: checked,
                       match_rule: matchRule,
+                      sync_scope: syncScope,
+                      keep_node_name: keepNodeName,
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
@@ -172,11 +186,13 @@ function SystemSettingsPage() {
                       <Label>匹配规则</Label>
                       <RadioGroup
                         value={matchRule}
-                        onValueChange={(value: 'node_name' | 'server_port') => {
+                        onValueChange={(value: 'node_name' | 'server_port' | 'type_server_port') => {
                           setMatchRule(value)
                           updateConfigMutation.mutate({
                             force_sync_external: forceSyncExternal,
                             match_rule: value,
+                            sync_scope: syncScope,
+                            keep_node_name: keepNodeName,
                             cache_expire_minutes: cacheExpireMinutes,
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
@@ -197,12 +213,88 @@ function SystemSettingsPage() {
                             服务器:端口 (server:port)
                           </Label>
                         </div>
+                        <div className='flex items-center space-x-2'>
+                          <RadioGroupItem value='type_server_port' id='match-type-server-port' />
+                          <Label htmlFor='match-type-server-port' className='font-normal cursor-pointer'>
+                            代理类型:服务器:端口 (type:server:port)
+                          </Label>
+                        </div>
                       </RadioGroup>
                       <p className='text-sm text-muted-foreground'>
                         {matchRule === 'node_name'
                           ? '根据节点名称匹配并更新节点信息'
-                          : '根据服务器地址和端口匹配并更新节点信息，适用于节点名称会变更的情况'}
+                          : matchRule === 'server_port'
+                            ? '根据服务器地址和端口匹配并更新节点信息，适用于节点名称会变更的情况'
+                            : '根据代理类型、服务器地址和端口匹配并更新节点信息，适用于同一服务器有多种代理类型的情况'}
                       </p>
+                    </div>
+
+                    <div className='space-y-2 pt-2 border-t'>
+                      <Label>同步范围</Label>
+                      <RadioGroup
+                        value={syncScope}
+                        onValueChange={(value: 'saved_only' | 'all') => {
+                          setSyncScope(value)
+                          updateConfigMutation.mutate({
+                            force_sync_external: forceSyncExternal,
+                            match_rule: matchRule,
+                            sync_scope: value,
+                            keep_node_name: keepNodeName,
+                            cache_expire_minutes: cacheExpireMinutes,
+                            sync_traffic: syncTraffic,
+                            enable_probe_binding: enableProbeBinding,
+                            enable_short_link: enableShortLink,
+                          })
+                        }}
+                        disabled={loadingConfig || updateConfigMutation.isPending}
+                      >
+                        <div className='flex items-center space-x-2'>
+                          <RadioGroupItem value='saved_only' id='sync-saved-only' />
+                          <Label htmlFor='sync-saved-only' className='font-normal cursor-pointer'>
+                            仅同步已保存节点
+                          </Label>
+                        </div>
+                        <div className='flex items-center space-x-2'>
+                          <RadioGroupItem value='all' id='sync-all' />
+                          <Label htmlFor='sync-all' className='font-normal cursor-pointer'>
+                            同步所有节点
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                      <p className='text-sm text-muted-foreground'>
+                        {syncScope === 'saved_only'
+                          ? '只更新已保存到数据库的节点，新增节点不会自动保存'
+                          : '同步外部订阅的所有节点，包括新增的节点'}
+                      </p>
+                    </div>
+
+                    <div className='flex items-center justify-between space-x-2 pt-2 border-t'>
+                      <div className='flex-1 space-y-1'>
+                        <Label htmlFor='keep-node-name' className='cursor-pointer'>
+                          保留当前节点名称
+                        </Label>
+                        <p className='text-sm text-muted-foreground'>
+                          开启后，同步时保留数据库中的节点名称，不使用外部订阅的节点名称
+                        </p>
+                      </div>
+                      <Switch
+                        id='keep-node-name'
+                        checked={keepNodeName}
+                        onCheckedChange={(checked) => {
+                          setKeepNodeName(checked)
+                          updateConfigMutation.mutate({
+                            force_sync_external: forceSyncExternal,
+                            match_rule: matchRule,
+                            sync_scope: syncScope,
+                            keep_node_name: checked,
+                            cache_expire_minutes: cacheExpireMinutes,
+                            sync_traffic: syncTraffic,
+                            enable_probe_binding: enableProbeBinding,
+                            enable_short_link: enableShortLink,
+                          })
+                        }}
+                        disabled={loadingConfig || updateConfigMutation.isPending}
+                      />
                     </div>
 
                     <div className='space-y-2 pt-2 border-t'>
@@ -220,6 +312,8 @@ function SystemSettingsPage() {
                           updateConfigMutation.mutate({
                             force_sync_external: forceSyncExternal,
                             match_rule: matchRule,
+                            sync_scope: syncScope,
+                            keep_node_name: keepNodeName,
                             cache_expire_minutes: cacheExpireMinutes,
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
@@ -263,6 +357,8 @@ function SystemSettingsPage() {
                     updateConfigMutation.mutate({
                       force_sync_external: forceSyncExternal,
                       match_rule: matchRule,
+                      sync_scope: syncScope,
+                      keep_node_name: keepNodeName,
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: checked,
@@ -311,6 +407,8 @@ function SystemSettingsPage() {
                     updateConfigMutation.mutate({
                       force_sync_external: forceSyncExternal,
                       match_rule: matchRule,
+                      sync_scope: syncScope,
+                      keep_node_name: keepNodeName,
                       cache_expire_minutes: cacheExpireMinutes,
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,

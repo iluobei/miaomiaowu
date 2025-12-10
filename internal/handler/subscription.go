@@ -696,7 +696,7 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	totalNodesSynced := 0
 
 	for _, sub := range subsToSync {
-		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings.MatchRule)
+		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings)
 		if err != nil {
 			log.Printf("[Subscription] Failed to sync subscription %s (%s): %v", sub.Name, sub.URL, err)
 			continue

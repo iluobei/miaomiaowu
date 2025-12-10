@@ -13,6 +13,8 @@ import (
 type userConfigRequest struct {
 	ForceSyncExternal  bool   `json:"force_sync_external"`
 	MatchRule          string `json:"match_rule"`
+	SyncScope          string `json:"sync_scope"`
+	KeepNodeName       bool   `json:"keep_node_name"`
 	CacheExpireMinutes int    `json:"cache_expire_minutes"`
 	SyncTraffic        bool   `json:"sync_traffic"`
 	EnableProbeBinding bool   `json:"enable_probe_binding"`
@@ -23,6 +25,8 @@ type userConfigRequest struct {
 type userConfigResponse struct {
 	ForceSyncExternal  bool   `json:"force_sync_external"`
 	MatchRule          string `json:"match_rule"`
+	SyncScope          string `json:"sync_scope"`
+	KeepNodeName       bool   `json:"keep_node_name"`
 	CacheExpireMinutes int    `json:"cache_expire_minutes"`
 	SyncTraffic        bool   `json:"sync_traffic"`
 	EnableProbeBinding bool   `json:"enable_probe_binding"`
@@ -61,6 +65,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 			resp := userConfigResponse{
 				ForceSyncExternal:  false,
 				MatchRule:          "node_name",
+				SyncScope:          "saved_only",
+				KeepNodeName:       true,
 				CacheExpireMinutes: 0,
 				SyncTraffic:        false,
 				EnableProbeBinding: false,
@@ -79,6 +85,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 	resp := userConfigResponse{
 		ForceSyncExternal:  settings.ForceSyncExternal,
 		MatchRule:          settings.MatchRule,
+		SyncScope:          settings.SyncScope,
+		KeepNodeName:       settings.KeepNodeName,
 		CacheExpireMinutes: settings.CacheExpireMinutes,
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,
@@ -103,8 +111,18 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	if matchRule == "" {
 		matchRule = "node_name"
 	}
-	if matchRule != "node_name" && matchRule != "server_port" {
-		writeError(w, http.StatusBadRequest, errors.New("match_rule must be 'node_name' or 'server_port'"))
+	if matchRule != "node_name" && matchRule != "server_port" && matchRule != "type_server_port" {
+		writeError(w, http.StatusBadRequest, errors.New("match_rule must be 'node_name', 'server_port', or 'type_server_port'"))
+		return
+	}
+
+	// Validate sync scope
+	syncScope := strings.TrimSpace(payload.SyncScope)
+	if syncScope == "" {
+		syncScope = "saved_only"
+	}
+	if syncScope != "saved_only" && syncScope != "all" {
+		writeError(w, http.StatusBadRequest, errors.New("sync_scope must be 'saved_only' or 'all'"))
 		return
 	}
 
@@ -118,10 +136,12 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		Username:           username,
 		ForceSyncExternal:  payload.ForceSyncExternal,
 		MatchRule:          matchRule,
+		SyncScope:          syncScope,
+		KeepNodeName:       payload.KeepNodeName,
 		CacheExpireMinutes: cacheExpireMinutes,
 		SyncTraffic:        payload.SyncTraffic,
 		EnableProbeBinding: payload.EnableProbeBinding,
-		CustomRulesEnabled: true, // 自定义规则始终启用
+		CustomRulesEnabled: true, // 自定义规则始���启用
 		EnableShortLink:    payload.EnableShortLink,
 	}
 
@@ -133,6 +153,8 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	resp := userConfigResponse{
 		ForceSyncExternal:  settings.ForceSyncExternal,
 		MatchRule:          settings.MatchRule,
+		SyncScope:          settings.SyncScope,
+		KeepNodeName:       settings.KeepNodeName,
 		CacheExpireMinutes: settings.CacheExpireMinutes,
 		SyncTraffic:        settings.SyncTraffic,
 		EnableProbeBinding: settings.EnableProbeBinding,

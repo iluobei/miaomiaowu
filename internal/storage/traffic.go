@@ -238,7 +238,9 @@ type SubscribeFile struct {
 type UserSettings struct {
 	Username            string
 	ForceSyncExternal   bool
-	MatchRule           string // "node_name" or "server_port"
+	MatchRule           string // "node_name", "server_port", or "type_server_port"
+	SyncScope           string // "saved_only" or "all"
+	KeepNodeName        bool   // Keep current node name when syncing
 	CacheExpireMinutes  int    // Cache expiration time in minutes
 	SyncTraffic         bool   // Sync traffic info from external subscriptions
 	EnableProbeBinding  bool   // Enable probe server binding for nodes
@@ -642,6 +644,16 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 	// Add enable_probe_binding column to user_settings table if it doesn't exist
 	if err := r.ensureUserSettingsColumn("enable_probe_binding", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add sync_scope column to user_settings table if it doesn't exist
+	if err := r.ensureUserSettingsColumn("sync_scope", "TEXT NOT NULL DEFAULT 'saved_only'"); err != nil {
+		return err
+	}
+
+	// Add keep_node_name column to user_settings table if it doesn't exist
+	if err := r.ensureUserSettingsColumn("keep_node_name", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
 
@@ -2723,9 +2735,9 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
-	var forceSyncInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt int
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &settings.CreatedAt, &settings.UpdatedAt)
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt int
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -2734,6 +2746,7 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	}
 
 	settings.ForceSyncExternal = forceSyncInt == 1
+	settings.KeepNodeName = keepNodeNameInt == 1
 	settings.SyncTraffic = syncTrafficInt == 1
 	settings.EnableProbeBinding = enableProbeBindingInt == 1
 	settings.CustomRulesEnabled = customRulesEnabledInt == 1
@@ -2756,6 +2769,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	forceSyncInt := 0
 	if settings.ForceSyncExternal {
 		forceSyncInt = 1
+	}
+
+	keepNodeNameInt := 1 // default to true
+	if !settings.KeepNodeName {
+		keepNodeNameInt = 0
 	}
 
 	syncTrafficInt := 0
@@ -2783,17 +2801,24 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		matchRule = "node_name"
 	}
 
+	syncScope := strings.TrimSpace(settings.SyncScope)
+	if syncScope == "" {
+		syncScope = "saved_only"
+	}
+
 	cacheExpireMinutes := settings.CacheExpireMinutes
 	if cacheExpireMinutes < 0 {
 		cacheExpireMinutes = 0
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
+			sync_scope = excluded.sync_scope,
+			keep_node_name = excluded.keep_node_name,
 			cache_expire_minutes = excluded.cache_expire_minutes,
 			sync_traffic = excluded.sync_traffic,
 			enable_probe_binding = excluded.enable_probe_binding,
@@ -2802,7 +2827,7 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 
