@@ -83,27 +83,19 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	username := auth.UsernameFromContext(ctx)
 
-	totalLimit, totalRemaining, totalUsed, err := h.fetchTotals(ctx, username)
-	if err != nil {
-		// Return empty metrics if probe is not configured yet
-		if errors.Is(err, storage.ErrProbeConfigNotFound) {
-			response := trafficSummaryResponse{
-				Metrics: trafficSummaryMetrics{
-					TotalLimitGB:     0,
-					TotalUsedGB:      0,
-					TotalRemainingGB: 0,
-					UsagePercentage:  0,
-				},
-				History: []trafficDailyUsage{},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
+	var totalLimit, totalRemaining, totalUsed int64
+	var probeErr error
 
-		writeError(w, http.StatusBadGateway, err)
-		return
+	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, username)
+	if probeErr != nil {
+		// Log the error but continue to try external subscription traffic
+		if errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
+			log.Printf("[Traffic] Probe not configured, will use external subscription traffic only")
+		} else {
+			log.Printf("[Traffic] Failed to fetch probe traffic: %v", probeErr)
+		}
+		// Reset values in case of error
+		totalLimit, totalRemaining, totalUsed = 0, 0, 0
 	}
 
 	// Add external subscription traffic if sync_traffic is enabled
@@ -113,6 +105,13 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		totalUsed += externalUsed
 		// Recalculate remaining
 		totalRemaining = totalLimit - totalUsed
+	}
+
+	// If no traffic data from either source, return appropriate response
+	if totalLimit == 0 && totalUsed == 0 && probeErr != nil && !errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
+		// Only return error if probe failed (not just not configured) and no external traffic
+		writeError(w, http.StatusBadGateway, probeErr)
+		return
 	}
 
 	if err := h.recordSnapshot(ctx, totalLimit, totalUsed, totalRemaining); err != nil {

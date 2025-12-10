@@ -21,6 +21,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
 import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
@@ -79,6 +80,11 @@ function formatTraffic(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+// 格式化流量为GB（用于外部订阅显示）
+function formatTrafficGB(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
@@ -294,6 +300,7 @@ function SubscribeFilesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
       toast.success('外部订阅已删除')
     },
     onError: (error: any) => {
@@ -310,6 +317,7 @@ function SubscribeFilesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
       toast.success('外部订阅同步成功')
     },
     onError: (error: any) => {
@@ -329,6 +337,7 @@ function SubscribeFilesPage() {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       queryClient.invalidateQueries({ queryKey: ['all-nodes-with-tags'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
       toast.success(data.message || '订阅同步成功')
       setSyncingSingleId(null)
     },
@@ -1453,14 +1462,44 @@ function SubscribeFilesPage() {
                     },
                     {
                       header: '流量使用',
-                      cell: (sub) => sub.total > 0 ? (
-                        <div className='text-sm'>
-                          <span>{formatTraffic(sub.upload + sub.download)}</span>
-                          <span className='text-muted-foreground'> / {formatTraffic(sub.total)}</span>
-                        </div>
-                      ) : (
-                        <span className='text-sm text-muted-foreground'>-</span>
-                      )
+                      cell: (sub) => {
+                        if (sub.total <= 0) {
+                          return <span className='text-sm text-muted-foreground'>-</span>
+                        }
+                        const used = sub.upload + sub.download
+                        const percentage = Math.min((used / sub.total) * 100, 100)
+                        const remaining = Math.max(sub.total - used, 0)
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className='w-24 space-y-1 cursor-help'>
+                                <Progress value={percentage} className='h-2' />
+                                <div className='text-xs text-center text-muted-foreground'>
+                                  {percentage.toFixed(0)}%
+                                </div>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent className='space-y-1'>
+                              <div className='text-xs'>
+                                <span className='font-medium'>已用: </span>
+                                {formatTrafficGB(used)}
+                              </div>
+                              <div className='text-xs'>
+                                <span className='font-medium'>总量: </span>
+                                {formatTrafficGB(sub.total)}
+                              </div>
+                              <div className='text-xs'>
+                                <span className='font-medium'>剩余: </span>
+                                {formatTrafficGB(remaining)}
+                              </div>
+                              <div className='text-xs text-muted-foreground'>
+                                上传: {formatTrafficGB(sub.upload)} / 下载: {formatTrafficGB(sub.download)}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      },
+                      width: '120px'
                     },
                     {
                       header: '到期时间',
@@ -1602,11 +1641,39 @@ function SubscribeFilesPage() {
                       },
                       {
                         label: '流量',
-                        value: (sub) => sub.total > 0 ? (
-                          <span>{formatTraffic(sub.upload + sub.download)} / {formatTraffic(sub.total)}</span>
-                        ) : (
-                          <span className='text-muted-foreground'>-</span>
-                        )
+                        value: (sub) => {
+                          if (sub.total <= 0) {
+                            return <span className='text-muted-foreground'>-</span>
+                          }
+                          const used = sub.upload + sub.download
+                          const percentage = Math.min((used / sub.total) * 100, 100)
+                          const remaining = Math.max(sub.total - used, 0)
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className='flex items-center gap-2 cursor-help'>
+                                  <Progress value={percentage} className='h-2 flex-1 max-w-24' />
+                                  <span className='text-xs whitespace-nowrap'>
+                                    {formatTrafficGB(used)} / {formatTrafficGB(sub.total)}
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className='space-y-1'>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>已用: </span>
+                                  {formatTrafficGB(used)} ({percentage.toFixed(1)}%)
+                                </div>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>剩余: </span>
+                                  {formatTrafficGB(remaining)}
+                                </div>
+                                <div className='text-xs text-muted-foreground'>
+                                  上传: {formatTrafficGB(sub.upload)} / 下载: {formatTrafficGB(sub.download)}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          )
+                        }
                       },
                       {
                         label: '到期',

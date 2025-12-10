@@ -224,6 +224,12 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 
 			log.Printf("[Traffic Collector] Daily traffic collection failed (attempt %d/%d): %v", attempt, maxRetries, err)
 
+			// 如果是探针配置未找到错误，不需要重试
+			if errors.Is(err, storage.ErrProbeConfigNotFound) {
+				log.Printf("[Traffic Collector] Probe not configured, skipping retries")
+				return
+			}
+
 			if attempt < maxRetries {
 				log.Printf("[Traffic Collector] Retrying in %v...", retryDelay)
 				select {

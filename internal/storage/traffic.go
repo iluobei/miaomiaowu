@@ -2934,8 +2934,8 @@ func (r *TrafficRepository) CreateExternalSubscription(ctx context.Context, sub 
 		userAgent = "clash-meta/2.4.0"
 	}
 
-	const stmt = `INSERT INTO external_subscriptions (username, name, url, user_agent, node_count, last_sync_at) VALUES (?, ?, ?, ?, ?, ?)`
-	result, err := r.db.ExecContext(ctx, stmt, username, name, url, userAgent, sub.NodeCount, sub.LastSyncAt)
+	const stmt = `INSERT INTO external_subscriptions (username, name, url, user_agent, node_count, last_sync_at, upload, download, total, expire) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	result, err := r.db.ExecContext(ctx, stmt, username, name, url, userAgent, sub.NodeCount, sub.LastSyncAt, sub.Upload, sub.Download, sub.Total, sub.Expire)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return 0, ErrExternalSubscriptionExists

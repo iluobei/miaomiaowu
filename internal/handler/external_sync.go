@@ -525,6 +525,46 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	return syncedCount, sub, nil
 }
 
+// ParseTrafficInfoHeader parses subscription-userinfo header and returns traffic info
+// Format: upload=0; download=685404160; total=1073741824; expire=1705276800
+// This function only parses the header, does not update database
+func ParseTrafficInfoHeader(userInfo string) (upload, download, total int64, expire *time.Time) {
+	parts := strings.Split(userInfo, ";")
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(kv[0])
+		value := strings.TrimSpace(kv[1])
+
+		switch key {
+		case "upload":
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+				upload = v
+			}
+		case "download":
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+				download = v
+			}
+		case "total":
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+				total = v
+			}
+		case "expire":
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+				expireTime := time.Unix(v, 0)
+				expire = &expireTime
+			}
+		}
+	}
+
+	return
+}
+
 // parseAndUpdateTrafficInfo parses subscription-userinfo header and updates traffic info
 // Format: upload=0; download=685404160; total=1073741824; expire=1705276800
 func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficRepository, sub *storage.ExternalSubscription, userInfo string) {

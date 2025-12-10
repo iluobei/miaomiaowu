@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -121,6 +122,40 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
+	// Fetch subscription to get traffic info
+	var trafficUpload, trafficDownload, trafficTotal int64
+	var trafficExpire *time.Time
+
+	userAgent := payload.UserAgent
+	if userAgent == "" {
+		userAgent = "clash-meta/2.4.0"
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("[External Subscription] Failed to create request for %s: %v", name, err)
+	} else {
+		req.Header.Set("User-Agent", userAgent)
+		log.Printf("[External Subscription] Fetching traffic info for %s with User-Agent: %s", name, userAgent)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[External Subscription] Failed to fetch subscription URL for traffic info: %v", err)
+		} else {
+			defer resp.Body.Close()
+			log.Printf("[External Subscription] Response status for %s: %d", name, resp.StatusCode)
+			if resp.StatusCode == http.StatusOK {
+				// Parse subscription-userinfo header for traffic info
+				userInfo := resp.Header.Get("subscription-userinfo")
+				log.Printf("[External Subscription] subscription-userinfo header for %s: %s", name, userInfo)
+				if userInfo != "" {
+					trafficUpload, trafficDownload, trafficTotal, trafficExpire = ParseTrafficInfoHeader(userInfo)
+					log.Printf("[External Subscription] Parsed traffic info: upload=%d, download=%d, total=%d", trafficUpload, trafficDownload, trafficTotal)
+				}
+			}
+		}
+	}
+
 	now := time.Now()
 	sub := storage.ExternalSubscription{
 		Username:   username,
@@ -129,6 +164,10 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		UserAgent:  payload.UserAgent, // 会在存储层使用默认值如果为空
 		NodeCount:  0,
 		LastSyncAt: &now,
+		Upload:     trafficUpload,
+		Download:   trafficDownload,
+		Total:      trafficTotal,
+		Expire:     trafficExpire,
 	}
 
 	id, err := repo.CreateExternalSubscription(r.Context(), sub)

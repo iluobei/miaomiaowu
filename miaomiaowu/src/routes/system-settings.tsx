@@ -154,7 +154,7 @@ function SystemSettingsPage() {
               <div className='flex items-center justify-between space-x-2 pt-2 border-t'>
                 <div className='flex-1 space-y-1'>
                   <Label htmlFor='force-sync-external' className='cursor-pointer'>
-                    强制同步外部订阅
+                    外部订阅同步设置
                   </Label>
                   <p className='text-sm text-muted-foreground'>
                     开启后，从订阅链接获取订阅时将重新获取外部订阅链接的最新节点

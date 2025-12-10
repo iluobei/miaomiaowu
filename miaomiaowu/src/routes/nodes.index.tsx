@@ -879,6 +879,9 @@ function NodesPage() {
           url: variables.url,
           user_agent: variables.userAgent, // 保存 User-Agent
         })
+        // 刷新外部订阅列表和流量数据
+        queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+        queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
       } catch (error) {
         // 如果保存失败（比如已经存在），忽略错误
         console.log('保存外部订阅链接失败（可能已存在）:', error)
