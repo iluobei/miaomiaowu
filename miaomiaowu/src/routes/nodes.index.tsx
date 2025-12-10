@@ -1730,7 +1730,33 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         </TableRow>
                       ) : (
                         filteredNodes.map(node => (
-                          <TableRow key={node.id}>
+                          <TableRow
+                            key={node.id}
+                            className={node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-muted/50' : 'cursor-pointer hover:bg-muted/30'}
+                            onClick={(e) => {
+                              // 排除功能按钮、输入框、checkbox等交互元素
+                              const target = e.target as HTMLElement
+                              if (
+                                target.closest('button') ||
+                                target.closest('input') ||
+                                target.closest('[role="checkbox"]') ||
+                                target.closest('[role="menuitem"]') ||
+                                target.closest('[data-radix-collection-item]')
+                              ) {
+                                return
+                              }
+                              // 只有已保存的节点才能选中
+                              if (node.isSaved && node.dbId) {
+                                const newSet = new Set(selectedNodeIds)
+                                if (newSet.has(node.dbId)) {
+                                  newSet.delete(node.dbId)
+                                } else {
+                                  newSet.add(node.dbId)
+                                }
+                                setSelectedNodeIds(newSet)
+                              }
+                            }}
+                          >
                             <TableCell>
                               {node.isSaved && node.dbId && (
                                 <Checkbox
