@@ -329,3 +329,12 @@
     box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.35);
   }
 }
+
+/* Twemoji 样式 - 统一 emoji 显示 */
+img.emoji {
+  height: 1em;
+  width: 1em;
+  margin: 0 0.05em 0 0.1em;
+  vertical-align: -0.1em;
+  display: inline-block;
+}

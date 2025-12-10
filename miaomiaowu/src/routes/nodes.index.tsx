@@ -22,11 +22,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2 } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2, Flag } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
 import URI_Producer from '@/lib/substore/producers/uri'
+import { countryCodeToFlag, hasEmojiPrefix, getGeoIPInfo } from '@/lib/country-flag'
+import { Twemoji } from '@/components/twemoji'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -175,6 +177,10 @@ function NodesPage() {
   const [tempSubUrl, setTempSubUrl] = useState<string>('')
   const [tempSubGenerating, setTempSubGenerating] = useState(false)
   const [tempSubSingleNodeId, setTempSubSingleNodeId] = useState<number | null>(null) // 单个节点模式
+
+  // 添加地区 emoji 状态
+  const [addingRegionEmoji, setAddingRegionEmoji] = useState(false)
+  const [addingEmojiForNode, setAddingEmojiForNode] = useState<number | null>(null)
 
   // 优化的回调函数
   const handleUserAgentChange = useCallback((value: string) => {
@@ -709,6 +715,205 @@ function NodesPage() {
       toast.error(error.response?.data?.error || '批量修改名称失败')
     },
   })
+
+  // 批量添加地区 emoji
+  const handleAddRegionEmoji = useCallback(async () => {
+    const nodeIds = Array.from(selectedNodeIds)
+    if (nodeIds.length === 0) {
+      toast.error('请先选择节点')
+      return
+    }
+
+    setAddingRegionEmoji(true)
+    let successCount = 0
+    let skipCount = 0
+    let failCount = 0
+
+    try {
+      for (const nodeId of nodeIds) {
+        const node = savedNodes.find(n => n.id === nodeId)
+        if (!node) continue
+
+        // 检查节点名称是否已有 emoji 前缀
+        if (hasEmojiPrefix(node.node_name)) {
+          skipCount++
+          continue
+        }
+
+        try {
+          // 获取 server 地址
+          let parsedConfig
+          try {
+            parsedConfig = JSON.parse(node.parsed_config)
+          } catch {
+            failCount++
+            continue
+          }
+
+          const server = parsedConfig?.server
+          if (!server) {
+            failCount++
+            continue
+          }
+
+          let ip = server
+
+          // 如果是域名，先解析为 IP（优先 IPv4）
+          if (!isIpAddress(server)) {
+            try {
+              const dnsResult = await api.get(`/api/dns/resolve?hostname=${encodeURIComponent(server)}`)
+              const ips = dnsResult.data?.ips || []
+              if (ips.length === 0) {
+                failCount++
+                continue
+              }
+              // 优先使用 IPv4（DNS 接口已经排序好）
+              ip = ips[0]
+            } catch {
+              failCount++
+              continue
+            }
+          }
+
+          // 获取 IP 地理位置
+          const geoInfo = await getGeoIPInfo(ip)
+          if (!geoInfo.country_code) {
+            failCount++
+            continue
+          }
+
+          // 转换为旗帜 emoji
+          const flag = countryCodeToFlag(geoInfo.country_code)
+          if (!flag) {
+            failCount++
+            continue
+          }
+
+          // 更新节点名称
+          const newName = `${flag} ${node.node_name}`
+          const updatedParsedConfig = updateConfigName(node.parsed_config, newName)
+          const updatedClashConfig = updateConfigName(node.clash_config, newName)
+
+          await api.put(`/api/admin/nodes/${nodeId}`, {
+            raw_url: node.raw_url,
+            node_name: newName,
+            protocol: node.protocol,
+            parsed_config: updatedParsedConfig,
+            clash_config: updatedClashConfig,
+            enabled: node.enabled,
+            tag: node.tag,
+          })
+
+          successCount++
+        } catch (error) {
+          console.error(`Failed to add emoji for node ${nodeId}:`, error)
+          failCount++
+        }
+      }
+
+      // 刷新节点列表
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+
+      // 显示结果
+      if (successCount > 0 && failCount === 0 && skipCount === 0) {
+        toast.success(`成功为 ${successCount} 个节点添加地区 emoji`)
+      } else {
+        const parts = []
+        if (successCount > 0) parts.push(`成功 ${successCount}`)
+        if (skipCount > 0) parts.push(`跳过 ${skipCount} (已有emoji)`)
+        if (failCount > 0) parts.push(`失败 ${failCount}`)
+        toast.info(parts.join('，'))
+      }
+    } finally {
+      setAddingRegionEmoji(false)
+    }
+  }, [selectedNodeIds, savedNodes, queryClient])
+
+  // 为单个节点添加地区 emoji
+  const handleAddSingleNodeEmoji = useCallback(async (nodeId: number) => {
+    const node = savedNodes.find(n => n.id === nodeId)
+    if (!node) return
+
+    // 检查节点名称是否已有 emoji 前缀
+    if (hasEmojiPrefix(node.node_name)) {
+      toast.info('该节点已有 emoji 前缀')
+      return
+    }
+
+    setAddingEmojiForNode(nodeId)
+
+    try {
+      // 获取 server 地址
+      let parsedConfig
+      try {
+        parsedConfig = JSON.parse(node.parsed_config)
+      } catch {
+        toast.error('无法解析节点配置')
+        return
+      }
+
+      const server = parsedConfig?.server
+      if (!server) {
+        toast.error('节点配置中没有 server 地址')
+        return
+      }
+
+      let ip = server
+
+      // 如果是域名，先解析为 IP（优先 IPv4）
+      if (!isIpAddress(server)) {
+        try {
+          const dnsResult = await api.get(`/api/dns/resolve?hostname=${encodeURIComponent(server)}`)
+          const ips = dnsResult.data?.ips || []
+          if (ips.length === 0) {
+            toast.error('DNS 解析失败')
+            return
+          }
+          ip = ips[0]
+        } catch {
+          toast.error('DNS 解析失败')
+          return
+        }
+      }
+
+      // 获取 IP 地理位置
+      const geoInfo = await getGeoIPInfo(ip)
+      if (!geoInfo.country_code) {
+        toast.error('获取地理位置失败')
+        return
+      }
+
+      // 转换为旗帜 emoji
+      const flag = countryCodeToFlag(geoInfo.country_code)
+      if (!flag) {
+        toast.error('无法生成旗帜 emoji')
+        return
+      }
+
+      // 更新节点名称
+      const newName = `${flag} ${node.node_name}`
+      const updatedParsedConfig = updateConfigName(node.parsed_config, newName)
+      const updatedClashConfig = updateConfigName(node.clash_config, newName)
+
+      await api.put(`/api/admin/nodes/${nodeId}`, {
+        raw_url: node.raw_url,
+        node_name: newName,
+        protocol: node.protocol,
+        parsed_config: updatedParsedConfig,
+        clash_config: updatedClashConfig,
+        enabled: node.enabled,
+        tag: node.tag,
+      })
+
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('已添加地区 emoji')
+    } catch (error) {
+      console.error('Failed to add emoji:', error)
+      toast.error('添加 emoji 失败')
+    } finally {
+      setAddingEmojiForNode(null)
+    }
+  }, [savedNodes, queryClient])
 
   // 生成临时订阅 (支持单个节点或批量模式)
   const generateTempSubscription = useCallback(async (singleNodeId?: number) => {
@@ -1272,6 +1477,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         <Button
                           variant='default'
                           size='sm'
+                          onClick={handleAddRegionEmoji}
+                          disabled={addingRegionEmoji}
+                        >
+                          {addingRegionEmoji ? '添加中...' : `添加emoji (${selectedNodeIds.size})`}
+                        </Button>
+                        <Button
+                          variant='default'
+                          size='sm'
                           onClick={() => {
                             // 获取选中节点的名称
                             const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
@@ -1280,14 +1493,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             setBatchRenameDialogOpen(true)
                           }}
                         >
-                          批量修改名称 ({selectedNodeIds.size})
+                          修改名称 ({selectedNodeIds.size})
                         </Button>
                         <Button
                           variant='default'
                           size='sm'
                           onClick={() => setBatchTagDialogOpen(true)}
                         >
-                          批量修改标签 ({selectedNodeIds.size})
+                          修改标签 ({selectedNodeIds.size})
                         </Button>
                         <Button
                           variant='secondary'
@@ -1566,7 +1779,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   </Button>
                                 </div>
                               ) : (
-                                <div className='font-medium text-sm break-all line-clamp-2'>{node.name || '未知'}</div>
+                                <div className='font-medium text-sm break-all line-clamp-2'><Twemoji>{node.name || '未知'}</Twemoji></div>
                               )}
                             </div>
                             {/* 编辑、交换和探针绑定按钮 */}
@@ -1611,6 +1824,22 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   >
                                     <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
                                   </Button>
+                                )}
+                                {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant='ghost'
+                                        size='icon'
+                                        className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                        onClick={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
+                                        disabled={addingEmojiForNode === node.dbNode!.id}
+                                      >
+                                        <Flag className={`size-4 ${addingEmojiForNode === node.dbNode!.id ? 'animate-pulse' : ''}`} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>添加地区 emoji</TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             )}
@@ -1851,10 +2080,10 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 <div className='flex items-center gap-2 min-w-0'>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <span className='truncate flex-1 min-w-0 cursor-help'>{node.name || '未知'}</span>
+                                      <span className='truncate flex-1 min-w-0 cursor-help'><Twemoji>{node.name || '未知'}</Twemoji></span>
                                     </TooltipTrigger>
                                     <TooltipContent className='max-w-xs'>
-                                      {node.name || '未知'}
+                                      <Twemoji>{node.name || '未知'}</Twemoji>
                                     </TooltipContent>
                                   </Tooltip>
                                   {node.isSaved && (
@@ -1885,6 +2114,22 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
                                       />
                                     </Button>
+                                  )}
+                                  {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant='ghost'
+                                          size='icon'
+                                          className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
+                                          onClick={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
+                                          disabled={addingEmojiForNode === node.dbNode!.id}
+                                        >
+                                          <Flag className={`size-4 ${addingEmojiForNode === node.dbNode!.id ? 'animate-pulse' : ''}`} />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>添加地区 emoji</TooltipContent>
+                                    </Tooltip>
                                   )}
                                 </div>
                               )}
@@ -2090,7 +2335,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         Clash 配置详情{editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
                                       </DialogTitle>
                                       <DialogDescription>
-                                        {node.name || '未知'}
+                                        <Twemoji>{node.name || '未知'}</Twemoji>
                                         {editingClashConfig?.nodeId === -1 && ' - 保存节点后可编辑配置'}
                                       </DialogDescription>
                                     </DialogHeader>
@@ -2380,7 +2625,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     >
                       <div className='flex flex-col gap-2 w-full items-start'>
                         <div className='flex items-center gap-2 w-full flex-wrap'>
-                          <span className='font-medium'>{node.node_name}</span>
+                          <span className='font-medium'><Twemoji>{node.node_name}</Twemoji></span>
                           <span className='text-xs text-muted-foreground'>
                             {node.protocol} - {node.original_server}
                           </span>
