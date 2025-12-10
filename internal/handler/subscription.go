@@ -217,15 +217,9 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// Get username from context
 	username := auth.UsernameFromContext(r.Context())
 
-	// 尝试获取流量信息，如果探针未配置则跳过流量统计
+	// 尝试获取流量信息，如果探针报错则跳过流量统计，不影响订阅输出
 	totalLimit, _, totalUsed, err := h.summary.fetchTotals(r.Context(), username)
 	hasTrafficInfo := err == nil
-	// 如果是探针未配置的错误，不返回错误，继续处理
-	if err != nil && !errors.Is(err, storage.ErrProbeConfigNotFound) {
-		// 其他错误才返回
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
 
 	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
 	var subscribeFile storage.SubscribeFile
