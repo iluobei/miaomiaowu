@@ -1569,7 +1569,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 <div className='font-medium text-sm break-all line-clamp-2'>{node.name || '未知'}</div>
                               )}
                             </div>
-                            {/* 编辑和交换按钮 */}
+                            {/* 编辑、交换和探针绑定按钮 */}
                             {editingNode?.id !== node.id && (
                               <div className='flex items-center gap-1 shrink-0' onClick={(e) => e.stopPropagation()}>
                                 <Button
@@ -1585,7 +1585,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-7 text-muted-foreground hover:text-foreground'
+                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
                                     onClick={() => {
                                       setSourceNodeForExchange(node.dbNode)
                                       setExchangeDialogOpen(true)
@@ -1596,6 +1596,20 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       alt='交换'
                                       className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
                                     />
+                                  </Button>
+                                )}
+                                {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                    onClick={() => {
+                                      setSelectedNodeForProbe(node.dbNode!)
+                                      setProbeBindingDialogOpen(true)
+                                      refetchProbeConfig()
+                                    }}
+                                  >
+                                    <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
                                   </Button>
                                 )}
                               </div>
