@@ -182,9 +182,11 @@ export function buildCustomRulesFromCategories(selectedCategories: string[]): st
 
 /**
  * Predefined rule set combinations
+ * 注意：顺序必须与 RULE_CATEGORIES 中的定义顺序一致
  */
 export const PREDEFINED_RULE_SETS = {
-  minimal: ['domestic', 'private', 'overseas'],
-  balanced: ['domestic', 'private', 'overseas', 'github', 'google', 'youtube', 'ai', 'telegram'],
+  // 按 RULE_CATEGORIES 顺序：ads, ai, bilibili, youtube, google, private, domestic, telegram, github...
+  minimal: ['private', 'domestic', 'overseas'],
+  balanced: ['ai', 'youtube', 'google', 'private', 'domestic', 'telegram', 'github', 'overseas'],
   comprehensive: RULE_CATEGORIES.map((rule) => rule.name),
 }

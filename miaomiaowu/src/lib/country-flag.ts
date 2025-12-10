@@ -21,6 +21,83 @@ export function countryCodeToFlag(countryCode: string): string {
 }
 
 /**
+ * 从旗帜 emoji 反向解析国家代码
+ * 例如 "🇺🇸" -> "US", "🇭🇰" -> "HK"
+ */
+export function flagToCountryCode(flag: string): string | null {
+  if (!flag) return null
+
+  const codePoints = [...flag].map(char => char.codePointAt(0) || 0)
+  if (codePoints.length !== 2) return null
+
+  // 区域指示符号范围: 0x1F1E6 (A) - 0x1F1FF (Z)
+  const isRegionalIndicator = (cp: number) => cp >= 0x1F1E6 && cp <= 0x1F1FF
+  if (!codePoints.every(isRegionalIndicator)) return null
+
+  return codePoints.map(cp => String.fromCharCode(cp - 127397)).join('')
+}
+
+/**
+ * 从节点名称提取地区 emoji 和国家代码
+ */
+export function extractRegionFromNodeName(nodeName: string): { emoji: string, countryCode: string } | null {
+  if (!nodeName) return null
+
+  const emojiRegex = /^([\u{1F1E6}-\u{1F1FF}]{2})/u
+  const match = nodeName.match(emojiRegex)
+  if (!match) return null
+
+  const emoji = match[1]
+  const countryCode = flagToCountryCode(emoji)
+  if (!countryCode) return null
+
+  return { emoji, countryCode }
+}
+
+/**
+ * 代理组名称到国家代码的映射
+ */
+export const REGION_GROUP_MAP: Record<string, string[]> = {
+  '🇭🇰 香港节点': ['HK'],
+  '🇺🇸 美国节点': ['US'],
+  '🇯🇵 日本节点': ['JP'],
+  '🇸🇬 新加坡节点': ['SG'],
+  '🇹🇼 台湾节点': ['TW'],
+  '🇰🇷 韩国节点': ['KR'],
+  '🇨🇦 加拿大节点': ['CA'],
+  '🇬🇧 英国节点': ['GB'],
+  '🇫🇷 法国节点': ['FR'],
+  '🇩🇪 德国节点': ['DE'],
+  '🇳🇱 荷兰节点': ['NL'],
+  '🇹🇷 土耳其节点': ['TR'],
+}
+
+/**
+ * 国家代码到代理组名称的反向映射
+ */
+export const COUNTRY_TO_GROUP_MAP: Record<string, string> = {
+  'HK': '🇭🇰 香港节点',
+  'US': '🇺🇸 美国节点',
+  'JP': '🇯🇵 日本节点',
+  'SG': '🇸🇬 新加坡节点',
+  'TW': '🇹🇼 台湾节点',
+  'KR': '🇰🇷 韩国节点',
+  'CA': '🇨🇦 加拿大节点',
+  'GB': '🇬🇧 英国节点',
+  'FR': '🇫🇷 法国节点',
+  'DE': '🇩🇪 德国节点',
+  'NL': '🇳🇱 荷兰节点',
+  'TR': '🇹🇷 土耳其节点',
+}
+
+/**
+ * 根据国家代码查找对应的代理组名称
+ */
+export function findRegionGroupName(countryCode: string): string | null {
+  return COUNTRY_TO_GROUP_MAP[countryCode.toUpperCase()] || null
+}
+
+/**
  * 检查字符串开头是否已有 emoji
  * 包括旗帜 emoji、表情符号等
  */

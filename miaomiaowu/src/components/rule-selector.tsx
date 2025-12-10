@@ -51,7 +51,12 @@ export function RuleSelector({
     if (selectedCategories.includes(categoryName)) {
       onCategoriesChange(selectedCategories.filter((c) => c !== categoryName))
     } else {
-      onCategoriesChange([...selectedCategories, categoryName])
+      // 添加新类别后，按 RULE_CATEGORIES 中的顺序排序
+      const newCategories = [...selectedCategories, categoryName]
+      const orderedCategories = RULE_CATEGORIES
+        .map(c => c.name)
+        .filter(name => newCategories.includes(name))
+      onCategoriesChange(orderedCategories)
     }
   }
 

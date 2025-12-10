@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Save, Layers, Activity, Upload } from 'lucide-react'
+import { Loader2, Save, Layers, Activity, Upload, MapPin } from 'lucide-react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
@@ -45,6 +45,7 @@ import { CustomRulesEditor } from '@/components/custom-rules-editor'
 import { RuleSelector } from '@/components/rule-selector'
 import type { PredefinedRuleSetType, CustomRule } from '@/lib/sublink/types'
 import type { ProxyConfig } from '@/lib/sublink/types'
+import { extractRegionFromNodeName, findRegionGroupName } from '@/lib/country-flag'
 import yaml from 'js-yaml'
 
 // 协议颜色映射
@@ -851,6 +852,177 @@ function SubscriptionGeneratorPage() {
     }
   }
 
+  // 自动按地区分组
+  const handleAutoGroupByRegion = () => {
+    if (!clashConfig) {
+      toast.error('请先生成配置')
+      return
+    }
+
+    try {
+      const parsedConfig = yaml.load(clashConfig) as any
+      let groups = parsedConfig['proxy-groups'] as any[]
+
+      if (!groups || groups.length === 0) {
+        toast.error('配置中没有找到代理组')
+        return
+      }
+
+      // 获取选中的节点名称
+      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      const nodeNames = selectedNodes.map(n => n.node_name)
+
+      // 按地区分类节点
+      const regionNodes: Record<string, string[]> = {}
+      const otherNodes: string[] = []
+
+      for (const nodeName of nodeNames) {
+        const regionInfo = extractRegionFromNodeName(nodeName)
+        if (regionInfo) {
+          const groupName = findRegionGroupName(regionInfo.countryCode)
+          if (groupName) {
+            if (!regionNodes[groupName]) regionNodes[groupName] = []
+            regionNodes[groupName].push(nodeName)
+          } else {
+            otherNodes.push(nodeName)
+          }
+        } else {
+          otherNodes.push(nodeName)
+        }
+      }
+
+      // 获取现有代理组名称
+      const existingGroupNames = new Set(groups.map(g => g.name))
+
+      // 创建缺失的地区代理组
+      const newGroups: any[] = []
+      const createdGroupNames: string[] = []
+      for (const [groupName, nodes] of Object.entries(regionNodes)) {
+        if (!existingGroupNames.has(groupName) && nodes.length > 0) {
+          newGroups.push({
+            name: groupName,
+            type: 'url-test',
+            url: 'https://www.gstatic.com/generate_204',
+            interval: 300,
+            tolerance: 50,
+            proxies: nodes
+          })
+          createdGroupNames.push(groupName)
+        }
+      }
+
+      // 如果有其他地区节点且不存在"其他地区"组，则创建
+      if (otherNodes.length > 0 && !existingGroupNames.has('🌐 其他地区')) {
+        newGroups.push({
+          name: '🌐 其他地区',
+          type: 'url-test',
+          url: 'https://www.gstatic.com/generate_204',
+          interval: 300,
+          tolerance: 50,
+          proxies: otherNodes
+        })
+        createdGroupNames.push('🌐 其他地区')
+      }
+
+      // 找到合适的位置插入新的地区代理组（在"节点选择"或"自动选择"之后）
+      if (newGroups.length > 0) {
+        const insertIndex = groups.findIndex(g =>
+          g.name === '🚀 节点选择' || g.name === '♻️ 自动选择'
+        )
+        if (insertIndex !== -1) {
+          // 找到最后一个"节点选择"或"自动选择"的位置
+          let lastSelectIndex = insertIndex
+          for (let i = insertIndex; i < groups.length; i++) {
+            if (groups[i].name === '🚀 节点选择' || groups[i].name === '♻️ 自动选择') {
+              lastSelectIndex = i
+            } else {
+              break
+            }
+          }
+          groups = [
+            ...groups.slice(0, lastSelectIndex + 1),
+            ...newGroups,
+            ...groups.slice(lastSelectIndex + 1)
+          ]
+        } else {
+          // 如果没找到，就放在开头
+          groups = [...newGroups, ...groups]
+        }
+      }
+
+      // 更新已存在的代理组
+      const updatedGroups = groups.map(group => {
+        // 地区代理组（已存在的）：添加对应地区的节点
+        if (regionNodes[group.name] && !createdGroupNames.includes(group.name)) {
+          // 保留原有的特殊节点（如 DIRECT），添加地区节点
+          const existingSpecialNodes = (group.proxies || []).filter((p: string) =>
+            ['DIRECT', 'REJECT', '♻️ 自动选择', '🚀 节点选择'].includes(p) ||
+            groups.some(g => g.name === p)
+          )
+          return {
+            ...group,
+            proxies: [...existingSpecialNodes, ...regionNodes[group.name]]
+          }
+        }
+        // "其他地区"组（已存在的）：添加未匹配的节点
+        if (group.name === '🌐 其他地区' && !createdGroupNames.includes('🌐 其他地区')) {
+          const existingSpecialNodes = (group.proxies || []).filter((p: string) =>
+            ['DIRECT', 'REJECT', '♻️ 自动选择', '🚀 节点选择'].includes(p) ||
+            groups.some(g => g.name === p)
+          )
+          return {
+            ...group,
+            proxies: [...existingSpecialNodes, ...otherNodes]
+          }
+        }
+        // "自动选择"组：添加所有节点
+        if (group.name === '♻️ 自动选择') {
+          return {
+            ...group,
+            proxies: [...nodeNames]
+          }
+        }
+        return group
+      })
+
+      // 更新配置
+      parsedConfig['proxy-groups'] = updatedGroups
+
+      // 确保 short-id 字段始终作为字符串
+      const processedConfig = ensureShortIdAsString(parsedConfig)
+
+      // 转换回 YAML
+      let newConfig = yaml.dump(processedConfig, {
+        lineWidth: -1,
+        noRefs: true,
+      })
+
+      // 修复 short-id 空值显示
+      newConfig = fixShortIdInYaml(newConfig)
+
+      setClashConfig(newConfig)
+      setHasManuallyGrouped(true)
+
+      // 统计分组结果
+      const stats = Object.entries(regionNodes)
+        .filter(([, nodes]) => nodes.length > 0)
+        .map(([name, nodes]) => `${name}: ${nodes.length}`)
+      if (otherNodes.length > 0) {
+        stats.push(`🌐 其他地区: ${otherNodes.length}`)
+      }
+
+      // 显示结果
+      if (createdGroupNames.length > 0) {
+        toast.success(`自动分组完成，新建代理组：${createdGroupNames.join('、')}`)
+      } else {
+        toast.success(`自动分组完成：${stats.join('、')}`)
+      }
+    } catch (error) {
+      console.error('自动分组失败:', error)
+      toast.error('自动分组失败')
+    }
+  }
+
   // 删除节点
   const handleRemoveProxy = (groupName: string, proxyIndex: number) => {
     setProxyGroups(groups =>
@@ -1399,6 +1571,10 @@ function SubscriptionGeneratorPage() {
                     </CardDescription>
                   </div>
                   <div className='flex gap-2'>
+                    <Button variant='outline' size='sm' className='flex-1' onClick={handleAutoGroupByRegion}>
+                      <MapPin className='mr-2 h-4 w-4' />
+                      按地区分组
+                    </Button>
                     <Button variant='outline' size='sm' className='flex-1' onClick={handleOpenGroupDialog}>
                       <Layers className='mr-2 h-4 w-4' />
                       手动分组
@@ -1419,6 +1595,10 @@ function SubscriptionGeneratorPage() {
                   />
                 </div>
                 <div className='mt-4 flex justify-end gap-2'>
+                  <Button variant='outline' onClick={handleAutoGroupByRegion}>
+                    <MapPin className='mr-2 h-4 w-4' />
+                    按地区分组
+                  </Button>
                   <Button variant='outline' onClick={handleOpenGroupDialog}>
                     <Layers className='mr-2 h-4 w-4' />
                     手动分组
