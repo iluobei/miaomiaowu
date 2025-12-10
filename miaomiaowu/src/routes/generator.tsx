@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { Twemoji } from '@/components/twemoji'
 import { ClashConfigBuilder } from '@/lib/sublink/clash-builder'
 import { CustomRulesEditor } from '@/components/custom-rules-editor'
 import { RuleSelector } from '@/components/rule-selector'
@@ -1166,7 +1167,7 @@ function SubscriptionGeneratorPage() {
                       },
                       {
                         header: '节点名称',
-                        cell: (node) => node.node_name,
+                        cell: (node) => <Twemoji>{node.node_name}</Twemoji>,
                         cellClassName: 'font-medium'
                       },
                       {
@@ -1227,7 +1228,7 @@ function SubscriptionGeneratorPage() {
                               onCheckedChange={() => handleToggleNode(node.id)}
                             />
                             <Badge variant='outline' className={`shrink-0 ${getProtocolColor(node.protocol)}`}>{node.protocol.toUpperCase()}</Badge>
-                            <div className='font-medium text-sm truncate flex-1 min-w-0'>{node.node_name}</div>
+                            <div className='font-medium text-sm truncate flex-1 min-w-0'><Twemoji>{node.node_name}</Twemoji></div>
                           </div>
 
                           {/* 第二行：标签 + 服务器地址 */}

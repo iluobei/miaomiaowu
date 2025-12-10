@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Twemoji } from '@/components/twemoji'
 
 interface ProxyGroup {
   name: string
@@ -290,7 +291,7 @@ export function MobileEditNodesDialog({
                               key={idx}
                               className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50"
                             >
-                              <span className="text-sm truncate flex-1">{proxy}</span>
+                              <span className="text-sm truncate flex-1"><Twemoji>{proxy}</Twemoji></span>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -402,7 +403,7 @@ export function MobileEditNodesDialog({
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{nodeName}</p>
+                          <p className="text-sm font-medium truncate"><Twemoji>{nodeName}</Twemoji></p>
                           {node?.tag && (
                             <Badge variant="secondary" className="text-xs mt-1">
                               {node.tag}

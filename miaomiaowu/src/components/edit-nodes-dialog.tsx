@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { GripVertical, X, Plus, Edit2, Check, Search } from 'lucide-react'
+import { Twemoji } from '@/components/twemoji'
 import {
   DndContext,
   DragOverlay,
@@ -559,7 +560,7 @@ export function EditNodesDialog({
         className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent cursor-move transition-colors duration-75'
       >
         <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-        <span className='text-sm truncate flex-1'>{proxy}</span>
+        <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
       </div>
     )
   }
@@ -774,7 +775,7 @@ export function EditNodesDialog({
           data-proxy-item
         >
           <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-          <span className='text-sm truncate flex-1'>{proxy}</span>
+          <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
           <Button
             variant='ghost'
             size='sm'
@@ -1047,7 +1048,7 @@ export function EditNodesDialog({
               {activeDragItem?.data.type === 'available-node' && (
                 <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
                   <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                  <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
+                  <span className='text-sm truncate'><Twemoji>{activeDragItem.data.nodeName}</Twemoji></span>
                 </div>
               )}
               {activeDragItem?.data.type === 'available-header' && (
@@ -1061,13 +1062,13 @@ export function EditNodesDialog({
               {activeDragItem?.data.type === 'group-node' && (
                 <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
                   <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                  <span className='text-sm truncate'>{activeDragItem.data.nodeName}</span>
+                  <span className='text-sm truncate'><Twemoji>{activeDragItem.data.nodeName}</Twemoji></span>
                 </div>
               )}
               {activeDragItem?.data.type === 'group-title' && (
                 <div className='flex items-center gap-2 p-2 rounded border bg-background shadow-2xl pointer-events-none'>
                   <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                  <span className='text-sm truncate'>{activeDragItem.data.groupName}</span>
+                  <span className='text-sm truncate'><Twemoji>{activeDragItem.data.groupName}</Twemoji></span>
                 </div>
               )}
               {activeDragItem?.data.type === 'group-card' && (() => {
@@ -1096,7 +1097,7 @@ export function EditNodesDialog({
                           className='flex items-center gap-2 p-2 rounded border bg-background'
                         >
                           <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-                          <span className='text-sm truncate flex-1'>{proxy}</span>
+                          <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
                         </div>
                       ))}
                       {(group?.proxies.length || 0) > 8 && (
