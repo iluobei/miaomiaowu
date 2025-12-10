@@ -607,6 +607,129 @@ func NewSyncExternalSubscriptionsHandler(repo *storage.TrafficRepository, subscr
 	}
 }
 
+// SyncSingleExternalSubscriptionHandler is an HTTP handler for syncing a single external subscription
+type SyncSingleExternalSubscriptionHandler struct {
+	repo         *storage.TrafficRepository
+	subscribeDir string
+}
+
+// NewSyncSingleExternalSubscriptionHandler creates a new handler for single subscription sync
+func NewSyncSingleExternalSubscriptionHandler(repo *storage.TrafficRepository, subscribeDir string) http.Handler {
+	return &SyncSingleExternalSubscriptionHandler{
+		repo:         repo,
+		subscribeDir: subscribeDir,
+	}
+}
+
+func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get username from context (set by auth middleware)
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get subscription ID from query parameter
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "缺少订阅ID参数",
+		})
+		return
+	}
+
+	subID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "无效的订阅ID",
+		})
+		return
+	}
+
+	log.Printf("[Sync API] Single subscription sync triggered by user: %s, subscription ID: %d", username, subID)
+
+	// Get user settings
+	userSettings, err := h.repo.GetUserSettings(r.Context(), username)
+	if err != nil {
+		log.Printf("[Sync API] 获取用户设置失败，使用默认设置: %v", err)
+		userSettings.MatchRule = "node_name"
+		userSettings.SyncScope = "saved_only"
+		userSettings.KeepNodeName = true
+	}
+
+	// Get the specific subscription
+	externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
+	if err != nil {
+		log.Printf("[Sync API] Failed to list external subscriptions: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "获取订阅列表失败",
+		})
+		return
+	}
+
+	// Find the subscription by ID
+	var targetSub *storage.ExternalSubscription
+	for i := range externalSubs {
+		if externalSubs[i].ID == subID {
+			targetSub = &externalSubs[i]
+			break
+		}
+	}
+
+	if targetSub == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "未找到指定订阅",
+		})
+		return
+	}
+
+	log.Printf("[Sync API] 开始同步单个订阅: %s (ID: %d)", targetSub.Name, targetSub.ID)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	nodeCount, updatedSub, err := syncSingleExternalSubscription(r.Context(), client, h.repo, h.subscribeDir, username, *targetSub, userSettings)
+	if err != nil {
+		log.Printf("[Sync API] Failed to sync subscription %s: %v", targetSub.Name, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("同步失败: %v", err),
+		})
+		return
+	}
+
+	// Update last sync time and node count
+	now := time.Now()
+	updatedSub.LastSyncAt = &now
+	updatedSub.NodeCount = nodeCount
+	if err := h.repo.UpdateExternalSubscription(r.Context(), updatedSub); err != nil {
+		log.Printf("[Sync API] 更新订阅 %s 的同步时间失败: %v", targetSub.Name, err)
+	}
+
+	log.Printf("[Sync API] Successfully synced subscription %s, synced %d nodes", targetSub.Name, nodeCount)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{
+		"message":    fmt.Sprintf("订阅 %s 同步成功", targetSub.Name),
+		"node_count": nodeCount,
+	})
+}
+
 func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

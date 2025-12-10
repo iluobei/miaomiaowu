@@ -317,6 +317,27 @@ function SubscribeFilesPage() {
     },
   })
 
+  // 同步单个外部订阅
+  const [syncingSingleId, setSyncingSingleId] = useState<number | null>(null)
+  const syncSingleExternalSubMutation = useMutation({
+    mutationFn: async (id: number) => {
+      setSyncingSingleId(id)
+      const response = await api.post(`/api/admin/sync-external-subscription?id=${id}`)
+      return response.data
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['all-nodes-with-tags'] })
+      toast.success(data.message || '订阅同步成功')
+      setSyncingSingleId(null)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '同步失败')
+      setSyncingSingleId(null)
+    },
+  })
+
   // 获取文件内容
   const fileContentQuery = useQuery({
     queryKey: ['rule-file', editingFile?.filename],
@@ -1462,30 +1483,41 @@ function SubscribeFilesPage() {
                     {
                       header: '操作',
                       cell: (sub) => (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant='ghost' size='sm' disabled={deleteExternalSubMutation.isPending}>
-                              删除
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>确认删除</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
-                                删除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <div className='flex items-center gap-1'>
+                          <Button
+                            variant='ghost'
+                            size='sm'
+                            onClick={() => syncSingleExternalSubMutation.mutate(sub.id)}
+                            disabled={syncingSingleId === sub.id || syncExternalSubsMutation.isPending}
+                          >
+                            <RefreshCw className={`h-4 w-4 ${syncingSingleId === sub.id ? 'animate-spin' : ''}`} />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant='ghost' size='sm' className='text-destructive hover:text-destructive' disabled={deleteExternalSubMutation.isPending}>
+                                <Trash2 className='h-4 w-4' />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
+                                  删除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       ),
                       headerClassName: 'text-center',
-                      cellClassName: 'text-center'
+                      cellClassName: 'text-center',
+                      width: '100px'
                     }
                   ] as DataTableColumn<ExternalSubscription>[]}
 
@@ -1520,33 +1552,47 @@ function SubscribeFilesPage() {
                           </Tooltip>
                           <div className='font-medium text-sm truncate'>{sub.name}</div>
                         </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant='outline'
-                              size='icon'
-                              className='size-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10'
-                              disabled={deleteExternalSubMutation.isPending}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Trash2 className='size-4' />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>确认删除</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
-                                删除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <div className='flex items-center gap-1'>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='size-8 shrink-0'
+                            disabled={syncingSingleId === sub.id || syncExternalSubsMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              syncSingleExternalSubMutation.mutate(sub.id)
+                            }}
+                          >
+                            <RefreshCw className={`size-4 ${syncingSingleId === sub.id ? 'animate-spin' : ''}`} />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant='outline'
+                                size='icon'
+                                className='size-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+                                disabled={deleteExternalSubMutation.isPending}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Trash2 className='size-4' />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  确定要删除外部订阅 "{sub.name}" 吗？此操作不会删除已同步的节点，但会停止后续同步。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteExternalSubMutation.mutate(sub.id)}>
+                                  删除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     )},
                     fields: [
