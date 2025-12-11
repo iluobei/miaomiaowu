@@ -1744,7 +1744,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               </div>
                               {/* 节点名称 */}
                               {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-2' onClick={(e) => e.stopPropagation()}>
+                                <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
                                   <Input
                                     value={editingNode.value}
                                     onChange={(event) => handleNameEditChange(event.target.value)}
@@ -1757,25 +1757,25 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         handleNameEditCancel()
                                       }
                                     }}
-                                    className='h-8'
+                                    className='h-7 flex-1 min-w-0'
                                     autoFocus
                                   />
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-emerald-600 shrink-0'
+                                    className='size-7 text-emerald-600 shrink-0'
                                     onClick={() => handleNameEditSubmit(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
-                                    <Check className='size-4' />
+                                    <Check className='size-3.5' />
                                   </Button>
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-muted-foreground shrink-0'
+                                    className='size-7 text-muted-foreground shrink-0'
                                     onClick={handleNameEditCancel}
                                   >
-                                    <X className='size-4' />
+                                    <X className='size-3.5' />
                                   </Button>
                                 </div>
                               ) : (
@@ -2034,44 +2034,54 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 <Badge variant='destructive'>解析失败</Badge>
                               )}
                             </TableCell>
-                            <TableCell className='font-medium'>
+                            <TableCell className='font-medium min-w-[200px] max-w-[300px]'>
                               {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-2'>
-                                  <Input
-                                    value={editingNode.value}
-                                    onChange={(e) => handleNameEditChange(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault()
-                                        handleNameEditSubmit(node)
-                                      } else if (e.key === 'Escape') {
-                                        e.preventDefault()
-                                        handleNameEditCancel()
-                                      }
-                                    }}
-                                    className='h-8 flex-1'
-                                    autoFocus
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-8 text-emerald-600'
-                                    onClick={() => handleNameEditSubmit(node)}
-                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
-                                  >
-                                    <Check className='size-4' />
-                                  </Button>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-8 text-muted-foreground'
-                                    onClick={handleNameEditCancel}
-                                  >
-                                    <X className='size-4' />
-                                  </Button>
-                                  {node.isSaved && (
-                                    <Check className='size-4 text-green-600' />
+                                <div className='min-w-0'>
+                                  <div className='flex items-center gap-1'>
+                                    <Input
+                                      value={editingNode.value}
+                                      onChange={(e) => handleNameEditChange(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault()
+                                          handleNameEditSubmit(node)
+                                        } else if (e.key === 'Escape') {
+                                          e.preventDefault()
+                                          handleNameEditCancel()
+                                        }
+                                      }}
+                                      className='h-7 flex-1 min-w-0'
+                                      autoFocus
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <Button
+                                      variant='ghost'
+                                      size='icon'
+                                      className='size-7 text-emerald-600 shrink-0'
+                                      onClick={() => handleNameEditSubmit(node)}
+                                      disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                    >
+                                      <Check className='size-3.5' />
+                                    </Button>
+                                    <Button
+                                      variant='ghost'
+                                      size='icon'
+                                      className='size-7 text-muted-foreground shrink-0'
+                                      onClick={handleNameEditCancel}
+                                    >
+                                      <X className='size-3.5' />
+                                    </Button>
+                                  </div>
+                                  {/* 编辑时也保留服务器地址显示，避免行高变化 */}
+                                  {node.parsed && (
+                                    <div className='flex items-center gap-1 mt-0.5 text-xs text-muted-foreground'>
+                                      <span className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</span>
+                                      {node.parsed.network && node.parsed.network !== 'tcp' && (
+                                        <Badge variant='outline' className='text-xs shrink-0'>
+                                          {node.parsed.network}
+                                        </Badge>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               ) : (
@@ -2322,9 +2332,9 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 <Badge variant='destructive'>解析失败</Badge>
                               )}
                             </TableCell>
-                            <TableCell className='font-medium'>
+                            <TableCell className='font-medium min-w-[200px] max-w-[300px]'>
                               {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-2'>
+                                <div className='flex items-center gap-1'>
                                   <Input
                                     value={editingNode.value}
                                     onChange={(event) => handleNameEditChange(event.target.value)}
@@ -2337,29 +2347,26 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                         handleNameEditCancel()
                                       }
                                     }}
-                                    className='h-8 w-48'
+                                    className='h-7 flex-1 min-w-0'
                                     autoFocus
                                   />
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-emerald-600'
+                                    className='size-7 text-emerald-600 shrink-0'
                                     onClick={() => handleNameEditSubmit(node)}
                                     disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
                                   >
-                                    <Check className='size-4' />
+                                    <Check className='size-3.5' />
                                   </Button>
                                   <Button
                                     variant='ghost'
                                     size='icon'
-                                    className='size-8 text-muted-foreground'
+                                    className='size-7 text-muted-foreground shrink-0'
                                     onClick={handleNameEditCancel}
                                   >
-                                    <X className='size-4' />
+                                    <X className='size-3.5' />
                                   </Button>
-                                  {node.isSaved && (
-                                    <Check className='size-4 text-green-600' />
-                                  )}
                                 </div>
                               ) : (
                                 <div className='flex items-center gap-2 min-w-0'>
