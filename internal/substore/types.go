@@ -11,7 +11,8 @@ type ProduceOptions struct {
 	LocalPort               int
 	DefaultNameserver       []string
 	Nameserver              []string
-	// Add other common options as needed
+	// FullConfig contains the complete original config for producers that need to output full config (e.g., Stash)
+	FullConfig map[string]interface{}
 }
 
 // Producer is the interface for all proxy format producers

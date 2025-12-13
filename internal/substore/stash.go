@@ -33,29 +33,29 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 	}
 
 	supportedSSCiphers := map[string]bool{
-		"aes-128-gcm":               true,
-		"aes-192-gcm":               true,
-		"aes-256-gcm":               true,
-		"aes-128-cfb":               true,
-		"aes-192-cfb":               true,
-		"aes-256-cfb":               true,
-		"aes-128-ctr":               true,
-		"aes-192-ctr":               true,
-		"aes-256-ctr":               true,
-		"rc4-md5":                   true,
-		"chacha20-ietf":             true,
-		"xchacha20":                 true,
-		"chacha20-ietf-poly1305":    true,
-		"xchacha20-ietf-poly1305":   true,
-		"2022-blake3-aes-128-gcm":   true,
-		"2022-blake3-aes-256-gcm":   true,
+		"aes-128-gcm":             true,
+		"aes-192-gcm":             true,
+		"aes-256-gcm":             true,
+		"aes-128-cfb":             true,
+		"aes-192-cfb":             true,
+		"aes-256-cfb":             true,
+		"aes-128-ctr":             true,
+		"aes-192-ctr":             true,
+		"aes-256-ctr":             true,
+		"rc4-md5":                 true,
+		"chacha20-ietf":           true,
+		"xchacha20":               true,
+		"chacha20-ietf-poly1305":  true,
+		"xchacha20-ietf-poly1305": true,
+		"2022-blake3-aes-128-gcm": true,
+		"2022-blake3-aes-256-gcm": true,
 	}
 
 	supportedVMessCiphers := map[string]bool{
-		"auto":               true,
-		"aes-128-gcm":        true,
-		"chacha20-poly1305":  true,
-		"none":               true,
+		"auto":              true,
+		"aes-128-gcm":       true,
+		"chacha20-poly1305": true,
+		"none":              true,
 	}
 
 	var result []Proxy
@@ -74,7 +74,8 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		if proxyType == "ss" {
 			cipher := GetString(proxy, "cipher")
 			if !supportedSSCiphers[cipher] {
-				shouldSkip = true
+				// 不跳过不支持的cipher 节点, 让stash报错去吧
+				// shouldSkip = true
 			}
 		}
 
@@ -427,10 +428,88 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		return result, nil
 	}
 
-	// Generate YAML string
+	// Generate full Stash config
+	return p.generateFullConfig(result, opts), nil
+}
+
+// 使用预先定义的模板生成stash配置, 因为stash不兼容clash配置
+// proxy-groups: #{proxy-groups}
+// proxies: #{proxies}
+// rules: #{rules}
+// script:
+//
+//	shortcuts:
+//	  quic: network == 'udp' and dst_port == 443
+//
+// dns:
+//
+//	default-nameserver:
+//	  #{default-nameserver}
+//	nameserver:
+//	  #{nameserver}
+//	skip-cert-verify: true
+//	fake-ip-filter:
+//	  - '+.stun.*.*'
+//	  - '+.stun.*.*.*'
+//	  - '+.stun.*.*.*.*'
+//	  - '+.stun.*.*.*.*.*'
+//	  # Google Voices
+//	  - 'lens.l.google.com'
+//	  # Nintendo Switch
+//	  - '*.n.n.srv.nintendo.net'
+//
+//	  # PlayStation
+//	  - '+.stun.playstation.net'
+//	  # XBox
+//	  - 'xbox.*.*.microsoft.com'
+//	  - '*.*.xboxlive.com'
+//	  # Microsoft
+//	  - '*.msftncsi.com'
+//	  - '*.msftconnecttest.com'
+//
+// log-level: warning
+// mode: rule
+func (p *StashProducer) generateFullConfig(proxies []Proxy, opts *ProduceOptions) string {
 	var sb strings.Builder
+
+	// Get original config fields if available
+	var proxyGroups, rules interface{}
+	var defaultNameserver, nameserver []interface{}
+
+	if opts != nil && opts.FullConfig != nil {
+		proxyGroups = opts.FullConfig["proxy-groups"]
+		rules = opts.FullConfig["rules"]
+
+		// Extract DNS settings
+		if dns, ok := opts.FullConfig["dns"].(map[string]interface{}); ok {
+			if ns, ok := dns["default-nameserver"].([]interface{}); ok {
+				defaultNameserver = ns
+			}
+			if ns, ok := dns["nameserver"].([]interface{}); ok {
+				nameserver = ns
+			}
+		}
+	}
+
+	// Write proxy-groups
+	sb.WriteString("proxy-groups:\n")
+	if proxyGroups != nil {
+		if groups, ok := proxyGroups.([]interface{}); ok {
+			for _, group := range groups {
+				groupBytes, err := json.Marshal(group)
+				if err != nil {
+					continue
+				}
+				sb.WriteString("  - ")
+				sb.Write(groupBytes)
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	// Write proxies
 	sb.WriteString("proxies:\n")
-	for _, proxy := range result {
+	for _, proxy := range proxies {
 		jsonBytes, err := json.Marshal(proxy)
 		if err != nil {
 			continue
@@ -440,7 +519,72 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		sb.WriteString("\n")
 	}
 
-	return sb.String(), nil
+	// Write rules
+	sb.WriteString("rules:\n")
+	if rules != nil {
+		if ruleList, ok := rules.([]interface{}); ok {
+			for _, rule := range ruleList {
+				if ruleStr, ok := rule.(string); ok {
+					sb.WriteString("  - ")
+					sb.WriteString(ruleStr)
+					sb.WriteString("\n")
+				}
+			}
+		}
+	}
+
+	// Write script section
+	sb.WriteString("script:\n")
+	sb.WriteString("  shortcuts:\n")
+	sb.WriteString("    quic: network == 'udp' and dst_port == 443\n")
+
+	// Write DNS section
+	sb.WriteString("dns:\n")
+
+	// default-nameserver
+	sb.WriteString("  default-nameserver:\n")
+	if len(defaultNameserver) > 0 {
+		for _, ns := range defaultNameserver {
+			if nsStr, ok := ns.(string); ok {
+				sb.WriteString("    - ")
+				sb.WriteString(nsStr)
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	// nameserver
+	sb.WriteString("  nameserver:\n")
+	if len(nameserver) > 0 {
+		for _, ns := range nameserver {
+			if nsStr, ok := ns.(string); ok {
+				sb.WriteString("    - ")
+				sb.WriteString(nsStr)
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	// Fixed DNS settings for Stash
+	sb.WriteString("  skip-cert-verify: true\n")
+	sb.WriteString("  fake-ip-filter:\n")
+	sb.WriteString("    - '+.stun.*.*'\n")
+	sb.WriteString("    - '+.stun.*.*.*'\n")
+	sb.WriteString("    - '+.stun.*.*.*.*'\n")
+	sb.WriteString("    - '+.stun.*.*.*.*.*'\n")
+	sb.WriteString("    - 'lens.l.google.com'\n")
+	sb.WriteString("    - '*.n.n.srv.nintendo.net'\n")
+	sb.WriteString("    - '+.stun.playstation.net'\n")
+	sb.WriteString("    - 'xbox.*.*.microsoft.com'\n")
+	sb.WriteString("    - '*.*.xboxlive.com'\n")
+	sb.WriteString("    - '*.msftncsi.com'\n")
+	sb.WriteString("    - '*.msftconnecttest.com'\n")
+
+	// Write other fixed settings
+	sb.WriteString("log-level: warning\n")
+	sb.WriteString("mode: rule\n")
+
+	return sb.String()
 }
 
 func (p *StashProducer) isSupportedType(proxyType string) bool {

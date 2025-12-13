@@ -809,8 +809,11 @@ func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType st
 		return nil, fmt.Errorf("unsupported client type '%s': %w", clientType, err)
 	}
 
-	// 调用Produce方法生成转换后的节点, 这里不处理原substore的internal模式与额外菜蔬
-	result, err := producer.Produce(proxies, "", nil)
+	// 调用Produce方法生成转换后的节点, 传入完整配置供需要的 Producer 使用（如 Stash）
+	opts := &substore.ProduceOptions{
+		FullConfig: config,
+	}
+	result, err := producer.Produce(proxies, "", opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to produce subscription: %w", err)
 	}
