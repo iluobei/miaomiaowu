@@ -141,7 +141,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		CacheExpireMinutes: cacheExpireMinutes,
 		SyncTraffic:        payload.SyncTraffic,
 		EnableProbeBinding: payload.EnableProbeBinding,
-		CustomRulesEnabled: true, // 自定义规则始���启用
+		CustomRulesEnabled: true, // 自定义规则始终启用
 		EnableShortLink:    payload.EnableShortLink,
 	}
 

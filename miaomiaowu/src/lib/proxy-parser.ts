@@ -214,9 +214,149 @@ function parseShadowsocksR(url: string): ProxyNode | null {
 }
 
 /**
+ * 解析 SS plugin 参数
+ * plugin 格式: plugin-name;param1=value1;param2=value2
+ * 例如: obfs-local;obfs=http;obfs-host=example.com
+ *
+ * 支持的 plugin 类型:
+ * - obfs/obfs-local: obfs=xxx -> mode, obfs-host -> host
+ * - v2ray-plugin: mode, tls, host, path, mux, headers, fingerprint, skip-cert-verify, v2ray-http-upgrade
+ * - gost-plugin: 类似 v2ray-plugin
+ * - shadow-tls: host, password, version, client-fingerprint/fp
+ * - restls: host, password, version-hint, restls-script, client-fingerprint/fp
+ * - kcptun: key, crypt, mode, conn, autoexpire, scavengettl, mtu, sndwnd, rcvwnd, datashard, parityshard, dscp, nocomp, acknodelay, nodelay, interval, resend, sockbuf, smuxver, smuxbuf, streambuf, keepalive
+ */
+function parseSSPlugin(pluginStr: string): { plugin: string; pluginOpts: Record<string, unknown>; clientFingerprint?: string } | null {
+  if (!pluginStr) return null
+
+  // 先进行 URL 解码
+  const decoded = decodeURIComponent(pluginStr)
+
+  // 用 ; 分割参数
+  const parts = decoded.split(';')
+  if (parts.length === 0) return null
+
+  // 第一个部分是 plugin 名称
+  const pluginName = parts[0].trim()
+  if (!pluginName) return null
+
+  // 标准化 plugin 名称
+  let plugin = pluginName
+  if (pluginName === 'obfs-local' || pluginName === 'simple-obfs') {
+    plugin = 'obfs'
+  }
+
+  const pluginOpts: Record<string, unknown> = {}
+  let clientFingerprint: string | undefined
+
+  // 解析剩余参数
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i].trim()
+    if (!part) continue
+
+    const eqIndex = part.indexOf('=')
+    if (eqIndex === -1) continue
+
+    const key = part.substring(0, eqIndex).trim()
+    const value = part.substring(eqIndex + 1).trim()
+
+    // 根据 plugin 类型处理参数
+    switch (plugin) {
+      case 'obfs':
+        if (key === 'obfs') {
+          pluginOpts.mode = value
+        } else if (key === 'obfs-host' || key === 'host') {
+          pluginOpts.host = value
+        }
+        break
+
+      case 'v2ray-plugin':
+      case 'gost-plugin':
+        if (key === 'mode') {
+          pluginOpts.mode = value
+        } else if (key === 'tls') {
+          pluginOpts.tls = value === 'true' || value === '1'
+        } else if (key === 'host') {
+          pluginOpts.host = value
+        } else if (key === 'path') {
+          pluginOpts.path = value
+        } else if (key === 'mux') {
+          pluginOpts.mux = value === 'true' || value === '1'
+        } else if (key === 'fingerprint') {
+          pluginOpts.fingerprint = value
+        } else if (key === 'skip-cert-verify') {
+          pluginOpts['skip-cert-verify'] = value === 'true' || value === '1'
+        } else if (key === 'v2ray-http-upgrade') {
+          pluginOpts['v2ray-http-upgrade'] = value === 'true' || value === '1'
+        } else if (key.startsWith('headers')) {
+          // headers 参数处理 (headers.Custom=value)
+          if (!pluginOpts.headers) {
+            pluginOpts.headers = {}
+          }
+          const headerKey = key.replace(/^headers\.?/, '') || 'custom'
+          ;(pluginOpts.headers as Record<string, string>)[headerKey] = value
+        }
+        break
+
+      case 'shadow-tls':
+        if (key === 'host') {
+          pluginOpts.host = value
+        } else if (key === 'password') {
+          pluginOpts.password = value
+        } else if (key === 'version') {
+          pluginOpts.version = parseInt(value) || 2
+        } else if (key === 'fp' || key === 'client-fingerprint') {
+          // shadow-tls 的 client-fingerprint 需要放到顶层
+          clientFingerprint = value
+        }
+        break
+
+      case 'restls':
+        if (key === 'host') {
+          pluginOpts.host = value
+        } else if (key === 'password') {
+          pluginOpts.password = value
+        } else if (key === 'version-hint') {
+          pluginOpts['version-hint'] = value
+        } else if (key === 'restls-script') {
+          pluginOpts['restls-script'] = value
+        } else if (key === 'fp' || key === 'client-fingerprint') {
+          // restls 的 client-fingerprint 需要放到顶层
+          clientFingerprint = value
+        }
+        break
+
+      case 'kcptun':
+        // kcptun 参数直接映射
+        if (['conn', 'autoexpire', 'scavengettl', 'mtu', 'sndwnd', 'rcvwnd',
+             'datashard', 'parityshard', 'dscp', 'nodelay', 'interval',
+             'resend', 'sockbuf', 'smuxver', 'smuxbuf', 'streambuf', 'keepalive'].includes(key)) {
+          pluginOpts[key] = parseInt(value)
+        } else if (['nocomp', 'acknodelay'].includes(key)) {
+          pluginOpts[key] = value === 'true' || value === '1'
+        } else if (['key', 'crypt', 'mode'].includes(key)) {
+          pluginOpts[key] = value
+        }
+        break
+
+      default:
+        // 未知 plugin 类型，直接映射参数
+        pluginOpts[key] = value
+    }
+  }
+
+  return {
+    plugin,
+    pluginOpts,
+    clientFingerprint
+  }
+}
+
+/**
  * 解析 Shadowsocks 协议
  * 格式: ss://base64(method:password)@server:port#name
  * 或: ss://base64(method:password@server:port)#name
+ * 或: ss://base64(method:password)@server:port/?plugin=xxx#name
  */
 function parseShadowsocks(url: string): ProxyNode | null {
   try {
@@ -230,6 +370,18 @@ function parseShadowsocks(url: string): ProxyNode | null {
       mainPart = parts[0]
       name = decodeURIComponent(parts[1])
     }
+
+    // 提取查询参数（处理 ?plugin=xxx&group=xxx 格式）
+    let queryParams: Record<string, string> = {}
+    if (mainPart.includes('?')) {
+      const qIndex = mainPart.indexOf('?')
+      const queryString = mainPart.substring(qIndex + 1)
+      mainPart = mainPart.substring(0, qIndex)
+      queryParams = parseQueryString(queryString)
+    }
+
+    // 去掉 mainPart 尾部的 /
+    mainPart = mainPart.replace(/\/$/, '')
 
     let server = ''
     let port = 0
@@ -285,6 +437,21 @@ function parseShadowsocks(url: string): ProxyNode | null {
 
     // SS 协议默认支持 UDP
     node.udp = true
+
+    // 解析 plugin 参数
+    if (queryParams.plugin) {
+      const pluginInfo = parseSSPlugin(queryParams.plugin)
+      if (pluginInfo) {
+        node.plugin = pluginInfo.plugin
+        if (Object.keys(pluginInfo.pluginOpts).length > 0) {
+          node['plugin-opts'] = pluginInfo.pluginOpts
+        }
+        // shadow-tls 和 restls 的 client-fingerprint 需要放到顶层
+        if (pluginInfo.clientFingerprint) {
+          node['client-fingerprint'] = pluginInfo.clientFingerprint
+        }
+      }
+    }
 
     return node
   } catch (e) {
@@ -869,7 +1036,8 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     // 'version', // Snell 版本字段，需单独处理
     // 已处理的参数
     'security', // 已转换为 tls 和 reality-opts
-    'fingerprint' // 已转换为 client-fingerprint
+    'fingerprint', // 已转换为 client-fingerprint
+    'client-fingerprint' // SS plugin 中的 client-fingerprint，已单独处理
   ])
 
   const clash: ClashProxy = {
@@ -969,8 +1137,8 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
   }
 
   // Client Fingerprint (注意是 client-fingerprint 不是 fingerprint)
-  if (node.fp || node.fingerprint) {
-    clash['client-fingerprint'] = (node.fingerprint || node.fp) as string
+  if (node.fp || node.fingerprint || node['client-fingerprint']) {
+    clash['client-fingerprint'] = (node['client-fingerprint'] || node.fingerprint || node.fp) as string
   }
 
   // 网络类型
