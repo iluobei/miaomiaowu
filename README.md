@@ -244,6 +244,9 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.2.8 (2025-12-14)
+- 🌈 支持导出带规则的stash配置
+- 🛠️ fix:ss plugin参数没有解析
 ### v0.2.7 (2025-12-11)
 - 🌈 调整节点列表的分辨率自适应
 - 🌈 支持给节点名称添加地区emoji
