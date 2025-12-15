@@ -1841,6 +1841,25 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     <TooltipContent>添加地区 emoji</TooltipContent>
                                   </Tooltip>
                                 )}
+                                {node.isSaved && node.dbId && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant='ghost'
+                                        size='icon'
+                                        className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                        onClick={() => {
+                                          setTempSubSingleNodeId(node.dbId!)
+                                          setTempSubUrl('')
+                                          setTempSubDialogOpen(true)
+                                        }}
+                                      >
+                                        <Link2 className='size-4' />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>生成临时订阅</TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
                             )}
                           </div>
