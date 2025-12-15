@@ -253,7 +253,7 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 	}
 
 	uri := fmt.Sprintf("vless://%s@%s:%d?%s#%s",
-		uuid, server, port, params.Encode(), url.QueryEscape(name))
+		uuid, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
@@ -319,7 +319,7 @@ func (p *URIProducer) encodeTrojan(proxy Proxy) (string, error) {
 	}
 
 	uri := fmt.Sprintf("trojan://%s@%s:%d?%s#%s",
-		password, server, port, params.Encode(), url.QueryEscape(name))
+		password, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
@@ -337,7 +337,7 @@ func (p *URIProducer) encodeShadowsocks(proxy Proxy) (string, error) {
 	// Remove padding
 	encoded = strings.TrimRight(encoded, "=")
 
-	uri := fmt.Sprintf("ss://%s@%s:%d#%s", encoded, server, port, url.QueryEscape(name))
+	uri := fmt.Sprintf("ss://%s@%s:%d#%s", encoded, server, port, url.PathEscape(name))
 	return uri, nil
 }
 
@@ -402,7 +402,7 @@ func (p *URIProducer) encodeHysteria2(proxy Proxy) (string, error) {
 	}
 
 	uri := fmt.Sprintf("hysteria2://%s@%s:%d?%s#%s",
-		password, server, port, params.Encode(), url.QueryEscape(name))
+		password, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
@@ -451,7 +451,7 @@ func (p *URIProducer) encodeHysteria(proxy Proxy) (string, error) {
 	}
 
 	uri := fmt.Sprintf("hysteria://%s@%s:%d?%s#%s",
-		password, server, port, params.Encode(), url.QueryEscape(name))
+		password, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
@@ -496,7 +496,7 @@ func (p *URIProducer) encodeTUIC(proxy Proxy) (string, error) {
 	}
 
 	uri := fmt.Sprintf("tuic://%s@%s:%d?%s#%s",
-		uuid, server, port, params.Encode(), url.QueryEscape(name))
+		uuid, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
@@ -513,6 +513,6 @@ func (p *URIProducer) encodeSOCKS5(proxy Proxy) (string, error) {
 		auth = fmt.Sprintf("%s:%s@", username, password)
 	}
 
-	uri := fmt.Sprintf("socks5://%s%s:%d#%s", auth, server, port, url.QueryEscape(name))
+	uri := fmt.Sprintf("socks5://%s%s:%d#%s", auth, server, port, url.PathEscape(name))
 	return uri, nil
 }
