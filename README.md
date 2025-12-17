@@ -244,6 +244,10 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.2.9 (2025-12-17)
+- 🛠️ fix:hysteria2协议缺少obfs-password参数
+- 🛠️ fix:手机端不显示临时订阅按钮
+- 🛠️ 🛠️ fix:节点名称空格编码成+号[#31](https://github.com/Jimleerx/miaomiaowu/issues/31)
 ### v0.2.8 (2025-12-14)
 - 🌈 支持导出带规则的stash配置
 - 🛠️ fix:ss plugin参数没有解析
