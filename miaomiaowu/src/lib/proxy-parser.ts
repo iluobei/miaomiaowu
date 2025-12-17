@@ -755,7 +755,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         node.auth = password // 内部临时字段，用于传递认证信息
         // node.ports = queryParams.mport || port.toString()
         node.obfs = queryParams.obfs
-        node['obfs-password'] = queryParams.obfsParam
+        node['obfs-password'] = queryParams['obfs-password'] || queryParams.obfsParam
         node.sni = queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server)
         node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : undefined
         // insecure=1 表示跳过证书验证
