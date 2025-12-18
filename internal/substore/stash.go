@@ -477,11 +477,17 @@ func (p *StashProducer) generateFullConfig(proxies []Proxy, opts *ProduceOptions
 
 	// Get original config fields if available
 	var proxyGroups, rules interface{}
+	var ruleProviders map[string]interface{}
 	var defaultNameserver, nameserver []interface{}
 
 	if opts != nil && opts.FullConfig != nil {
 		proxyGroups = opts.FullConfig["proxy-groups"]
 		rules = opts.FullConfig["rules"]
+
+		// Extract rule-providers
+		if rp, ok := opts.FullConfig["rule-providers"].(map[string]interface{}); ok {
+			ruleProviders = rp
+		}
 
 		// Extract DNS settings
 		if dns, ok := opts.FullConfig["dns"].(map[string]interface{}); ok {
@@ -491,6 +497,67 @@ func (p *StashProducer) generateFullConfig(proxies []Proxy, opts *ProduceOptions
 			if ns, ok := dns["nameserver"].([]interface{}); ok {
 				nameserver = ns
 			}
+		}
+	}
+
+	// Collect RULE-SET names from rules and build rule-providers for Stash
+	ruleSetNames := make(map[string]bool)
+	if rules != nil {
+		if ruleList, ok := rules.([]interface{}); ok {
+			for _, rule := range ruleList {
+				if ruleStr, ok := rule.(string); ok {
+					// Parse RULE-SET,ruleset-name,policy format
+					parts := strings.SplitN(ruleStr, ",", 3)
+					if len(parts) >= 2 && strings.ToUpper(parts[0]) == "RULE-SET" {
+						ruleSetName := strings.TrimSpace(parts[1])
+						ruleSetNames[ruleSetName] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Build final rule-providers map for Stash (convert mrs to yaml format)
+	finalRuleProviders := make(map[string]map[string]interface{})
+	for name := range ruleSetNames {
+		if ruleProviders != nil {
+			if existing, ok := ruleProviders[name].(map[string]interface{}); ok {
+				// Provider exists, check if it needs conversion from mrs to yaml
+				provider := make(map[string]interface{})
+				for k, v := range existing {
+					provider[k] = v
+				}
+
+				// Check format and URL
+				format, _ := provider["format"].(string)
+				url, _ := provider["url"].(string)
+
+				// Convert mrs format to yaml format
+				if format == "mrs" || strings.HasSuffix(url, ".mrs") {
+					provider["format"] = "yaml"
+					// Replace .mrs extension with .yaml in URL
+					if strings.HasSuffix(url, ".mrs") {
+						provider["url"] = strings.TrimSuffix(url, ".mrs") + ".yaml"
+					}
+					// Update path as well
+					if path, ok := provider["path"].(string); ok && strings.HasSuffix(path, ".mrs") {
+						provider["path"] = strings.TrimSuffix(path, ".mrs") + ".yaml"
+					}
+				}
+
+				finalRuleProviders[name] = provider
+				continue
+			}
+		}
+
+		// Provider doesn't exist, create a new one with geosite URL
+		finalRuleProviders[name] = map[string]interface{}{
+			"type":     "http",
+			"format":   "yaml",
+			"behavior": "domain",
+			"url":      "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/" + name + ".yaml",
+			"path":     "./ruleset/" + name + ".yaml",
+			"interval": 86400,
 		}
 	}
 
@@ -520,6 +587,61 @@ func (p *StashProducer) generateFullConfig(proxies []Proxy, opts *ProduceOptions
 		sb.WriteString("  - ")
 		sb.Write(jsonBytes)
 		sb.WriteString("\n")
+	}
+
+	// Write rule-providers (if any RULE-SET rules exist)
+	if len(finalRuleProviders) > 0 {
+		sb.WriteString("rule-providers:\n")
+		// Sort keys for consistent output
+		sortedNames := make([]string, 0, len(finalRuleProviders))
+		for name := range finalRuleProviders {
+			sortedNames = append(sortedNames, name)
+		}
+		// Simple sort
+		for i := 0; i < len(sortedNames); i++ {
+			for j := i + 1; j < len(sortedNames); j++ {
+				if sortedNames[i] > sortedNames[j] {
+					sortedNames[i], sortedNames[j] = sortedNames[j], sortedNames[i]
+				}
+			}
+		}
+		for _, name := range sortedNames {
+			provider := finalRuleProviders[name]
+			sb.WriteString("  ")
+			sb.WriteString(name)
+			sb.WriteString(":\n")
+			// Write provider fields in a specific order
+			if v, ok := provider["type"]; ok {
+				sb.WriteString("    type: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+			if v, ok := provider["format"]; ok {
+				sb.WriteString("    format: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+			if v, ok := provider["behavior"]; ok {
+				sb.WriteString("    behavior: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+			if v, ok := provider["url"]; ok {
+				sb.WriteString("    url: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+			if v, ok := provider["path"]; ok {
+				sb.WriteString("    path: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+			if v, ok := provider["interval"]; ok {
+				sb.WriteString("    interval: ")
+				sb.WriteString(fmt.Sprintf("%v", v))
+				sb.WriteString("\n")
+			}
+		}
 	}
 
 	// Write rules
