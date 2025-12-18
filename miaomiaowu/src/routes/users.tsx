@@ -90,6 +90,7 @@ function UsersPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
   const [resetState, setResetState] = useState<ResetState | null>(null)
+  const [deleteUsername, setDeleteUsername] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createState, setCreateState] = useState<CreateState>({
     username: '',
@@ -167,6 +168,20 @@ function UsersPage() {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(data.password).catch(() => null)
       }
+    },
+    onError: (error) => {
+      handleServerError(error)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (username: string) => {
+      await api.post('/api/admin/users/delete', { username })
+    },
+    onSuccess: () => {
+      toast.success('用户已删除')
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setDeleteUsername(null)
     },
     onError: (error) => {
       handleServerError(error)
@@ -410,12 +425,20 @@ function UsersPage() {
                         >
                           管理订阅
                         </Button>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          disabled={deleteMutation.isPending}
+                          onClick={() => setDeleteUsername(user.username)}
+                        >
+                          删除
+                        </Button>
                       </div>
                     )
                   },
                   headerClassName: 'text-right',
                   cellClassName: 'text-right',
-                  width: '280px'
+                  width: '360px'
                 }
               ] as DataTableColumn<UserRow>[]}
 
@@ -495,6 +518,15 @@ function UsersPage() {
                         }
                       >
                         管理订阅
+                      </Button>
+                      <Button
+                        variant='destructive'
+                        size='sm'
+                        className='flex-1'
+                        disabled={deleteMutation.isPending}
+                        onClick={() => setDeleteUsername(user.username)}
+                      >
+                        删除
                       </Button>
                     </>
                   )
@@ -767,6 +799,42 @@ function UsersPage() {
               }}
             >
               {updateSubscriptionsMutation.isPending ? '保存中…' : '确认保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteUsername)} onOpenChange={(open) => !open && setDeleteUsername(null)}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>确认删除用户</DialogTitle>
+          </DialogHeader>
+          <div className='space-y-4'>
+            <p className='text-sm text-muted-foreground'>
+              确定要删除用户 <strong>{deleteUsername}</strong> 吗？此操作将删除该用户的所有数据，包括：
+            </p>
+            <ul className='list-disc list-inside text-sm text-muted-foreground space-y-1'>
+              <li>用户账号信息</li>
+              <li>订阅绑定关系</li>
+              <li>保存的节点</li>
+              <li>外部订阅</li>
+              <li>用户设置</li>
+            </ul>
+            <p className='text-sm text-destructive font-medium'>此操作不可撤销！</p>
+          </div>
+          <DialogFooter className='gap-2'>
+            <DialogClose asChild>
+              <Button type='button' variant='outline' disabled={deleteMutation.isPending}>
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              type='button'
+              variant='destructive'
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteUsername && deleteMutation.mutate(deleteUsername)}
+            >
+              {deleteMutation.isPending ? '删除中…' : '确认删除'}
             </Button>
           </DialogFooter>
         </DialogContent>

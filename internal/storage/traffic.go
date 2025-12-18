@@ -2329,6 +2329,81 @@ func (r *TrafficRepository) UpdateUserStatus(ctx context.Context, username strin
 	return nil
 }
 
+// DeleteUser removes a user and all related data (subscriptions, sessions, nodes, etc.)
+func (r *TrafficRepository) DeleteUser(ctx context.Context, username string) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return errors.New("username is required")
+	}
+
+	// Start a transaction to ensure all deletions succeed or fail together
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete user's subscriptions bindings
+	_, err = tx.ExecContext(ctx, `DELETE FROM user_subscriptions WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user subscriptions: %w", err)
+	}
+
+	// Delete user's sessions
+	_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user sessions: %w", err)
+	}
+
+	// Delete user's nodes
+	_, err = tx.ExecContext(ctx, `DELETE FROM nodes WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user nodes: %w", err)
+	}
+
+	// Delete user's external subscriptions
+	_, err = tx.ExecContext(ctx, `DELETE FROM external_subscriptions WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user external subscriptions: %w", err)
+	}
+
+	// Delete user's settings
+	_, err = tx.ExecContext(ctx, `DELETE FROM user_settings WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user settings: %w", err)
+	}
+
+	// Delete user's token
+	_, err = tx.ExecContext(ctx, `DELETE FROM user_tokens WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user token: %w", err)
+	}
+
+	// Finally, delete the user
+	res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete user rows affected: %w", err)
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateUserNickname updates the nickname associated with a user account.
 func (r *TrafficRepository) UpdateUserNickname(ctx context.Context, username, nickname string) error {
 	if r == nil || r.db == nil {
@@ -2598,6 +2673,7 @@ func (r *TrafficRepository) RemoveSubscriptionFromUser(ctx context.Context, user
 }
 
 // GetUserSubscriptionIDs returns all subscription IDs assigned to a user.
+// Only returns IDs that exist in subscribe_files table (filters out orphaned records).
 func (r *TrafficRepository) GetUserSubscriptionIDs(ctx context.Context, username string) ([]int64, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("traffic repository not initialized")
@@ -2608,7 +2684,14 @@ func (r *TrafficRepository) GetUserSubscriptionIDs(ctx context.Context, username
 		return nil, errors.New("username is required")
 	}
 
-	const stmt = `SELECT subscription_id FROM user_subscriptions WHERE username = ? ORDER BY created_at ASC`
+	// Join with subscribe_files to only return valid subscription IDs
+	const stmt = `
+		SELECT us.subscription_id
+		FROM user_subscriptions us
+		INNER JOIN subscribe_files sf ON us.subscription_id = sf.id
+		WHERE us.username = ?
+		ORDER BY us.created_at ASC
+	`
 	rows, err := r.db.QueryContext(ctx, stmt, username)
 	if err != nil {
 		return nil, fmt.Errorf("get user subscription IDs: %w", err)

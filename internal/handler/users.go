@@ -270,6 +270,63 @@ func NewUserCreateHandler(repo *storage.TrafficRepository) http.Handler {
 	})
 }
 
+type userDeleteRequest struct {
+	Username string `json:"username"`
+}
+
+func NewUserDeleteHandler(repo *storage.TrafficRepository) http.Handler {
+	if repo == nil {
+		panic("user delete handler requires repository")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("only POST is supported"))
+			return
+		}
+
+		var payload userDeleteRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		username := strings.TrimSpace(payload.Username)
+		if username == "" {
+			writeError(w, http.StatusBadRequest, errors.New("username is required"))
+			return
+		}
+
+		// Check if target user is admin
+		targetUser, err := repo.GetUser(r.Context(), username)
+		if err != nil {
+			if errors.Is(err, storage.ErrUserNotFound) {
+				writeError(w, http.StatusNotFound, errors.New("user not found"))
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		if targetUser.Role == storage.RoleAdmin {
+			writeError(w, http.StatusBadRequest, errors.New("不能删除管理员账号"))
+			return
+		}
+
+		if err := repo.DeleteUser(r.Context(), username); err != nil {
+			if errors.Is(err, storage.ErrUserNotFound) {
+				writeError(w, http.StatusNotFound, errors.New("user not found"))
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	})
+}
+
 func generateRandomPassword(length int) (string, error) {
 	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	if length <= 0 {

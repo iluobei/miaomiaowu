@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"miaomiaowu/internal/storage"
@@ -72,7 +71,7 @@ func (h *userSubscriptionsHandler) handleUpdate(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 验证所有订阅ID是否存在（使用subscribe_files表）
+	// 获取所有有效的订阅ID（使用subscribe_files表）
 	allSubscriptions, err := h.repo.ListSubscribeFiles(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -84,14 +83,15 @@ func (h *userSubscriptionsHandler) handleUpdate(w http.ResponseWriter, r *http.R
 		validIDs[sub.ID] = true
 	}
 
+	// 过滤掉无效的订阅ID（已删除的订阅）
+	filteredIDs := make([]int64, 0, len(req.SubscriptionIDs))
 	for _, id := range req.SubscriptionIDs {
-		if id > 0 && !validIDs[id] {
-			writeBadRequest(w, "invalid subscription ID: "+strconv.FormatInt(id, 10))
-			return
+		if id > 0 && validIDs[id] {
+			filteredIDs = append(filteredIDs, id)
 		}
 	}
 
-	if err := h.repo.SetUserSubscriptions(r.Context(), username, req.SubscriptionIDs); err != nil {
+	if err := h.repo.SetUserSubscriptions(r.Context(), username, filteredIDs); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
