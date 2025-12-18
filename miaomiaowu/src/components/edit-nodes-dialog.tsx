@@ -229,6 +229,7 @@ export function EditNodesDialog({
     // 获取目标代理组名称
     const getTargetGroupName = (): string | null => {
       if (overId === 'all-groups-zone') return 'all-groups'
+      if (overId === 'remove-from-all-zone') return 'remove-from-all'
       if (overId === 'available-zone') return 'available'
       if (overId.startsWith('drop-')) return overId.replace('drop-', '')
       if (overData?.groupName) return overData.groupName
@@ -259,7 +260,16 @@ export function EditNodesDialog({
 
         const nodeName = activeData.nodeName!
 
-        if (targetGroup === 'all-groups') {
+        if (targetGroup === 'remove-from-all') {
+          // 从所有代理组移除该节点
+          const updatedGroups = proxyGroups.map(group => {
+            if (group.proxies.includes(nodeName)) {
+              return { ...group, proxies: group.proxies.filter(p => p !== nodeName) }
+            }
+            return group
+          })
+          onProxyGroupsChange(updatedGroups)
+        } else if (targetGroup === 'all-groups') {
           // 添加到所有代理组（跳过与节点同名的代理组，防止代理组添加到自己内部）
           const updatedGroups = proxyGroups.map(group => {
             if (group.name !== nodeName && !group.proxies.includes(nodeName)) {
@@ -296,7 +306,18 @@ export function EditNodesDialog({
 
         const nodeNames = activeData.nodeNames || []
 
-        if (targetGroup === 'all-groups') {
+        if (targetGroup === 'remove-from-all') {
+          // 批量从所有代理组移除
+          const nodeNamesToRemove = new Set(nodeNames)
+          const updatedGroups = proxyGroups.map(group => {
+            const newProxies = group.proxies.filter(p => !nodeNamesToRemove.has(p))
+            if (newProxies.length !== group.proxies.length) {
+              return { ...group, proxies: newProxies }
+            }
+            return group
+          })
+          onProxyGroupsChange(updatedGroups)
+        } else if (targetGroup === 'all-groups') {
           // 添加到所有代理组（过滤掉与代理组同名的节点，防止代理组添加到自己内部）
           const updatedGroups = proxyGroups.map(group => {
             const existingNodes = new Set(group.proxies)
@@ -342,6 +363,19 @@ export function EditNodesDialog({
           if (onRemoveNodeFromGroup && activeData.index !== undefined) {
             onRemoveNodeFromGroup(sourceGroup, activeData.index)
           }
+          return
+        }
+
+        if (targetGroup === 'remove-from-all') {
+          // 从所有代理组移除该节点
+          const nodeName = activeData.nodeName!
+          const updatedGroups = proxyGroups.map(group => {
+            if (group.proxies.includes(nodeName)) {
+              return { ...group, proxies: group.proxies.filter(p => p !== nodeName) }
+            }
+            return group
+          })
+          onProxyGroupsChange(updatedGroups)
           return
         }
 
@@ -615,7 +649,7 @@ export function EditNodesDialog({
     return (
       <div
         ref={setNodeRef}
-        className={`w-48 h-20 mr-9 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
+        className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
           isOver
             ? 'border-primary bg-primary/10 border-solid'
             : 'border-dashed border-muted-foreground/30 bg-muted/20'
@@ -623,6 +657,29 @@ export function EditNodesDialog({
       >
         <span className={isOver ? 'text-primary font-medium' : 'text-muted-foreground'}>
           添加到所有代理组
+        </span>
+      </div>
+    )
+  }
+
+  // 快捷拖放区（从所有代理组移除）
+  const DroppableRemoveFromAllZone = () => {
+    const { setNodeRef, isOver } = useDroppable({
+      id: 'remove-from-all-zone',
+      data: { type: 'remove-from-all-zone' }
+    })
+
+    return (
+      <div
+        ref={setNodeRef}
+        className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
+          isOver
+            ? 'border-destructive bg-destructive/10 border-solid'
+            : 'border-dashed border-muted-foreground/30 bg-muted/20'
+        }`}
+      >
+        <span className={isOver ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+          从所有代理组移除
         </span>
       </div>
     )
@@ -926,7 +983,10 @@ export function EditNodesDialog({
                   <DialogDescription>{description}</DialogDescription>
                 </div>
                 {/* 快捷拖放区 */}
-                <DroppableAllGroupsZone />
+                <div className='flex gap-2 mr-9'>
+                  <DroppableRemoveFromAllZone />
+                  <DroppableAllGroupsZone />
+                </div>
               </div>
             </DialogHeader>
 
