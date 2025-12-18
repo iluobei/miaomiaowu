@@ -254,6 +254,7 @@ MIT License
 - 🌈 stash订阅不再跳过任何节点，不兼容的格式由stash报错
 - 🛠️ fix:订阅链接选择客户端类型后二维码显示错误
 - 🛠️ fix:stash不支持mrs格式规则集，替换为yaml格式
+- 🛠️ fix:修改订阅时落地节点链式代理失效
 ### v0.2.9 (2025-12-17)
 - 🛠️ fix:hysteria2协议缺少obfs-password参数
 - 🛠️ fix:手机端不显示临时订阅按钮
