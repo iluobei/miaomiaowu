@@ -230,7 +230,7 @@ function SubscriptionPage() {
                 <CardHeader>
                   <div className='flex items-start gap-3'>
                     <button
-                      onClick={() => setQrValue(subscribeURL)}
+                      onClick={() => setQrValue(displayURL)}
                       className='flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all hover:bg-primary/20 hover:scale-110 active:scale-95 cursor-pointer'
                       title='点击显示二维码'
                     >
