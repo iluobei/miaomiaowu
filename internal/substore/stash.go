@@ -88,13 +88,16 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		if proxyType == "vless" && IsPresent(proxy, "reality-opts") {
 			flow := GetString(proxy, "flow")
 			if flow != "xtls-rprx-vision" {
-				shouldSkip = true
+				// 不跳过没有流控算法的节点, 让stash报错去吧
+				// shouldSkip = true
+				// shouldSkip = true
 			}
 		}
 
 		// Check underlying-proxy / dialer-proxy
 		if IsPresent(proxy, "underlying-proxy") || IsPresent(proxy, "dialer-proxy") {
-			shouldSkip = true
+			// stash 不支持链式代理, 不跳过, 让stash报错去吧
+			// shouldSkip = true
 		}
 
 		if shouldSkip {
