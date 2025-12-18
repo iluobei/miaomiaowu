@@ -806,6 +806,39 @@ function SubscribeFilesPage() {
         }
       }
 
+      // 处理链式代理：给落地节点组中的节点添加 dialer-proxy 参数
+      const landingGroup = proxyGroups.find(g => g.name === '🌄 落地节点')
+      const hasRelayGroup = proxyGroups.some(g => g.name === '🌠 中转节点')
+
+      if (landingGroup && hasRelayGroup && parsed.proxies && Array.isArray(parsed.proxies)) {
+        // 获取落地节点组中的所有节点名称
+        const landingNodeNames = new Set(landingGroup.proxies.filter((p): p is string => p !== undefined))
+
+        // 创建节点名称到协议的映射（用于判断是否已是链式代理节点）
+        const nodeProtocolMap = new Map<string, string>()
+        if (nodesQuery.data?.nodes) {
+          nodesQuery.data.nodes.forEach((node: any) => {
+            nodeProtocolMap.set(node.node_name, node.protocol)
+          })
+        }
+
+        // 给这些节点添加 dialer-proxy 参数（跳过已经是链式代理的节点）
+        parsed.proxies = parsed.proxies.map((proxy: any) => {
+          if (landingNodeNames.has(proxy.name)) {
+            // 通过协议判断是否为链式代理节点（协议包含 ⇋）
+            const protocol = nodeProtocolMap.get(proxy.name)
+            if (protocol && protocol.includes('⇋')) {
+              return proxy
+            }
+            return {
+              ...proxy,
+              'dialer-proxy': '🌠 中转节点'
+            }
+          }
+          return proxy
+        })
+      }
+
       // 更新代理组
       if (parsed && parsed['proxy-groups']) {
         // 保留代理组的所有原始属性，只更新 proxies
