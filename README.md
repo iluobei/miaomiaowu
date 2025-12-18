@@ -223,6 +223,12 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-instal
 - 🔒 JWT 认证，安全可靠
 - 📱 响应式设计，支持移动端
 
+## ⚠️ 免责声明
+
+- 本程序仅供学习交流使用，请勿用于非法用途
+- 使用本程序需遵守当地法律法规
+- 作者不对使用者的任何行为承担责任
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Jimleerx/miaomiaowu&type=date&legend=top-left)](https://www.star-history.com/#Jimleerx/miaomiaowu&type=date&legend=top-left)
