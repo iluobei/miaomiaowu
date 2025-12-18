@@ -241,7 +241,21 @@ func (r *TrafficRepository) DeleteSubscribeFile(ctx context.Context, id int64) e
 		return errors.New("subscribe file id is required")
 	}
 
-	res, err := r.db.ExecContext(ctx, `DELETE FROM subscribe_files WHERE id = ?`, id)
+	// Start a transaction to ensure both deletions succeed or fail together
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// First, delete related user_subscriptions records
+	_, err = tx.ExecContext(ctx, `DELETE FROM user_subscriptions WHERE subscription_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete user subscriptions: %w", err)
+	}
+
+	// Then, delete the subscribe file
+	res, err := tx.ExecContext(ctx, `DELETE FROM subscribe_files WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete subscribe file: %w", err)
 	}
@@ -252,6 +266,10 @@ func (r *TrafficRepository) DeleteSubscribeFile(ctx context.Context, id int64) e
 	}
 	if affected == 0 {
 		return ErrSubscribeFileNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
