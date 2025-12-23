@@ -85,6 +85,10 @@ func GenerateClashProxyGroups(groups []ACLProxyGroup, allProxyNames []string) st
 			if len(regexFilters) > 0 {
 				// Apply regex filter to get matching proxies
 				proxiesToOutput = filterProxyNamesByRegex(allProxyNames, regexFilters)
+				// If no proxies matched the regex, add DIRECT as fallback
+				if len(proxiesToOutput) == 0 {
+					proxiesToOutput = []string{"DIRECT"}
+				}
 			} else if g.HasWildcard {
 				// Has .* wildcard: include all provided proxies
 				proxiesToOutput = allProxyNames
