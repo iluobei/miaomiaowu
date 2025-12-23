@@ -73,6 +73,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/setup/status", handler.NewSetupStatusHandler(repo))
 	mux.Handle("/api/setup/init", handler.NewInitialSetupHandler(repo))
+	mux.Handle("/api/setup/restore-backup", handler.NewSetupRestoreBackupHandler(repo))
 	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo))
 
 	// Admin-only endpoints
@@ -104,6 +105,8 @@ func main() {
 	mux.Handle("/api/admin/templates/", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateHandler(repo)))
 	mux.Handle("/api/admin/templates/convert", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateConvertHandler()))
 	mux.Handle("/api/admin/templates/fetch-source", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateFetchSourceHandler()))
+	mux.Handle("/api/admin/backup/download", auth.RequireAdmin(tokenStore, userRepo, handler.NewBackupDownloadHandler(repo)))
+	mux.Handle("/api/admin/backup/restore", auth.RequireAdmin(tokenStore, userRepo, handler.NewBackupRestoreHandler(repo)))
 
 	// User endpoints (all authenticated users)
 	mux.Handle("/api/user/password", auth.RequireToken(tokenStore, handler.NewPasswordHandler(authManager)))

@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { Upload, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -177,6 +179,7 @@ function LoginView() {
 
 function InitialSetupView() {
   const queryClient = useQueryClient()
+  const [backupFile, setBackupFile] = useState<File | null>(null)
   const form = useForm<SetupFormValues>({
     defaultValues: {
       username: '',
@@ -204,6 +207,29 @@ function InitialSetupView() {
     onError: (error) => {
       handleServerError(error)
       toast.error('初始化失败，请重试')
+    },
+  })
+
+  const restoreBackup = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('backup', file)
+      return api.post('/api/setup/restore-backup', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['setup-status'] })
+      toast.success('备份恢复成功！请刷新页面后登录。')
+      setBackupFile(null)
+      // Reload page after a short delay
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+    },
+    onError: (error) => {
+      handleServerError(error)
+      toast.error('备份恢复失败')
     },
   })
 
@@ -287,6 +313,41 @@ function InitialSetupView() {
               {setup.isPending ? '创建中...' : '创建管理员账号'}
             </Button>
           </form>
+
+          {/* Divider */}
+          <div className='relative my-6'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t' />
+            </div>
+            <div className='relative flex justify-center text-xs uppercase'>
+              <span className='bg-card px-2 text-muted-foreground'>或</span>
+            </div>
+          </div>
+
+          {/* Restore from backup */}
+          <div className='space-y-3'>
+            <Label>从备份恢复</Label>
+            <Input
+              type='file'
+              accept='.zip'
+              onChange={(e) => setBackupFile(e.target.files?.[0] || null)}
+              className='cursor-pointer'
+            />
+            <Button
+              type='button'
+              onClick={() => backupFile && restoreBackup.mutate(backupFile)}
+              disabled={!backupFile || restoreBackup.isPending}
+              variant='outline'
+              className='w-full'
+            >
+              <Upload className='size-4 mr-2' />
+              {restoreBackup.isPending ? '恢复中...' : '从备份恢复'}
+            </Button>
+            <div className='flex items-start gap-2 text-xs text-muted-foreground'>
+              <AlertTriangle className='size-4 shrink-0 text-amber-500' />
+              <span>如果您有之前的备份文件，可以在这里恢复数据</span>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

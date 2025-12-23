@@ -346,6 +346,16 @@ func (r *TrafficRepository) Close() error {
 	return r.db.Close()
 }
 
+// Checkpoint forces a WAL checkpoint to ensure all data is written to the main database file.
+// This is useful before creating backups.
+func (r *TrafficRepository) Checkpoint() error {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	_, err := r.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	return err
+}
+
 func (r *TrafficRepository) migrate() error {
 	const trafficSchema = `
 CREATE TABLE IF NOT EXISTS traffic_records (

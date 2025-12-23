@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { LogOut, Settings2, ExternalLink, BookOpen } from 'lucide-react'
+import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import { BackupDialog } from '@/components/backup-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +20,7 @@ import { useVersionCheck } from '@/hooks/use-version-check'
 
 export function UserMenu() {
   const [open, setOpen] = useDialogState<boolean>()
+  const [backupDialogOpen, setBackupDialogOpen] = useState(false)
   const { auth } = useAuthStore()
   const { currentVersion, hasUpdate, releaseUrl } = useVersionCheck()
   const { data: profile } = useQuery({
@@ -84,6 +87,11 @@ export function UserMenu() {
               <BookOpen className='size-4' /> 使用帮助
             </Link>
           </DropdownMenuItem>
+          {profile?.is_admin && (
+            <DropdownMenuItem onClick={() => setBackupDialogOpen(true)} className='cursor-pointer justify-center'>
+              <HardDrive className='size-4' /> 备份数据
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild className='cursor-pointer justify-center'>
             <a
@@ -112,6 +120,7 @@ export function UserMenu() {
       </DropdownMenu>
 
       <SignOutDialog open={Boolean(open)} onOpenChange={(value) => setOpen(value)} />
+      <BackupDialog open={backupDialogOpen} onOpenChange={setBackupDialogOpen} />
     </>
   )
 }
