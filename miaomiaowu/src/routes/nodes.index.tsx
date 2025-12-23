@@ -182,6 +182,11 @@ function NodesPage() {
   const [addingRegionEmoji, setAddingRegionEmoji] = useState(false)
   const [addingEmojiForNode, setAddingEmojiForNode] = useState<number | null>(null)
 
+  // 删除重复节点状态
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicateGroups, setDuplicateGroups] = useState<Array<{ config: string; nodes: ParsedNode[] }>>([])
+  const [deletingDuplicates, setDeletingDuplicates] = useState(false)
+
   // 优化的回调函数
   const handleUserAgentChange = useCallback((value: string) => {
     setUserAgent(value)
@@ -915,6 +920,89 @@ function NodesPage() {
     }
   }, [savedNodes, queryClient])
 
+  // 查找重复节点
+  const findDuplicateNodes = useCallback(() => {
+    if (savedNodes.length === 0) {
+      toast.info('没有节点')
+      return
+    }
+
+    // 按 clash_config 分组（比较完整配置，包括 name 字段）
+    const configGroups = new Map<string, ParsedNode[]>()
+
+    for (const node of savedNodes) {
+      try {
+        // 解析配置并按 key 排序，确保相同配置生成相同的字符串
+        const config = JSON.parse(node.clash_config)
+        const configKey = JSON.stringify(config, Object.keys(config).sort())
+
+        if (!configGroups.has(configKey)) {
+          configGroups.set(configKey, [])
+        }
+        configGroups.get(configKey)!.push(node)
+      } catch {
+        // 无法解析的配置，使用原始字符串
+        const configKey = node.clash_config
+        if (!configGroups.has(configKey)) {
+          configGroups.set(configKey, [])
+        }
+        configGroups.get(configKey)!.push(node)
+      }
+    }
+
+    // 过滤出有重复的组
+    const duplicates: Array<{ config: string; nodes: ParsedNode[] }> = []
+    for (const [config, nodes] of configGroups) {
+      if (nodes.length > 1) {
+        duplicates.push({ config, nodes })
+      }
+    }
+
+    if (duplicates.length === 0) {
+      toast.success('没有发现重复节点')
+      return
+    }
+
+    setDuplicateGroups(duplicates)
+    setDuplicateDialogOpen(true)
+  }, [savedNodes])
+
+  // 删除重复节点（保留每组的第一个）
+  const handleDeleteDuplicates = useCallback(async () => {
+    if (duplicateGroups.length === 0) return
+
+    // 收集所有要删除的节点 ID（每组保留第一个，删除其余）
+    const nodeIdsToDelete: number[] = []
+    for (const group of duplicateGroups) {
+      // 按创建时间排序，保留最早创建的
+      const sortedNodes = [...group.nodes].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+      // 跳过第一个，删除其余
+      for (let i = 1; i < sortedNodes.length; i++) {
+        nodeIdsToDelete.push(sortedNodes[i].id)
+      }
+    }
+
+    if (nodeIdsToDelete.length === 0) {
+      toast.info('没有需要删除的节点')
+      return
+    }
+
+    setDeletingDuplicates(true)
+    try {
+      await api.post('/api/admin/nodes/batch-delete', { node_ids: nodeIdsToDelete })
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success(`成功删除 ${nodeIdsToDelete.length} 个重复节点`)
+      setDuplicateDialogOpen(false)
+      setDuplicateGroups([])
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '删除失败')
+    } finally {
+      setDeletingDuplicates(false)
+    }
+  }, [duplicateGroups, queryClient])
+
   // 生成临时订阅 (支持单个节点或批量模式)
   const generateTempSubscription = useCallback(async (singleNodeId?: number) => {
     const nodeIds = singleNodeId !== undefined ? [singleNodeId] : Array.from(selectedNodeIds)
@@ -1463,7 +1551,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                       <Link2 className='h-4 w-4 inline' /> 生成临时订阅
                     </p>
                   </div>
-                  <div className='flex flex-wrap gap-2'>
+                  <div className='flex flex-wrap gap-2 justify-end'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -1595,6 +1683,15 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                    )}
+                    {savedNodes.length > 0 && (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={findDuplicateNodes}
+                      >
+                        删除重复
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -3158,6 +3255,80 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 {batchRenameMutation.isPending ? '保存中...' : '确认修改'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除重复节点对话框 */}
+      <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+        <DialogContent className='max-w-2xl max-h-[80vh] flex flex-col'>
+          <DialogHeader>
+            <DialogTitle>删除重复节点</DialogTitle>
+            <DialogDescription>
+              发现 {duplicateGroups.length} 组重复节点，共 {duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)} 个重复节点将被删除（每组保留最早创建的节点）
+            </DialogDescription>
+          </DialogHeader>
+          <div className='flex-1 overflow-y-auto space-y-4 py-4'>
+            {duplicateGroups.map((group, groupIndex) => (
+              <div key={groupIndex} className='border rounded-lg p-3 space-y-2'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-sm font-medium'>
+                    重复组 {groupIndex + 1}（{group.nodes.length} 个节点）
+                  </span>
+                  <Badge variant='secondary'>
+                    将删除 {group.nodes.length - 1} 个
+                  </Badge>
+                </div>
+                <div className='space-y-1'>
+                  {[...group.nodes]
+                    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                    .map((node, nodeIndex) => (
+                      <div
+                        key={node.id}
+                        className={`flex items-center justify-between text-sm p-2 rounded ${
+                          nodeIndex === 0
+                            ? 'bg-green-500/10 border border-green-500/20'
+                            : 'bg-red-500/10 border border-red-500/20'
+                        }`}
+                      >
+                        <div className='flex items-center gap-2 flex-1 min-w-0'>
+                          <Badge variant='outline' className='shrink-0'>
+                            {node.protocol.toUpperCase()}
+                          </Badge>
+                          <span className='truncate'>{node.node_name}</span>
+                          {node.tag && (
+                            <Badge variant='secondary' className='shrink-0'>
+                              {node.tag}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className={`text-xs shrink-0 ml-2 ${nodeIndex === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {nodeIndex === 0 ? '保留' : '删除'}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className='flex justify-end gap-2 pt-4 border-t'>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setDuplicateDialogOpen(false)
+                setDuplicateGroups([])
+              }}
+              disabled={deletingDuplicates}
+            >
+              取消
+            </Button>
+            <Button
+              variant='destructive'
+              onClick={handleDeleteDuplicates}
+              disabled={deletingDuplicates}
+            >
+              {deletingDuplicates ? '删除中...' : `确认删除 ${duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)} 个重复节点`}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
