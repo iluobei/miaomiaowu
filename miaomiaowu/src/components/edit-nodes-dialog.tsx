@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { GripVertical, X, Plus, Edit2, Check, Search } from 'lucide-react'
+import { GripVertical, X, Plus, Edit2, Check, Search, Settings2 } from 'lucide-react'
 import { Twemoji } from '@/components/twemoji'
 import {
   DndContext,
@@ -23,12 +23,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
 
 interface ProxyGroup {
   name: string
   type: string
   proxies: string[]
+  url?: string
+  interval?: number
+  strategy?: 'round-robin' | 'consistent-hashing' | 'sticky-sessions'
 }
 
 interface Node {
@@ -563,6 +567,88 @@ export function EditNodesDialog({
 
   // ================== 组件定义 ==================
 
+  // 代理组类型选择器
+  interface ProxyTypeSelectorProps {
+    group: ProxyGroup
+    onChange: (updatedGroup: ProxyGroup) => void
+  }
+
+  const ProxyTypeSelector = ({ group, onChange }: ProxyTypeSelectorProps) => {
+    const types = [
+      { value: 'select', label: '手动选择', hasUrl: false, hasStrategy: false },
+      { value: 'url-test', label: '自动选择', hasUrl: true, hasStrategy: false },
+      { value: 'fallback', label: '自动回退', hasUrl: true, hasStrategy: false },
+      { value: 'load-balance', label: '负载均衡', hasUrl: true, hasStrategy: true },
+    ]
+
+    const handleTypeSelect = (type: string) => {
+      const typeConfig = types.find(t => t.value === type)
+      const updatedGroup: ProxyGroup = {
+        ...group,
+        type,
+      }
+
+      if (typeConfig?.hasUrl) {
+        updatedGroup.url = group.url || 'https://www.gstatic.com/generate_204'
+        updatedGroup.interval = group.interval || 300
+      } else {
+        delete updatedGroup.url
+        delete updatedGroup.interval
+      }
+
+      if (typeConfig?.hasStrategy) {
+        updatedGroup.strategy = group.strategy || 'round-robin'
+      } else {
+        delete updatedGroup.strategy
+      }
+
+      onChange(updatedGroup)
+    }
+
+    return (
+      <div className='space-y-1'>
+        {types.map(({ value, label }) => (
+          <Button
+            key={value}
+            variant={group.type === value ? 'default' : 'ghost'}
+            size='sm'
+            className='w-full justify-start'
+            onClick={() => handleTypeSelect(value)}
+          >
+            {label}
+          </Button>
+        ))}
+
+        {group.type === 'load-balance' && (
+          <div className='pt-2 border-t'>
+            <p className='text-xs text-muted-foreground mb-1'>策略</p>
+            <Select
+              value={group.strategy || 'round-robin'}
+              onValueChange={(value) => onChange({ ...group, strategy: value as ProxyGroup['strategy'] })}
+            >
+              <SelectTrigger className='h-8 text-xs'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='round-robin'>轮询</SelectItem>
+                <SelectItem value='consistent-hashing'>一致性哈希</SelectItem>
+                <SelectItem value='sticky-sessions'>粘性会话</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // 代理组类型变更处理
+  const handleGroupTypeChange = (groupName: string, updatedGroup: ProxyGroup) => {
+    const updatedGroups = proxyGroups.map(g =>
+      g.name === groupName ? updatedGroup : g
+    )
+    onProxyGroupsChange(updatedGroups)
+  }
+
   // 可拖动的可用节点
   interface DraggableAvailableNodeProps {
     proxy: string
@@ -924,6 +1010,24 @@ export function EditNodesDialog({
                 {group.type} ({(group.proxies || []).length} 个节点)
               </CardDescription>
             </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 w-6 p-0 flex-shrink-0'
+                  title='切换代理组类型'
+                >
+                  <Settings2 className='h-4 w-4 text-muted-foreground hover:text-foreground' />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-48 p-2' align='end'>
+                <ProxyTypeSelector
+                  group={group}
+                  onChange={(updatedGroup) => handleGroupTypeChange(group.name, updatedGroup)}
+                />
+              </PopoverContent>
+            </Popover>
             <Button
               variant='ghost'
               size='sm'
