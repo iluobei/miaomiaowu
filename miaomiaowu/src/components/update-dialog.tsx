@@ -74,7 +74,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
+      <DialogContent className='sm:max-w-md overflow-hidden'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <RefreshCw className='size-5' /> 检查更新
@@ -109,10 +109,10 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
               </div>
 
               {updateInfo.release_notes && (
-                <div className='space-y-2'>
+                <div className='space-y-2 overflow-hidden'>
                   <p className='text-sm font-medium'>更新内容：</p>
-                  <div className='bg-muted/30 rounded-lg p-3 max-h-40 overflow-y-auto'>
-                    <p className='text-sm text-muted-foreground whitespace-pre-wrap'>
+                  <div className='bg-muted/30 rounded-lg p-3 max-h-40 overflow-y-auto overflow-x-hidden'>
+                    <p className='text-sm text-muted-foreground whitespace-pre-wrap break-all'>
                       {updateInfo.release_notes}
                     </p>
                   </div>

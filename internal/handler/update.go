@@ -14,12 +14,13 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"miaomiaowu/internal/version"
 )
 
 const (
-	currentVersion = "0.3.1"
-	githubRepo     = "Jimleerx/miaomiaowu"
-	githubAPIURL   = "https://api.github.com/repos/%s/releases/latest"
+	githubRepo   = "Jimleerx/miaomiaowu"
+	githubAPIURL = "https://api.github.com/repos/%s/releases/latest"
 )
 
 // UpdateInfo contains version update information
@@ -184,10 +185,10 @@ func checkLatestVersion() (*UpdateInfo, error) {
 	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
-	hasUpdate := compareVersions(currentVersion, latestVersion)
+	hasUpdate := compareVersions(version.Version, latestVersion)
 
 	return &UpdateInfo{
-		CurrentVersion: currentVersion,
+		CurrentVersion: version.Version,
 		LatestVersion:  latestVersion,
 		HasUpdate:      hasUpdate,
 		ReleaseURL:     release.HTMLURL,

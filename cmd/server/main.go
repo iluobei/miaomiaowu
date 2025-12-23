@@ -15,12 +15,11 @@ import (
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/handler"
 	"miaomiaowu/internal/storage"
+	"miaomiaowu/internal/version"
 	"miaomiaowu/internal/web"
 	ruletemplates "miaomiaowu/rule_templates"
 	"miaomiaowu/subscribes"
 )
-
-const version = "0.3.2"
 
 func main() {
 	addr := getAddr()
@@ -167,7 +166,7 @@ func main() {
 	go startTrafficCollector(collectorCtx, trafficHandler)
 
 	go func() {
-		log.Printf("miaomiaowu Server v%s - HTTP server listening on %s", version, addr)
+		log.Printf("miaomiaowu Server v%s - HTTP server listening on %s", version.Version, addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http server failed: %v", err)
 		}
