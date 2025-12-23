@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive } from 'lucide-react'
+import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive, RefreshCw } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { BackupDialog } from '@/components/backup-dialog'
+import { UpdateDialog } from '@/components/update-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,7 @@ import { useVersionCheck } from '@/hooks/use-version-check'
 export function UserMenu() {
   const [open, setOpen] = useDialogState<boolean>()
   const [backupDialogOpen, setBackupDialogOpen] = useState(false)
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const { auth } = useAuthStore()
   const { currentVersion, hasUpdate, releaseUrl } = useVersionCheck()
   const { data: profile } = useQuery({
@@ -92,6 +94,20 @@ export function UserMenu() {
               <HardDrive className='size-4' /> 备份数据
             </DropdownMenuItem>
           )}
+          {profile?.is_admin && (
+            <DropdownMenuItem onClick={() => setUpdateDialogOpen(true)} className='cursor-pointer justify-center'>
+              <RefreshCw className='size-4' />
+              <span className='relative'>
+                检查更新
+                {hasUpdate && (
+                  <span className='absolute mt-2 -right-1.5 -top-1.5 flex size-1.5'>
+                    <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75'></span>
+                    <span className='relative inline-flex size-1.5 rounded-full bg-primary'></span>
+                  </span>
+                )}
+              </span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild className='cursor-pointer justify-center'>
             <a
@@ -101,15 +117,7 @@ export function UserMenu() {
               className='flex items-center gap-2'
             >
               <ExternalLink className='size-4' />
-              <span className='relative'>
-                版本 v{currentVersion}
-                {hasUpdate && (
-                  <span className='absolute mt-2 -right-1.5 -top-1.5 flex size-1.5'>
-                    <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75'></span>
-                    <span className='relative inline-flex size-1.5 rounded-full bg-primary'></span>
-                  </span>
-                )}
-              </span>
+              版本 v{currentVersion}
             </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -121,6 +129,7 @@ export function UserMenu() {
 
       <SignOutDialog open={Boolean(open)} onOpenChange={(value) => setOpen(value)} />
       <BackupDialog open={backupDialogOpen} onOpenChange={setBackupDialogOpen} />
+      <UpdateDialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen} />
     </>
   )
 }

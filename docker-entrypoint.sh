@@ -26,6 +26,21 @@ mkdir -p /app/data /app/subscribes /app/rule_templates
 echo "Fixing permissions for mounted volumes..."
 chown -R appuser:appuser /app/data /app/subscribes /app/rule_templates
 
+# Check if an updated binary exists in the data directory (from in-app update)
+UPDATED_SERVER="/app/data/server"
+ORIGINAL_SERVER="/app/server"
+
+if [ -f "$UPDATED_SERVER" ] && [ -x "$UPDATED_SERVER" ]; then
+    echo "Found updated server binary at $UPDATED_SERVER, using it..."
+    SERVER_BINARY="$UPDATED_SERVER"
+else
+    echo "Using original server binary..."
+    SERVER_BINARY="$ORIGINAL_SERVER"
+fi
+
+# Set DOCKER environment variable for in-app update detection
+export DOCKER=1
+
 # Use gosu to drop privileges and run the application as appuser
 echo "Starting application as appuser..."
-exec gosu appuser "$@"
+exec gosu appuser "$SERVER_BINARY"
