@@ -33,6 +33,13 @@ type UpdateInfo struct {
 	ReleaseNotes   string `json:"release_notes"`
 }
 
+// UpdateProgress represents the progress of an update operation
+type UpdateProgress struct {
+	Step     string `json:"step"`     // checking, downloading, backing_up, replacing, restarting, done, error
+	Progress int    `json:"progress"` // 0-100 for downloading step
+	Message  string `json:"message"`
+}
+
 // GitHubRelease represents the GitHub API response for a release
 type GitHubRelease struct {
 	TagName string `json:"tag_name"`
@@ -144,6 +151,112 @@ func NewUpdateApplyHandler() http.Handler {
 	})
 }
 
+// NewUpdateApplySSEHandler returns a handler that applies updates with SSE progress
+func NewUpdateApplySSEHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set SSE headers
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "SSE not supported", http.StatusInternalServerError)
+			return
+		}
+
+		// Helper to send progress
+		sendProgress := func(step string, progress int, message string) {
+			p := UpdateProgress{Step: step, Progress: progress, Message: message}
+			data, _ := json.Marshal(p)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+
+		// 1. Check version
+		sendProgress("checking", 0, "正在检查版本信息...")
+
+		info, err := checkLatestVersion()
+		if err != nil {
+			sendProgress("error", 0, fmt.Sprintf("检查更新失败: %v", err))
+			return
+		}
+
+		if !info.HasUpdate {
+			sendProgress("error", 0, "已是最新版本")
+			return
+		}
+
+		if info.DownloadURL == "" {
+			sendProgress("error", 0, "未找到适合当前系统的下载链接")
+			return
+		}
+
+		// 2. Download with progress
+		sendProgress("downloading", 0, "正在下载更新...")
+		log.Printf("开始下载更新: %s", info.DownloadURL)
+
+		lastProgress := 0
+		tempFile, err := downloadBinaryWithProgress(info.DownloadURL, func(downloaded, total int64) {
+			progress := int(downloaded * 100 / total)
+			// Only send update every 5% to reduce traffic
+			if progress >= lastProgress+5 || progress == 100 {
+				lastProgress = progress
+				sendProgress("downloading", progress, fmt.Sprintf("正在下载... %d%%", progress))
+			}
+		})
+		if err != nil {
+			sendProgress("error", 0, fmt.Sprintf("下载失败: %v", err))
+			return
+		}
+		defer os.Remove(tempFile)
+
+		// 3. Get target path
+		targetPath, err := getUpdateTargetPath()
+		if err != nil {
+			sendProgress("error", 0, fmt.Sprintf("获取程序路径失败: %v", err))
+			return
+		}
+
+		// 4. Backup current version (only for non-Docker)
+		if !isDocker() {
+			sendProgress("backing_up", 0, "正在备份当前版本...")
+			backupPath := targetPath + ".bak"
+			if err := copyFile(targetPath, backupPath); err != nil {
+				log.Printf("备份当前版本失败 (非致命错误): %v", err)
+			}
+		}
+
+		// 5. Replace binary
+		sendProgress("replacing", 0, "正在替换文件...")
+		log.Printf("正在替换二进制文件: %s -> %s", tempFile, targetPath)
+		if err := replaceBinary(tempFile, targetPath); err != nil {
+			sendProgress("error", 0, fmt.Sprintf("替换失败: %v", err))
+			return
+		}
+
+		// 6. Set execute permission
+		if err := os.Chmod(targetPath, 0755); err != nil {
+			sendProgress("error", 0, fmt.Sprintf("设置权限失败: %v", err))
+			return
+		}
+
+		// 7. Send restarting status
+		sendProgress("restarting", 0, "更新完成，正在重启服务...")
+		log.Printf("更新成功，准备重启...")
+
+		// 8. Send done status
+		sendProgress("done", 100, "更新完成")
+
+		// 9. Restart asynchronously (give client time to receive response)
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			restartSelf(targetPath)
+		}()
+	})
+}
+
 // checkLatestVersion fetches the latest release info from GitHub
 func checkLatestVersion() (*UpdateInfo, error) {
 	url := fmt.Sprintf(githubAPIURL, githubRepo)
@@ -236,6 +349,11 @@ func parseVersion(v string) []int {
 
 // downloadBinary downloads the binary to a temp file
 func downloadBinary(url string) (string, error) {
+	return downloadBinaryWithProgress(url, nil)
+}
+
+// downloadBinaryWithProgress downloads the binary to a temp file with progress callback
+func downloadBinaryWithProgress(url string, onProgress func(downloaded, total int64)) (string, error) {
 	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -252,10 +370,39 @@ func downloadBinary(url string) (string, error) {
 		return "", err
 	}
 
-	if _, err := io.Copy(tempFile, resp.Body); err != nil {
-		tempFile.Close()
-		os.Remove(tempFile.Name())
-		return "", err
+	totalSize := resp.ContentLength
+	var downloaded int64
+
+	// If no progress callback or unknown size, use simple copy
+	if onProgress == nil || totalSize <= 0 {
+		if _, err := io.Copy(tempFile, resp.Body); err != nil {
+			tempFile.Close()
+			os.Remove(tempFile.Name())
+			return "", err
+		}
+	} else {
+		// Copy with progress tracking
+		buf := make([]byte, 32*1024) // 32KB buffer
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, writeErr := tempFile.Write(buf[:n]); writeErr != nil {
+					tempFile.Close()
+					os.Remove(tempFile.Name())
+					return "", writeErr
+				}
+				downloaded += int64(n)
+				onProgress(downloaded, totalSize)
+			}
+			if readErr != nil {
+				if readErr == io.EOF {
+					break
+				}
+				tempFile.Close()
+				os.Remove(tempFile.Name())
+				return "", readErr
+			}
+		}
 	}
 
 	tempFile.Close()
@@ -309,13 +456,26 @@ func isDocker() bool {
 
 // replaceBinary replaces the target with the new binary
 func replaceBinary(src, dst string) error {
-	// Try rename first (fastest if on same filesystem)
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+	// On Linux, we can delete the running binary (it stays in memory)
+	// then rename the new file to take its place
+
+	// First, try to remove the old binary
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		// If removal fails (e.g., permission denied), try direct rename
+		if err := os.Rename(src, dst); err == nil {
+			return nil
+		}
+		// If rename also fails, try copy
+		return copyFile(src, dst)
 	}
 
-	// Rename failed, try copy instead
-	return copyFile(src, dst)
+	// Old binary removed (or didn't exist), now rename new binary
+	if err := os.Rename(src, dst); err != nil {
+		// Rename failed (cross-device), try copy instead
+		return copyFile(src, dst)
+	}
+
+	return nil
 }
 
 // copyFile copies a file from src to dst
