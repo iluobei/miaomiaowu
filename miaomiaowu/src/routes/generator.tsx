@@ -269,8 +269,8 @@ function SubscriptionGeneratorPage() {
   const [loading, setLoading] = useState(false)
   const [clashConfig, setClashConfig] = useState('')
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
-  const [protocolFilter, setProtocolFilter] = useState<string>('all')
-  const [tagFilter, setTagFilter] = useState<string>('all')
+  const [selectedProtocols, setSelectedProtocols] = useState<Set<string>>(new Set())
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
 
   // 规则模式状态
   const [ruleMode, setRuleMode] = useState<'custom' | 'template'>('custom')
@@ -559,12 +559,8 @@ function SubscriptionGeneratorPage() {
   // 获取所有标签类型
   const tags = Array.from(new Set(enabledNodes.map(n => n.tag))).sort()
 
-  // 根据协议和标签筛选节点
-  const filteredNodes = enabledNodes.filter(n => {
-    const protocolMatch = protocolFilter === 'all' || n.protocol.toLowerCase() === protocolFilter
-    const tagMatch = tagFilter === 'all' || n.tag === tagFilter
-    return protocolMatch && tagMatch
-  })
+  // 节点列表显示全部（协议和标签都改为多选，不再用于筛选显示）
+  const filteredNodes = enabledNodes
 
   const handleToggleNode = (nodeId: number) => {
     const newSet = new Set(selectedNodeIds)
@@ -1616,39 +1612,65 @@ function SubscriptionGeneratorPage() {
                 </div>
               ) : (
                 <>
-                  {/* 协议筛选按钮 */}
+                  {/* 协议快速选择按钮（多选模式，与标签互斥） */}
                   <div className='flex flex-wrap gap-2 mb-4'>
                     <Button
-                      variant={protocolFilter === 'all' ? 'default' : 'outline'}
+                      variant={selectedProtocols.size === 0 && selectedTags.size === 0 ? 'default' : 'outline'}
                       size='sm'
                       onClick={() => {
-                        setProtocolFilter('all')
-                        // 全选所有符合当前标签筛选的节点
-                        const nodesToSelect = enabledNodes.filter(n => {
-                          const tagMatch = tagFilter === 'all' || n.tag === tagFilter
-                          return tagMatch
-                        })
-                        setSelectedNodeIds(new Set(nodesToSelect.map(n => n.id)))
+                        // 计算所有节点
+                        const allNodeIds = new Set(enabledNodes.map(n => n.id))
+                        const currentIds = Array.from(selectedNodeIds).sort()
+                        const targetIds = Array.from(allNodeIds).sort()
+
+                        // 如果当前已全选且没有选中协议/标签，则取消全部；否则全选
+                        if (selectedProtocols.size === 0 && selectedTags.size === 0 &&
+                            currentIds.length === targetIds.length &&
+                            currentIds.every((id, i) => id === targetIds[i])) {
+                          setSelectedNodeIds(new Set())
+                        } else {
+                          setSelectedProtocols(new Set())  // 清空协议选择
+                          setSelectedTags(new Set())       // 清空标签选择
+                          setSelectedNodeIds(allNodeIds)
+                        }
                       }}
                     >
                       全部 ({enabledNodes.length})
                     </Button>
                     {protocols.map((protocol) => {
                       const count = enabledNodes.filter(n => n.protocol.toLowerCase() === protocol).length
+                      const isProtocolSelected = selectedProtocols.has(protocol)
                       return (
                         <Button
                           key={protocol}
-                          variant={protocolFilter === protocol ? 'default' : 'outline'}
+                          variant={isProtocolSelected ? 'default' : 'outline'}
                           size='sm'
                           onClick={() => {
-                            setProtocolFilter(protocol)
-                            // 全选符合该协议和当前标签筛选的节点
-                            const nodesToSelect = enabledNodes.filter(n => {
-                              const protocolMatch = n.protocol.toLowerCase() === protocol
-                              const tagMatch = tagFilter === 'all' || n.tag === tagFilter
-                              return protocolMatch && tagMatch
-                            })
-                            setSelectedNodeIds(new Set(nodesToSelect.map(n => n.id)))
+                            // 获取该协议的所有节点（协议和标签互斥，不考虑标签）
+                            const protocolNodeIds = enabledNodes
+                              .filter(n => n.protocol.toLowerCase() === protocol)
+                              .map(n => n.id)
+
+                            // 清空标签选择（协议和标签互斥）
+                            setSelectedTags(new Set())
+
+                            if (isProtocolSelected) {
+                              // 已选中 → 移除该协议的节点
+                              setSelectedProtocols(prev => {
+                                const next = new Set(prev)
+                                next.delete(protocol)
+                                return next
+                              })
+                              setSelectedNodeIds(prev => {
+                                const next = new Set(prev)
+                                protocolNodeIds.forEach(id => next.delete(id))
+                                return next
+                              })
+                            } else {
+                              // 未选中 → 添加该协议的节点
+                              setSelectedProtocols(prev => new Set([...prev, protocol]))
+                              setSelectedNodeIds(prev => new Set([...prev, ...protocolNodeIds]))
+                            }
                           }}
                         >
                           {protocol.toUpperCase()} ({count})
@@ -1657,29 +1679,27 @@ function SubscriptionGeneratorPage() {
                     })}
                   </div>
 
-                  {/* 标签筛选按钮 */}
+                  {/* 标签快速选择按钮（多选模式，与协议互斥） */}
                   {tags.length > 0 && (
                     <div className='flex flex-wrap gap-2 mb-4'>
                       <Button
-                        variant={tagFilter === 'all' ? 'default' : 'outline'}
+                        variant={selectedTags.size === 0 && selectedProtocols.size === 0 ? 'default' : 'outline'}
                         size='sm'
                         onClick={() => {
-                          setTagFilter('all')
-                          // 计算应该选中的节点
-                          const nodesToSelect = enabledNodes.filter(n => {
-                            const protocolMatch = protocolFilter === 'all' || n.protocol.toLowerCase() === protocolFilter
-                            return protocolMatch
-                          })
-                          const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.id))
-
-                          // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
+                          // 计算所有节点
+                          const allNodeIds = new Set(enabledNodes.map(n => n.id))
                           const currentIds = Array.from(selectedNodeIds).sort()
-                          const targetIds = Array.from(nodeIdsToSelect).sort()
-                          if (tagFilter === 'all' && currentIds.length === targetIds.length &&
+                          const targetIds = Array.from(allNodeIds).sort()
+
+                          // 如果当前已全选且没有选中协议/标签，则取消全部；否则全选
+                          if (selectedProtocols.size === 0 && selectedTags.size === 0 &&
+                              currentIds.length === targetIds.length &&
                               currentIds.every((id, i) => id === targetIds[i])) {
                             setSelectedNodeIds(new Set())
                           } else {
-                            setSelectedNodeIds(nodeIdsToSelect)
+                            setSelectedProtocols(new Set())  // 清空协议选择
+                            setSelectedTags(new Set())       // 清空标签选择
+                            setSelectedNodeIds(allNodeIds)
                           }
                         }}
                       >
@@ -1687,29 +1707,37 @@ function SubscriptionGeneratorPage() {
                       </Button>
                       {tags.map((tag) => {
                         const count = enabledNodes.filter(n => n.tag === tag).length
+                        const isTagSelected = selectedTags.has(tag)
                         return (
                           <Button
                             key={tag}
-                            variant={tagFilter === tag ? 'default' : 'outline'}
+                            variant={isTagSelected ? 'default' : 'outline'}
                             size='sm'
                             onClick={() => {
-                              setTagFilter(tag)
-                              // 计算应该选中的节点
-                              const nodesToSelect = enabledNodes.filter(n => {
-                                const protocolMatch = protocolFilter === 'all' || n.protocol.toLowerCase() === protocolFilter
-                                const tagMatch = n.tag === tag
-                                return protocolMatch && tagMatch
-                              })
-                              const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.id))
+                              // 获取该标签的所有节点（协议和标签互斥，不考虑协议）
+                              const tagNodeIds = enabledNodes
+                                .filter(n => n.tag === tag)
+                                .map(n => n.id)
 
-                              // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
-                              const currentIds = Array.from(selectedNodeIds).sort()
-                              const targetIds = Array.from(nodeIdsToSelect).sort()
-                              if (tagFilter === tag && currentIds.length === targetIds.length &&
-                                  currentIds.every((id, i) => id === targetIds[i])) {
-                                setSelectedNodeIds(new Set())
+                              // 清空协议选择（协议和标签互斥）
+                              setSelectedProtocols(new Set())
+
+                              if (isTagSelected) {
+                                // 已选中 → 移除该标签的节点
+                                setSelectedTags(prev => {
+                                  const next = new Set(prev)
+                                  next.delete(tag)
+                                  return next
+                                })
+                                setSelectedNodeIds(prev => {
+                                  const next = new Set(prev)
+                                  tagNodeIds.forEach(id => next.delete(id))
+                                  return next
+                                })
                               } else {
-                                setSelectedNodeIds(nodeIdsToSelect)
+                                // 未选中 → 添加该标签的节点
+                                setSelectedTags(prev => new Set([...prev, tag]))
+                                setSelectedNodeIds(prev => new Set([...prev, ...tagNodeIds]))
                               }
                             }}
                           >
