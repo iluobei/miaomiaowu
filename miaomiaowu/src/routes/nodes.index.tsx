@@ -1451,6 +1451,17 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   <div>
                     <CardTitle>节点列表 ({filteredNodes.length})</CardTitle>
                     <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
+                    <p className='mt-2 text-xs text-primary flex flex-wrap items-center gap-1'>
+                      <Pencil className='h-4 w-4 inline' /> 编辑节点名称，
+                      <img src={ExchangeIcon} alt='链式代理' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 创建链式代理，
+                      <Activity className='h-4 w-4 inline' /> 绑定探针，
+                      <Flag className='h-4 w-4 inline' /> 添加地区emoji，
+                      <img src={IpIcon} alt='解析IP地址' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 解析IP地址，
+                      <Undo2 className='h-4 w-4 inline' /> 恢复原始域名，
+                      <Eye className='h-4 w-4 inline' /> 查看修改配置，
+                      <Copy className='h-4 w-4 inline' /> 复制URI，
+                      <Link2 className='h-4 w-4 inline' /> 生成临时订阅
+                    </p>
                   </div>
                   <div className='flex flex-wrap gap-2'>
                     <Button

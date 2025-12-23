@@ -1085,6 +1085,10 @@ export function EditNodesDialog({
                 <div className='flex-1'>
                   <DialogTitle>{title}</DialogTitle>
                   <DialogDescription>{description}</DialogDescription>
+                  <p className='mt-2 text-sm text-primary flex flex-wrap items-center gap-1'>
+                    <GripVertical className='h-4 w-4 inline' /> 为可拖动元素，
+                    <Settings2 className='h-4 w-4 inline' /> 切换代理组类型、双击代理组标题编辑代理组名称，拖动可用节点标题时，代表拖动可用节点内的所有节点
+                  </p>
                 </div>
                 {/* 快捷拖放区 */}
                 <div className='flex gap-2 mr-9'>
