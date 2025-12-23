@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SystemSettingsRouteImport } from './routes/system-settings'
 import { Route as SubscriptionRouteImport } from './routes/subscription'
 import { Route as SubscribeFilesRouteImport } from './routes/subscribe-files'
@@ -23,6 +24,7 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as CustomRulesRouteImport } from './routes/custom-rules'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TemplatesIndexRouteImport } from './routes/templates.index'
 import { Route as SubscriptionIndexRouteImport } from './routes/subscription.index'
 import { Route as SubscribeFilesIndexRouteImport } from './routes/subscribe-files.index'
 import { Route as NodesIndexRouteImport } from './routes/nodes.index'
@@ -32,6 +34,11 @@ import { Route as SubscribeFilesCustomRouteImport } from './routes/subscribe-fil
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SystemSettingsRoute = SystemSettingsRouteImport.update({
@@ -99,6 +106,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TemplatesRoute,
+} as any)
 const SubscriptionIndexRoute = SubscriptionIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -139,12 +151,14 @@ export interface FileRoutesByFullPath {
   '/subscribe-files': typeof SubscribeFilesRouteWithChildren
   '/subscription': typeof SubscriptionRouteWithChildren
   '/system-settings': typeof SystemSettingsRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/users': typeof UsersRoute
   '/subscribe-files/custom': typeof SubscribeFilesCustomRoute
   '/custom-rules/': typeof CustomRulesIndexRoute
   '/nodes/': typeof NodesIndexRoute
   '/subscribe-files/': typeof SubscribeFilesIndexRoute
   '/subscription/': typeof SubscriptionIndexRoute
+  '/templates/': typeof TemplatesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -162,6 +176,7 @@ export interface FileRoutesByTo {
   '/nodes': typeof NodesIndexRoute
   '/subscribe-files': typeof SubscribeFilesIndexRoute
   '/subscription': typeof SubscriptionIndexRoute
+  '/templates': typeof TemplatesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -178,12 +193,14 @@ export interface FileRoutesById {
   '/subscribe-files': typeof SubscribeFilesRouteWithChildren
   '/subscription': typeof SubscriptionRouteWithChildren
   '/system-settings': typeof SystemSettingsRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/users': typeof UsersRoute
   '/subscribe-files/custom': typeof SubscribeFilesCustomRoute
   '/custom-rules/': typeof CustomRulesIndexRoute
   '/nodes/': typeof NodesIndexRoute
   '/subscribe-files/': typeof SubscribeFilesIndexRoute
   '/subscription/': typeof SubscriptionIndexRoute
+  '/templates/': typeof TemplatesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -201,12 +218,14 @@ export interface FileRouteTypes {
     | '/subscribe-files'
     | '/subscription'
     | '/system-settings'
+    | '/templates'
     | '/users'
     | '/subscribe-files/custom'
     | '/custom-rules/'
     | '/nodes/'
     | '/subscribe-files/'
     | '/subscription/'
+    | '/templates/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -224,6 +243,7 @@ export interface FileRouteTypes {
     | '/nodes'
     | '/subscribe-files'
     | '/subscription'
+    | '/templates'
   id:
     | '__root__'
     | '/'
@@ -239,12 +259,14 @@ export interface FileRouteTypes {
     | '/subscribe-files'
     | '/subscription'
     | '/system-settings'
+    | '/templates'
     | '/users'
     | '/subscribe-files/custom'
     | '/custom-rules/'
     | '/nodes/'
     | '/subscribe-files/'
     | '/subscription/'
+    | '/templates/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -261,6 +283,7 @@ export interface RootRouteChildren {
   SubscribeFilesRoute: typeof SubscribeFilesRouteWithChildren
   SubscriptionRoute: typeof SubscriptionRouteWithChildren
   SystemSettingsRoute: typeof SystemSettingsRoute
+  TemplatesRoute: typeof TemplatesRouteWithChildren
   UsersRoute: typeof UsersRoute
 }
 
@@ -271,6 +294,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof UsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/system-settings': {
@@ -364,6 +394,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/templates/': {
+      id: '/templates/'
+      path: '/'
+      fullPath: '/templates/'
+      preLoaderRoute: typeof TemplatesIndexRouteImport
+      parentRoute: typeof TemplatesRoute
+    }
     '/subscription/': {
       id: '/subscription/'
       path: '/'
@@ -450,6 +487,18 @@ const SubscriptionRouteWithChildren = SubscriptionRoute._addFileChildren(
   SubscriptionRouteChildren,
 )
 
+interface TemplatesRouteChildren {
+  TemplatesIndexRoute: typeof TemplatesIndexRoute
+}
+
+const TemplatesRouteChildren: TemplatesRouteChildren = {
+  TemplatesIndexRoute: TemplatesIndexRoute,
+}
+
+const TemplatesRouteWithChildren = TemplatesRoute._addFileChildren(
+  TemplatesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChangePasswordRoute: ChangePasswordRoute,
@@ -464,6 +513,7 @@ const rootRouteChildren: RootRouteChildren = {
   SubscribeFilesRoute: SubscribeFilesRouteWithChildren,
   SubscriptionRoute: SubscriptionRouteWithChildren,
   SystemSettingsRoute: SystemSettingsRoute,
+  TemplatesRoute: TemplatesRouteWithChildren,
   UsersRoute: UsersRoute,
 }
 export const routeTree = rootRouteImport

@@ -773,6 +773,27 @@ CREATE INDEX IF NOT EXISTS idx_custom_rule_applications_rule ON custom_rule_appl
 		return fmt.Errorf("migrate custom_rule_applications: %w", err)
 	}
 
+	// Templates table for ACL4SSR rule configuration
+	const templatesSchema = `
+CREATE TABLE IF NOT EXISTS templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'clash' CHECK (category IN ('clash','surge')),
+    template_url TEXT NOT NULL DEFAULT '',
+    rule_source TEXT NOT NULL DEFAULT '',
+    use_proxy INTEGER NOT NULL DEFAULT 0,
+    enable_include_all INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name)
+);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);
+`
+
+	if _, err := r.db.Exec(templatesSchema); err != nil {
+		return fmt.Errorf("migrate templates: %w", err)
+	}
+
 	return nil
 }
 

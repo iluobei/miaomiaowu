@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Save, Layers, Activity, Upload, MapPin } from 'lucide-react'
+import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Copy, Settings, FileText } from 'lucide-react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
@@ -23,6 +23,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Switch } from '@/components/ui/switch'
 import {
   Card,
   CardContent,
@@ -156,6 +167,88 @@ type SavedNode = {
   updated_at: string
 }
 
+// 模板类型定义
+interface Template {
+  id: number
+  name: string
+  category: 'clash' | 'surge'
+  template_url: string
+  rule_source: string
+  use_proxy: boolean
+  enable_include_all: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface ACL4SSRPreset {
+  name: string
+  url: string
+  label: string
+}
+
+type TemplateFormData = Omit<Template, 'id' | 'created_at' | 'updated_at'>
+
+// 内置 ACL4SSR 预设列表
+const ACL4SSR_PRESETS: ACL4SSRPreset[] = [
+  // 作者自用
+  { name: 'sublinkPro作者自用', url: 'https://raw.githubusercontent.com/ZeroDeng01/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_NoCountry.ini', label: 'sublinkPro作者自用 - 不区分国家' },
+  // 标准版
+  { name: 'ACL4SSR', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR.ini', label: '标准版 - 典型分组' },
+  { name: 'ACL4SSR_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_AdblockPlus.ini', label: '标准版 - 典型分组+去广告' },
+  // 回国版
+  { name: 'ACL4SSR_BackCN', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_BackCN.ini', label: '回国版 - 回国专用' },
+  // 精简版
+  { name: 'ACL4SSR_Mini', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini.ini', label: '精简版 - 少量分组' },
+  { name: 'ACL4SSR_Mini_Fallback', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_Fallback.ini', label: '精简版 - 故障转移' },
+  { name: 'ACL4SSR_Mini_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_MultiMode.ini', label: '精简版 - 多模式 (自动/手动)' },
+  { name: 'ACL4SSR_Mini_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_NoAuto.ini', label: '精简版 - 无自动测速' },
+  // 无苹果/微软分流版
+  { name: 'ACL4SSR_NoApple', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoApple.ini', label: '无苹果 - 无苹果分流' },
+  { name: 'ACL4SSR_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto.ini', label: '无测速 - 无自动测速' },
+  { name: 'ACL4SSR_NoAuto_NoApple', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto_NoApple.ini', label: '无测速&苹果 - 无测速&无苹果分流' },
+  { name: 'ACL4SSR_NoAuto_NoApple_NoMicrosoft', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto_NoApple_NoMicrosoft.ini', label: '无测速&苹果&微软 - 无测速&无苹果&无微软分流' },
+  { name: 'ACL4SSR_NoMicrosoft', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoMicrosoft.ini', label: '无微软 - 无微软分流' },
+  // 在线版
+  { name: 'ACL4SSR_Online', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online.ini', label: '在线版 - 典型分组' },
+  { name: 'ACL4SSR_Online_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_AdblockPlus.ini', label: '在线版 - 典型分组+去广告' },
+  // 在线全分组版
+  { name: 'ACL4SSR_Online_Full', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full.ini', label: '在线全分组 - 比较全' },
+  { name: 'ACL4SSR_Online_Full_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_AdblockPlus.ini', label: '在线全分组 - 带广告拦截' },
+  { name: 'ACL4SSR_Online_Full_Google', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_Google.ini', label: '在线全分组 - 谷歌分流' },
+  { name: 'ACL4SSR_Online_Full_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_MultiMode.ini', label: '在线全分组 - 多模式' },
+  { name: 'ACL4SSR_Online_Full_Netflix', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_Netflix.ini', label: '在线全分组 - 奈飞分流' },
+  { name: 'ACL4SSR_Online_Full_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_NoAuto.ini', label: '在线全分组 - 无自动测速' },
+  // 在线精简版
+  { name: 'ACL4SSR_Online_Mini', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini.ini', label: '在线精简版 - 少量分组' },
+  { name: 'ACL4SSR_Online_Mini_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_AdblockPlus.ini', label: '在线精简版 - 带广告拦截' },
+  { name: 'ACL4SSR_Online_Mini_Ai', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_Ai.ini', label: '在线精简版 - AI' },
+  { name: 'ACL4SSR_Online_Mini_Fallback', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_Fallback.ini', label: '在线精简版 - 故障转移' },
+  { name: 'ACL4SSR_Online_Mini_MultiCountry', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_MultiCountry.ini', label: '在线精简版 - 多国家' },
+  { name: 'ACL4SSR_Online_Mini_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_MultiMode.ini', label: '在线精简版 - 多模式' },
+  { name: 'ACL4SSR_Online_Mini_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_NoAuto.ini', label: '在线精简版 - 无自动测速' },
+  { name: 'ACL4SSR_Online_MultiCountry', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_MultiCountry.ini', label: '在线版 - 多国家' },
+  { name: 'ACL4SSR_Online_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_NoAuto.ini', label: '在线版 - 无自动测速' },
+  { name: 'ACL4SSR_Online_NoReject', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_NoReject.ini', label: '在线版 - 无拒绝规则' },
+  // 特殊版
+  { name: 'ACL4SSR_WithChinaIp', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithChinaIp.ini', label: '特殊版 - 包含回国IP' },
+  { name: 'ACL4SSR_WithChinaIp_WithGFW', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithChinaIp_WithGFW.ini', label: '特殊版 - 包含回国IP&GFW列表' },
+  { name: 'ACL4SSR_WithGFW', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithGFW.ini', label: '特殊版 - 包含GFW列表' },
+]
+
+// Aethersailor 预设列表
+const Aethersailor_PRESETS: ACL4SSRPreset[] = [
+  { name: 'Custom_Clash', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash.ini', label: 'Aethersailor - 标准 (推荐使用)' },
+  { name: 'Custom_Clash_Full', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Full.ini', label: 'Aethersailor - 全分组 (节点较多)' },
+  { name: 'Custom_Clash_GFW', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_GFW.ini', label: 'Aethersailor - 极简 (GFW)' },
+  { name: 'Custom_Clash_Lite', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Lite.ini', label: 'Aethersailor - 轻量 (国内直连，国外代理)' },
+]
+
+// 合并所有预设模板
+const ALL_CUSTOM_TEMPLATES: ACL4SSRPreset[] = [
+  ...Aethersailor_PRESETS,
+  ...ACL4SSR_PRESETS,
+]
+
 export const Route = createFileRoute('/generator')({
   beforeLoad: () => {
     const token = useAuthStore.getState().auth.accessToken
@@ -181,12 +274,30 @@ function SubscriptionGeneratorPage() {
 
   // 规则模式状态
   const [ruleMode, setRuleMode] = useState<'custom' | 'template'>('custom')
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  const [selectedTemplateUrl, setSelectedTemplateUrl] = useState<string>('')
   const [hasManuallyGrouped, setHasManuallyGrouped] = useState(false)
 
-  // 上传模板状态
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  // 模板管理对话框状态
+  const [templateManageDialogOpen, setTemplateManageDialogOpen] = useState(false)
+  const [isTemplateFormDialogOpen, setIsTemplateFormDialogOpen] = useState(false)
+  const [isTemplateDeleteDialogOpen, setIsTemplateDeleteDialogOpen] = useState(false)
+  const [isTemplatePreviewDialogOpen, setIsTemplatePreviewDialogOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
+  const [deletingTemplateId, setDeletingTemplateId] = useState<number | null>(null)
+  const [templatePreviewContent, setTemplatePreviewContent] = useState('')
+  const [isTemplatePreviewLoading, setIsTemplatePreviewLoading] = useState(false)
+  const [isSourcePreviewDialogOpen, setIsSourcePreviewDialogOpen] = useState(false)
+  const [sourcePreviewContent, setSourcePreviewContent] = useState('')
+  const [isSourcePreviewLoading, setIsSourcePreviewLoading] = useState(false)
+  const [sourcePreviewTitle, setSourcePreviewTitle] = useState('')
+  const [templateFormData, setTemplateFormData] = useState<TemplateFormData>({
+    name: '',
+    category: 'clash',
+    template_url: '',
+    rule_source: '',
+    use_proxy: false,
+    enable_include_all: true,
+  })
 
   // 保存订阅对话框状态
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -216,63 +327,231 @@ function SubscriptionGeneratorPage() {
     enabled: Boolean(auth.accessToken),
   })
 
-  // 获取规则模板列表
-  const { data: templatesData } = useQuery({
-    queryKey: ['rule-templates'],
+  // 获取数据库模板列表
+  const { data: dbTemplates = [] } = useQuery<Template[]>({
+    queryKey: ['templates'],
     queryFn: async () => {
-      const response = await api.get('/api/admin/rule-templates')
-      return response.data as { templates: string[] }
+      const response = await api.get('/api/admin/templates')
+      return response.data.templates || []
     },
     enabled: Boolean(auth.accessToken),
   })
 
   const savedNodes = nodesData?.nodes ?? []
   const enabledNodes = savedNodes.filter(n => n.enabled)
-  const templates = templatesData?.templates ?? []
+
+  // 合并后台模板和预设模板（后台模板放在最前面）
+  const allTemplates = useMemo(() => {
+    const dbTemplateItems: ACL4SSRPreset[] = dbTemplates.map(t => ({
+      name: `db-${t.id}`,
+      url: t.rule_source,
+      label: t.name,
+    }))
+    return [...dbTemplateItems, ...ALL_CUSTOM_TEMPLATES]
+  }, [dbTemplates])
 
   // 默认选择第一个模板
   useEffect(() => {
-    if (ruleMode === 'template' && templates.length > 0 && !selectedTemplate) {
-      setSelectedTemplate(templates[0])
+    if (ruleMode === 'template' && allTemplates.length > 0 && !selectedTemplateUrl) {
+      setSelectedTemplateUrl(allTemplates[0].url)
     }
-  }, [ruleMode, templates, selectedTemplate])
+  }, [ruleMode, selectedTemplateUrl, allTemplates])
 
-  // 上传模板 mutation
-  const uploadTemplateMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData()
-      formData.append('template', file)
-      const response = await api.post('/api/admin/rule-templates/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      return response.data as { filename: string }
+  // 创建模板 mutation
+  const createTemplateMutation = useMutation({
+    mutationFn: async (template: TemplateFormData) => {
+      const response = await api.post('/api/admin/templates', template)
+      return response.data
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
-      setSelectedTemplate(data.filename)
-      setUploadDialogOpen(false)
-      toast.success('模板上传成功')
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      setIsTemplateFormDialogOpen(false)
+      resetTemplateForm()
+      toast.success('模板已创建')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || '上传模板失败')
-    }
+      toast.error(error.response?.data?.error || '创建模板时出错')
+    },
   })
 
-  const handleUploadTemplate = () => {
-    const file = fileInputRef.current?.files?.[0]
-    if (!file) {
-      toast.error('请选择文件')
-      return
-    }
+  // 更新模板 mutation
+  const updateTemplateMutation = useMutation({
+    mutationFn: async ({ id, ...template }: TemplateFormData & { id: number }) => {
+      const response = await api.put(`/api/admin/templates/${id}`, template)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      setIsTemplateFormDialogOpen(false)
+      resetTemplateForm()
+      toast.success('模板已更新')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '更新模板时出错')
+    },
+  })
 
-    // 检查文件扩展名
-    if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
-      toast.error('只支持 .yaml 或 .yml 文件')
-      return
-    }
+  // 删除模板 mutation
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/api/admin/templates/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      setIsTemplateDeleteDialogOpen(false)
+      setDeletingTemplateId(null)
+      toast.success('模板已删除')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '删除模板时出错')
+    },
+  })
 
-    uploadTemplateMutation.mutate(file)
+  // 重置模板表单
+  const resetTemplateForm = () => {
+    setTemplateFormData({
+      name: '',
+      category: 'clash',
+      template_url: '',
+      rule_source: '',
+      use_proxy: false,
+      enable_include_all: true,
+    })
+    setEditingTemplate(null)
   }
+
+  // 模板管理相关函数
+  const handleCreateTemplate = () => {
+    resetTemplateForm()
+    setIsTemplateFormDialogOpen(true)
+  }
+
+  const handleEditTemplate = (template: Template) => {
+    setEditingTemplate(template)
+    setTemplateFormData({
+      name: template.name,
+      category: template.category,
+      template_url: template.template_url,
+      rule_source: template.rule_source,
+      use_proxy: template.use_proxy,
+      enable_include_all: template.enable_include_all,
+    })
+    setIsTemplateFormDialogOpen(true)
+  }
+
+  const handleDeleteTemplate = (id: number) => {
+    setDeletingTemplateId(id)
+    setIsTemplateDeleteDialogOpen(true)
+  }
+
+  const handlePreviewTemplate = async (template: Template) => {
+    if (!template.rule_source) {
+      toast.error('请先配置规则源')
+      return
+    }
+
+    setIsTemplatePreviewLoading(true)
+    setIsTemplatePreviewDialogOpen(true)
+
+    try {
+      const response = await api.post('/api/admin/templates/convert', {
+        template_url: template.template_url,
+        rule_source: template.rule_source,
+        category: template.category,
+        use_proxy: template.use_proxy,
+        enable_include_all: template.enable_include_all,
+      })
+      setTemplatePreviewContent(response.data.content)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '生成预览时出错')
+      setIsTemplatePreviewDialogOpen(false)
+    } finally {
+      setIsTemplatePreviewLoading(false)
+    }
+  }
+
+  const handlePreviewSource = async (template: Template) => {
+    if (!template.rule_source) {
+      toast.error('请先配置规则源')
+      return
+    }
+
+    setIsSourcePreviewLoading(true)
+    setIsSourcePreviewDialogOpen(true)
+    setSourcePreviewTitle(template.name)
+
+    try {
+      // 通过后端代理获取源文件内容
+      const response = await api.post('/api/admin/templates/fetch-source', {
+        url: template.rule_source,
+        use_proxy: template.use_proxy,
+      })
+      setSourcePreviewContent(response.data.content)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '获取源文件时出错')
+      setIsSourcePreviewDialogOpen(false)
+    } finally {
+      setIsSourcePreviewLoading(false)
+    }
+  }
+
+  const handlePreviewSelectedSource = async () => {
+    if (!selectedTemplateUrl) {
+      toast.error('请先选择模板')
+      return
+    }
+
+    // 找到当前选中的模板名称
+    const selectedTemplate = allTemplates.find(t => t.url === selectedTemplateUrl)
+    const templateName = selectedTemplate?.label || '模板源文件'
+
+    setIsSourcePreviewLoading(true)
+    setIsSourcePreviewDialogOpen(true)
+    setSourcePreviewTitle(templateName)
+
+    try {
+      const response = await api.post('/api/admin/templates/fetch-source', {
+        url: selectedTemplateUrl,
+        use_proxy: false,
+      })
+      setSourcePreviewContent(response.data.content)
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '获取源文件时出错')
+      setIsSourcePreviewDialogOpen(false)
+    } finally {
+      setIsSourcePreviewLoading(false)
+    }
+  }
+
+  const handleSubmitTemplate = () => {
+    if (!templateFormData.name.trim()) {
+      toast.error('请输入模板名称')
+      return
+    }
+
+    if (!templateFormData.rule_source.trim()) {
+      toast.error('请输入规则源地址')
+      return
+    }
+
+    // 准备提交数据，如果启用代理下载则自动拼接 1ms.cc 代理前缀
+    const submitData = {
+      ...templateFormData,
+      rule_source: templateFormData.use_proxy && !templateFormData.rule_source.startsWith('https://1ms.cc/')
+        ? `https://1ms.cc/${templateFormData.rule_source}`
+        : templateFormData.rule_source,
+      // 默认使用 Clash 格式和启用 include-all
+      category: 'clash' as const,
+      enable_include_all: true,
+    }
+
+    if (editingTemplate) {
+      updateTemplateMutation.mutate({ id: editingTemplate.id, ...submitData })
+    } else {
+      createTemplateMutation.mutate(submitData)
+    }
+  }
+
 
   // 获取所有协议类型
   const protocols = Array.from(new Set(enabledNodes.map(n => n.protocol.toLowerCase()))).sort()
@@ -332,14 +611,14 @@ function SubscriptionGeneratorPage() {
     return allProxies.filter(name => !usedNodes.has(name))
   }, [allProxies, proxyGroups, showAllNodes])
 
-  // 加载模板并插入节点
+  // 使用 ACL4SSR 模板转换功能加载模板
   const handleLoadTemplate = async () => {
     if (selectedNodeIds.size === 0) {
       toast.error('请选择至少一个节点')
       return
     }
 
-    if (!selectedTemplate) {
+    if (!selectedTemplateUrl) {
       toast.error('请选择一个模板')
       return
     }
@@ -362,12 +641,21 @@ function SubscriptionGeneratorPage() {
         return
       }
 
-      // 读取模板文件
-      const response = await api.get(`/api/admin/rule-templates/${selectedTemplate}`)
-      const templateContent = response.data.content as string
+      // 提取节点名称列表用于后端显式填充 proxies 字段
+      const proxyNames = proxies.map(p => p.name)
 
-      // 解析模板
-      const templateConfig = yaml.load(templateContent) as any
+      // 调用转换 API 获取配置（使用预设 URL 作为规则源）
+      const convertResponse = await api.post('/api/admin/templates/convert', {
+        template_url: '',  // 使用默认模板
+        rule_source: selectedTemplateUrl,
+        category: 'clash',
+        use_proxy: false,
+        enable_include_all: true,
+        proxy_names: proxyNames,  // 传递节点名称列表，后端将显式填充 proxies 字段
+      })
+
+      // 解析生成的配置
+      const templateConfig = yaml.load(convertResponse.data.content) as any
 
       // 插入代理节点，并重新排序字段
       templateConfig.proxies = proxies.map(proxy => reorderProxyFields(proxy))
@@ -395,9 +683,9 @@ function SubscriptionGeneratorPage() {
       setClashConfig(finalConfig)
       setHasManuallyGrouped(false) // 加载模板后重置手动分组状态
       toast.success(`成功加载模板并插入 ${proxies.length} 个节点`)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Load template error:', error)
-      toast.error('加载模板失败')
+      toast.error(error.response?.data?.error || '加载模板失败')
     } finally {
       setLoading(false)
     }
@@ -1605,37 +1893,51 @@ function SubscriptionGeneratorPage() {
                   <div className='space-y-2'>
                     <Label htmlFor='template-select'>选择模板</Label>
                     <p className='text-sm text-muted-foreground'>
-                      模板为静态文件模板(源代码rule_templates目录中)，不会提交节点到转换后端，放心使用。
+                      使用 ACL4SSR 规则模板生成配置，自动解析代理组和规则。
                     </p>
                   </div>
                   <div className='space-y-2'>
-                    <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                      <SelectTrigger id='template-select'>
-                        <SelectValue placeholder='请选择模板' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {templates.map((template) => (
-                          <SelectItem key={template} value={template}>
-                            {template}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <div className='flex gap-2'>
+                      <Select
+                        value={selectedTemplateUrl}
+                        onValueChange={setSelectedTemplateUrl}
+                      >
+                        <SelectTrigger id='template-select' className='flex-1'>
+                          <SelectValue placeholder='请选择模板' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allTemplates.map((template) => (
+                            <SelectItem key={template.name} value={template.url}>
+                              {template.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         variant='outline'
-                        className='flex-1'
-                        onClick={() => setUploadDialogOpen(true)}
+                        size='icon'
+                        onClick={handlePreviewSelectedSource}
+                        disabled={!selectedTemplateUrl}
+                        title='查看源文件'
                       >
-                        <Upload className='mr-2 h-4 w-4' />
-                        上传
+                        <FileText className='h-4 w-4' />
                       </Button>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        onClick={() => setTemplateManageDialogOpen(true)}
+                        title='模板管理'
+                      >
+                        <Settings className='h-4 w-4' />
+                      </Button>
+                    </div>
+                    <div className='flex gap-2'>
                       <div
                         className='flex-1'
                         onClick={() => {
                           if (selectedNodeIds.size === 0) {
                             toast.error('请先选择节点')
-                          } else if (!selectedTemplate) {
+                          } else if (!selectedTemplateUrl) {
                             toast.error('请先选择模板')
                           }
                         }}
@@ -1643,7 +1945,7 @@ function SubscriptionGeneratorPage() {
                         <Button
                           className='w-full'
                           onClick={handleLoadTemplate}
-                          disabled={loading || selectedNodeIds.size === 0 || !selectedTemplate}
+                          disabled={loading || selectedNodeIds.size === 0 || !selectedTemplateUrl}
                         >
                           {loading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
                           加载
@@ -1906,38 +2208,244 @@ function SubscriptionGeneratorPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 上传模板对话框 */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent>
+      {/* 模板管理主对话框 */}
+      <Dialog open={templateManageDialogOpen} onOpenChange={setTemplateManageDialogOpen}>
+        <DialogContent className='max-w-2xl'>
+          <DialogHeader className='flex flex-row items-center justify-between'>
+            <div>
+              <DialogTitle>模板管理</DialogTitle>
+              <DialogDescription>
+                管理 ACL4SSR 规则模板
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className='space-y-4'>
+            <div className='flex justify-end'>
+              <Button onClick={handleCreateTemplate}>
+                <Plus className='h-4 w-4 mr-2' />
+                新建模板
+              </Button>
+            </div>
+            <DataTable
+              columns={[
+                {
+                  header: '名称',
+                  cell: (template: Template) => (
+                    <span className='font-medium'>{template.name}</span>
+                  ),
+                },
+                {
+                  header: '规则源',
+                  cell: (template: Template) => (
+                    <span className='text-sm text-muted-foreground truncate max-w-[180px] block' title={template.rule_source}>
+                      {template.rule_source ? template.rule_source.split('/').pop() : '未配置'}
+                    </span>
+                  ),
+                },
+                {
+                  header: '操作',
+                  cell: (template: Template) => (
+                    <div className='flex items-center gap-1'>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handlePreviewSource(template)}
+                        title='查看源文件'
+                      >
+                        <FileText className='h-4 w-4' />
+                      </Button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handlePreviewTemplate(template)}
+                        title='预览生成结果'
+                      >
+                        <Eye className='h-4 w-4' />
+                      </Button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handleEditTemplate(template)}
+                        title='编辑'
+                      >
+                        <Pencil className='h-4 w-4' />
+                      </Button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handleDeleteTemplate(template.id)}
+                        title='删除'
+                      >
+                        <Trash2 className='h-4 w-4 text-destructive' />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={dbTemplates}
+              getRowKey={(template: Template) => template.id}
+              emptyText='暂无模板，点击上方按钮创建'
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 模板表单对话框 */}
+      <Dialog open={isTemplateFormDialogOpen} onOpenChange={setIsTemplateFormDialogOpen}>
+        <DialogContent className='max-w-md'>
           <DialogHeader>
-            <DialogTitle>上传模板</DialogTitle>
+            <DialogTitle>
+              {editingTemplate ? '编辑模板' : '新建模板'}
+            </DialogTitle>
             <DialogDescription>
-              选择一个 YAML 格式的模板文件上传到 rule_templates 文件夹
+              配置模板名称和规则源地址
             </DialogDescription>
           </DialogHeader>
+
           <div className='space-y-4 py-4'>
             <div className='space-y-2'>
-              <Label htmlFor='template-file'>模板文件</Label>
+              <Label htmlFor='template-name'>
+                模板名称 <span className='text-destructive'>*</span>
+              </Label>
               <Input
-                id='template-file'
-                type='file'
-                accept='.yaml,.yml'
-                ref={fileInputRef}
+                id='template-name'
+                value={templateFormData.name}
+                onChange={(e) =>
+                  setTemplateFormData({ ...templateFormData, name: e.target.value })
+                }
+                placeholder='输入模板名称'
+              />
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='rule-source'>
+                规则源地址 <span className='text-destructive'>*</span>
+              </Label>
+              <Input
+                id='rule-source'
+                value={templateFormData.rule_source}
+                onChange={(e) =>
+                  setTemplateFormData({ ...templateFormData, rule_source: e.target.value })
+                }
+                placeholder='ACL4SSR 配置 URL'
               />
               <p className='text-xs text-muted-foreground'>
-                支持 .yaml 或 .yml 格式
+                ACL4SSR 格式的规则配置 URL
               </p>
             </div>
+
+            <div className='flex items-center justify-between'>
+              <div className='space-y-0.5'>
+                <Label>使用代理下载</Label>
+                <p className='text-xs text-muted-foreground'>
+                  启用后自动通过 1ms.cc 代理下载
+                </p>
+              </div>
+              <Switch
+                checked={templateFormData.use_proxy}
+                onCheckedChange={(checked) =>
+                  setTemplateFormData({ ...templateFormData, use_proxy: checked })
+                }
+              />
+            </div>
           </div>
+
           <DialogFooter>
-            <Button variant='outline' onClick={() => setUploadDialogOpen(false)}>
+            <Button variant='outline' onClick={() => setIsTemplateFormDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleUploadTemplate} disabled={uploadTemplateMutation.isPending}>
-              {uploadTemplateMutation.isPending && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-              上传
+            <Button
+              onClick={handleSubmitTemplate}
+              disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending || !templateFormData.name.trim() || !templateFormData.rule_source.trim()}
+            >
+              {(createTemplateMutation.isPending || updateTemplateMutation.isPending) && (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              )}
+              {editingTemplate ? '保存' : '创建'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 模板删除确认对话框 */}
+      <AlertDialog open={isTemplateDeleteDialogOpen} onOpenChange={setIsTemplateDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这个模板吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingTemplateId && deleteTemplateMutation.mutate(deletingTemplateId)}
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 模板预览对话框 */}
+      <Dialog open={isTemplatePreviewDialogOpen} onOpenChange={setIsTemplatePreviewDialogOpen}>
+        <DialogContent className='max-w-4xl max-h-[80vh]'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center justify-between'>
+              <span>配置预览</span>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  navigator.clipboard.writeText(templatePreviewContent)
+                  toast.success('已复制到剪贴板')
+                }}
+              >
+                <Copy className='h-4 w-4 mr-2' />
+                复制
+              </Button>
+            </DialogTitle>
+            <DialogDescription>
+              生成的配置文件预览
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='overflow-auto max-h-[60vh]'>
+            {isTemplatePreviewLoading ? (
+              <div className='flex items-center justify-center py-8'>
+                <span className='text-muted-foreground'>正在生成预览...</span>
+              </div>
+            ) : (
+              <pre className='text-xs bg-muted p-4 rounded-md whitespace-pre-wrap font-mono'>
+                {templatePreviewContent}
+              </pre>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 模板源文件预览对话框 */}
+      <Dialog open={isSourcePreviewDialogOpen} onOpenChange={setIsSourcePreviewDialogOpen}>
+        <DialogContent className='sm:max-w-[75vw] max-h-[80vh]'>
+          <DialogHeader>
+            <DialogTitle>源文件预览 - {sourcePreviewTitle}</DialogTitle>
+            <DialogDescription>
+              ACL4SSR 规则源文件内容
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='overflow-auto max-h-[60vh]'>
+            {isSourcePreviewLoading ? (
+              <div className='flex items-center justify-center py-8'>
+                <span className='text-muted-foreground'>正在获取源文件...</span>
+              </div>
+            ) : (
+              <pre className='text-xs bg-muted p-4 rounded-md whitespace-pre-wrap font-mono'>
+                {sourcePreviewContent}
+              </pre>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
