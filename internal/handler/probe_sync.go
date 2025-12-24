@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -72,6 +74,8 @@ func (h *probeSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var servers []probeSyncServer
 	var err error
 
+	log.Printf("[探针同步] 开始获取探针信息: 类型=%s, 地址=%s", probeType, address)
+
 	switch probeType {
 	case storage.ProbeTypeNezha:
 		servers, err = h.fetchNezhaServers(r.Context(), address)
@@ -82,21 +86,27 @@ func (h *probeSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case storage.ProbeTypeKomari:
 		servers, err = h.fetchKomariServers(r.Context(), address)
 	default:
+		log.Printf("[探针同步] 不支持的探针类型: %s", probeType)
 		writeBadRequest(w, "不支持的探针类型")
 		return
 	}
 
 	if err != nil {
+		log.Printf("[探针同步] 获取探针信息失败: 类型=%s, 地址=%s, 错误=%v", probeType, address, err)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
 
+	log.Printf("[探针同步] 成功获取探针信息: 类型=%s, 地址=%s, 服务器数量=%d", probeType, address, len(servers))
 	respondJSON(w, http.StatusOK, probeSyncResponse{Servers: servers})
 }
 
 func (h *probeSyncHandler) fetchNezhaServers(ctx context.Context, address string) ([]probeSyncServer, error) {
+	log.Printf("[探针同步-Nezha] 开始解析地址: %s", address)
+
 	base, err := url.Parse(strings.TrimSpace(address))
 	if err != nil {
+		log.Printf("[探针同步-Nezha] 地址解析失败: %s, 错误=%v", address, err)
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
 
@@ -114,29 +124,44 @@ func (h *probeSyncHandler) fetchNezhaServers(ctx context.Context, address string
 	endpoint := &url.URL{Path: "/api/v1/ws/server"}
 	target := base.ResolveReference(endpoint)
 
+	log.Printf("[探针同步-Nezha] 连接 WebSocket: %s", target.String())
+
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
 	if err != nil {
+		var respInfo string
 		if resp != nil {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			respInfo = fmt.Sprintf("状态码=%d, 响应=%s", resp.StatusCode, string(bodyBytes))
 			resp.Body.Close()
+		} else {
+			respInfo = "无响应"
 		}
+		log.Printf("[探针同步-Nezha] WebSocket 连接失败: URL=%s, 错误=%v, 响应信息=%s", target.String(), err, respInfo)
 		return nil, fmt.Errorf("无法连接到 WebSocket 接口: %w", err)
 	}
 	defer conn.Close()
 
+	log.Printf("[探针同步-Nezha] WebSocket 连接成功，等待数据...")
+
 	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		log.Printf("[探针同步-Nezha] 设置读取超时失败: %v", err)
 		return nil, fmt.Errorf("set websocket deadline: %w", err)
 	}
 
 	_, message, err := conn.ReadMessage()
 	if err != nil {
+		log.Printf("[探针同步-Nezha] 读取 WebSocket 消息失败: %v", err)
 		return nil, fmt.Errorf("未在期望时间内收到服务器数据: %w", err)
 	}
 
+	log.Printf("[探针同步-Nezha] 收到消息，长度=%d 字节", len(message))
+
 	message = bytes.TrimSpace(message)
 	if len(message) == 0 {
+		log.Printf("[探针同步-Nezha] 收到空消息")
 		return nil, errors.New("empty probe websocket payload")
 	}
 
@@ -154,24 +179,37 @@ func (h *probeSyncHandler) fetchNezhaServers(ctx context.Context, address string
 
 	var snapshot nezhaSnapshot
 
+	// 记录消息预览（最多500字节）
+	msgPreview := string(message)
+	if len(msgPreview) > 500 {
+		msgPreview = msgPreview[:500] + "...(截断)"
+	}
+
 	if message[0] == '[' {
 		var frames []nezhaSnapshot
 		if err := decoder.Decode(&frames); err != nil {
+			log.Printf("[探针同步-Nezha] JSON数组解析失败: 错误=%v, 内容预览=%s", err, msgPreview)
 			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
 		}
 		if len(frames) == 0 {
+			log.Printf("[探针同步-Nezha] 返回的数组为空")
 			return nil, errors.New("探针未返回任何服务器数据")
 		}
 		snapshot = frames[len(frames)-1]
+		log.Printf("[探针同步-Nezha] 解析到 %d 个数据帧，使用最后一帧", len(frames))
 	} else {
 		if err := decoder.Decode(&snapshot); err != nil {
+			log.Printf("[探针同步-Nezha] JSON对象解析失败: 错误=%v, 内容预览=%s", err, msgPreview)
 			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
 		}
 	}
 
 	if len(snapshot.Servers) == 0 {
+		log.Printf("[探针同步-Nezha] 服务器列表为空, 内容预览=%s", msgPreview)
 		return nil, errors.New("探针未返回任何服务器数据")
 	}
+
+	log.Printf("[探针同步-Nezha] 成功解析到 %d 个服务器", len(snapshot.Servers))
 
 	servers := make([]probeSyncServer, 0, len(snapshot.Servers))
 	for i, srv := range snapshot.Servers {
@@ -213,27 +251,45 @@ func (h *probeSyncHandler) fetchNezhaServers(ctx context.Context, address string
 }
 
 func (h *probeSyncHandler) fetchDstatusServers(ctx context.Context, address string) ([]probeSyncServer, error) {
+	log.Printf("[探针同步-Dstatus] 开始解析地址: %s", address)
+
 	base, err := url.Parse(strings.TrimSpace(address))
 	if err != nil {
+		log.Printf("[探针同步-Dstatus] 地址解析失败: %s, 错误=%v", address, err)
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
 
 	endpoint := &url.URL{Path: "/api/servers"}
 	target := base.ResolveReference(endpoint)
 
+	log.Printf("[探针同步-Dstatus] 请求服务器列表: %s", target.String())
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
+		log.Printf("[探针同步-Dstatus] 创建请求失败: %v", err)
 		return nil, err
 	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
+		log.Printf("[探针同步-Dstatus] HTTP请求失败: URL=%s, 错误=%v", target.String(), err)
 		return nil, fmt.Errorf("服务器接口返回异常: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// 读取响应体以便记录日志
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyPreview := string(bodyBytes)
+	if len(bodyPreview) > 500 {
+		bodyPreview = bodyPreview[:500] + "...(截断)"
+	}
+
+	log.Printf("[探针同步-Dstatus] 收到响应: 状态码=%d, Content-Type=%s, 内容长度=%d",
+		resp.StatusCode, resp.Header.Get("Content-Type"), len(bodyBytes))
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("服务器接口返回异常")
+		log.Printf("[探针同步-Dstatus] 服务器返回错误状态: 状态码=%d, 响应内容=%s", resp.StatusCode, bodyPreview)
+		return nil, fmt.Errorf("服务器接口返回异常: 状态码=%d", resp.StatusCode)
 	}
 
 	var serversResp struct {
@@ -243,16 +299,20 @@ func (h *probeSyncHandler) fetchDstatusServers(ctx context.Context, address stri
 		} `json:"data"`
 	}
 
-	decoder := json.NewDecoder(resp.Body)
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 	decoder.UseNumber()
 
 	if err := decoder.Decode(&serversResp); err != nil {
+		log.Printf("[探针同步-Dstatus] JSON解析失败: 错误=%v, 响应内容=%s", err, bodyPreview)
 		return nil, fmt.Errorf("parse servers response: %w", err)
 	}
 
 	if len(serversResp.Data) == 0 {
+		log.Printf("[探针同步-Dstatus] 服务器列表为空, 响应内容=%s", bodyPreview)
 		return nil, errors.New("未从面板获取到服务器列表")
 	}
+
+	log.Printf("[探针同步-Dstatus] 成功获取 %d 个服务器", len(serversResp.Data))
 
 	serverIDs := make([]string, 0, len(serversResp.Data))
 	serverMap := make(map[string]string)
@@ -343,16 +403,22 @@ func (h *probeSyncHandler) fetchDstatusServers(ctx context.Context, address stri
 }
 
 func (h *probeSyncHandler) fetchNezhaV0Servers(ctx context.Context, address string) ([]probeSyncServer, error) {
+	log.Printf("[探针同步-NezhaV0] 开始解析地址: %s", address)
+
 	base, err := url.Parse(strings.TrimSpace(address))
 	if err != nil {
+		log.Printf("[探针同步-NezhaV0] 地址解析失败: %s, 错误=%v", address, err)
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
 
 	endpoint := &url.URL{Path: "/api/server"}
 	target := base.ResolveReference(endpoint)
 
+	log.Printf("[探针同步-NezhaV0] 请求HTTP接口: %s", target.String())
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
+		log.Printf("[探针同步-NezhaV0] 创建请求失败: %v", err)
 		return nil, err
 	}
 
@@ -365,33 +431,56 @@ func (h *probeSyncHandler) fetchNezhaV0Servers(ctx context.Context, address stri
 	}
 
 	httpSuccess := false
+	var httpBodyPreview string
 	if err == nil {
 		defer resp.Body.Close()
 
+		// 读取响应体以便记录日志
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		httpBodyPreview = string(bodyBytes)
+		if len(httpBodyPreview) > 500 {
+			httpBodyPreview = httpBodyPreview[:500] + "...(截断)"
+		}
+
+		log.Printf("[探针同步-NezhaV0] HTTP响应: 状态码=%d, 内容长度=%d", resp.StatusCode, len(bodyBytes))
+
 		if resp.StatusCode == http.StatusOK {
-			decoder := json.NewDecoder(resp.Body)
+			decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 			decoder.UseNumber()
 
-			if err := decoder.Decode(&serverResp); err == nil && len(serverResp.Result) > 0 {
+			if decodeErr := decoder.Decode(&serverResp); decodeErr == nil && len(serverResp.Result) > 0 {
 				httpSuccess = true
+				log.Printf("[探针同步-NezhaV0] HTTP接口成功，获取到 %d 个服务器", len(serverResp.Result))
+			} else if decodeErr != nil {
+				log.Printf("[探针同步-NezhaV0] HTTP响应JSON解析失败: 错误=%v, 内容=%s", decodeErr, httpBodyPreview)
+			} else {
+				log.Printf("[探针同步-NezhaV0] HTTP响应中服务器列表为空, 内容=%s", httpBodyPreview)
 			}
+		} else {
+			log.Printf("[探针同步-NezhaV0] HTTP返回非200状态码: %d, 内容=%s", resp.StatusCode, httpBodyPreview)
 		}
+	} else {
+		log.Printf("[探针同步-NezhaV0] HTTP请求失败: %v", err)
 	}
 
 	// 如果 HTTP 接口失败或没有数据，尝试使用 WebSocket
 	if !httpSuccess {
+		log.Printf("[探针同步-NezhaV0] HTTP接口失败，尝试使用 WebSocket 接口...")
 		wsServers, wsErr := h.fetchNezhaV0ServersViaWebSocket(ctx, base)
 		if wsErr != nil {
 			// WebSocket 也失败了，返回综合错误信息
+			log.Printf("[探针同步-NezhaV0] WebSocket 接口也失败: %v", wsErr)
 			if err != nil {
 				return nil, fmt.Errorf("HTTP 接口失败: %w; WebSocket 接口也失败: %v", err, wsErr)
 			}
 			return nil, fmt.Errorf("HTTP 接口未获取到数据; WebSocket 接口也失败: %v", wsErr)
 		}
+		log.Printf("[探针同步-NezhaV0] WebSocket 接口成功，获取到 %d 个服务器", len(wsServers))
 		return wsServers, nil
 	}
 
 	if len(serverResp.Result) == 0 {
+		log.Printf("[探针同步-NezhaV0] 服务器列表为空")
 		return nil, errors.New("未从面板获取到服务器列表")
 	}
 
@@ -435,27 +524,45 @@ func (h *probeSyncHandler) fetchNezhaV0Servers(ctx context.Context, address stri
 }
 
 func (h *probeSyncHandler) fetchKomariServers(ctx context.Context, address string) ([]probeSyncServer, error) {
+	log.Printf("[探针同步-Komari] 开始解析地址: %s", address)
+
 	base, err := url.Parse(strings.TrimSpace(address))
 	if err != nil {
+		log.Printf("[探针同步-Komari] 地址解析失败: %s, 错误=%v", address, err)
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
 
 	endpoint := &url.URL{Path: "/api/nodes"}
 	target := base.ResolveReference(endpoint)
 
+	log.Printf("[探针同步-Komari] 请求服务器列表: %s", target.String())
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
+		log.Printf("[探针同步-Komari] 创建请求失败: %v", err)
 		return nil, err
 	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
+		log.Printf("[探针同步-Komari] HTTP请求失败: URL=%s, 错误=%v", target.String(), err)
 		return nil, fmt.Errorf("服务器接口返回异常: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// 读取响应体以便记录日志
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyPreview := string(bodyBytes)
+	if len(bodyPreview) > 500 {
+		bodyPreview = bodyPreview[:500] + "...(截断)"
+	}
+
+	log.Printf("[探针同步-Komari] 收到响应: 状态码=%d, Content-Type=%s, 内容长度=%d",
+		resp.StatusCode, resp.Header.Get("Content-Type"), len(bodyBytes))
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("服务器接口返回异常")
+		log.Printf("[探针同步-Komari] 服务器返回错误状态: 状态码=%d, 响应内容=%s", resp.StatusCode, bodyPreview)
+		return nil, fmt.Errorf("服务器接口返回异常: 状态码=%d", resp.StatusCode)
 	}
 
 	var nodesResp struct {
@@ -466,16 +573,20 @@ func (h *probeSyncHandler) fetchKomariServers(ctx context.Context, address strin
 		} `json:"data"`
 	}
 
-	decoder := json.NewDecoder(resp.Body)
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 	decoder.UseNumber()
 
 	if err := decoder.Decode(&nodesResp); err != nil {
+		log.Printf("[探针同步-Komari] JSON解析失败: 错误=%v, 响应内容=%s", err, bodyPreview)
 		return nil, fmt.Errorf("parse nodes response: %w", err)
 	}
 
 	if len(nodesResp.Data) == 0 {
+		log.Printf("[探针同步-Komari] 服务器列表为空, 响应内容=%s", bodyPreview)
 		return nil, errors.New("未从面板获取到服务器列表")
 	}
+
+	log.Printf("[探针同步-Komari] 成功获取 %d 个服务器", len(nodesResp.Data))
 
 	servers := make([]probeSyncServer, 0, len(nodesResp.Data))
 	for i, node := range nodesResp.Data {
@@ -518,31 +629,47 @@ func (h *probeSyncHandler) fetchNezhaV0ServersViaWebSocket(ctx context.Context, 
 	endpoint := &url.URL{Path: "/ws"}
 	target := base.ResolveReference(endpoint)
 
+	log.Printf("[探针同步-NezhaV0-WS] 开始连接WebSocket: %s", target.String())
+
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, target.String(), nil)
 	if err != nil {
 		if resp != nil {
+			log.Printf("[探针同步-NezhaV0-WS] WebSocket连接失败，HTTP响应状态码: %d", resp.StatusCode)
 			resp.Body.Close()
 		}
+		log.Printf("[探针同步-NezhaV0-WS] WebSocket连接失败: %v", err)
 		return nil, fmt.Errorf("无法连接到 WebSocket 接口: %w", err)
 	}
 	defer conn.Close()
+	log.Printf("[探针同步-NezhaV0-WS] WebSocket连接成功")
 
 	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		return nil, fmt.Errorf("set websocket deadline: %w", err)
 	}
 
+	log.Printf("[探针同步-NezhaV0-WS] 等待接收WebSocket消息...")
 	_, message, err := conn.ReadMessage()
 	if err != nil {
+		log.Printf("[探针同步-NezhaV0-WS] 读取WebSocket消息失败: %v", err)
 		return nil, fmt.Errorf("未在期望时间内收到服务器数据: %w", err)
 	}
+	log.Printf("[探针同步-NezhaV0-WS] 收到WebSocket消息，长度: %d 字节", len(message))
 
 	message = bytes.TrimSpace(message)
 	if len(message) == 0 {
+		log.Printf("[探针同步-NezhaV0-WS] WebSocket消息为空")
 		return nil, errors.New("empty probe websocket payload")
 	}
+
+	// 记录消息内容预览
+	msgPreview := string(message)
+	if len(msgPreview) > 500 {
+		msgPreview = msgPreview[:500] + "..."
+	}
+	log.Printf("[探针同步-NezhaV0-WS] 消息内容预览: %s", msgPreview)
 
 	type nezhaServer struct {
 		ID   json.Number `json:"id"`
@@ -559,21 +686,29 @@ func (h *probeSyncHandler) fetchNezhaV0ServersViaWebSocket(ctx context.Context, 
 	var snapshot nezhaSnapshot
 
 	if message[0] == '[' {
+		log.Printf("[探针同步-NezhaV0-WS] 检测到数组格式，解析多帧数据")
 		var frames []nezhaSnapshot
 		if err := decoder.Decode(&frames); err != nil {
+			log.Printf("[探针同步-NezhaV0-WS] 解析数组格式数据失败: %v", err)
 			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
 		}
+		log.Printf("[探针同步-NezhaV0-WS] 解析到 %d 个帧", len(frames))
 		if len(frames) == 0 {
+			log.Printf("[探针同步-NezhaV0-WS] 数组为空，没有数据帧")
 			return nil, errors.New("探针未返回任何服务器数据")
 		}
 		snapshot = frames[len(frames)-1]
 	} else {
+		log.Printf("[探针同步-NezhaV0-WS] 检测到对象格式，解析单个快照")
 		if err := decoder.Decode(&snapshot); err != nil {
+			log.Printf("[探针同步-NezhaV0-WS] 解析对象格式数据失败: %v", err)
 			return nil, fmt.Errorf("解析探针返回数据失败: %w", err)
 		}
 	}
 
+	log.Printf("[探针同步-NezhaV0-WS] 快照中包含 %d 个服务器", len(snapshot.Servers))
 	if len(snapshot.Servers) == 0 {
+		log.Printf("[探针同步-NezhaV0-WS] 服务器列表为空")
 		return nil, errors.New("探针未返回任何服务器数据")
 	}
 
@@ -613,5 +748,6 @@ func (h *probeSyncHandler) fetchNezhaV0ServersViaWebSocket(ctx context.Context, 
 		})
 	}
 
+	log.Printf("[探针同步-NezhaV0-WS] 成功解析 %d 个服务器", len(servers))
 	return servers, nil
 }
