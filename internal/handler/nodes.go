@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,67 @@ func convertNilToEmptyStringInMap(m map[string]any) {
 				}
 			}
 		}
+	}
+}
+
+// safeURLDecode 安全地进行 URL 解码，解码失败时返回原字符串
+func safeURLDecode(s string) string {
+	if s == "" {
+		return s
+	}
+	decoded, err := url.QueryUnescape(s)
+	if err != nil {
+		return s
+	}
+	return decoded
+}
+
+// decodeProxyURLFields 对代理节点中可能包含 URL 编码的字段进行解码
+// 主要处理 path、host 等字段，支持 ws-opts、h2-opts、grpc-opts 等传输层配置
+func decodeProxyURLFields(proxy map[string]any) {
+	// 处理 ws-opts
+	if wsOpts, ok := proxy["ws-opts"].(map[string]any); ok {
+		if path, ok := wsOpts["path"].(string); ok {
+			wsOpts["path"] = safeURLDecode(path)
+		}
+		if headers, ok := wsOpts["headers"].(map[string]any); ok {
+			if host, ok := headers["Host"].(string); ok {
+				headers["Host"] = safeURLDecode(host)
+			}
+		}
+	}
+
+	// 处理 h2-opts
+	if h2Opts, ok := proxy["h2-opts"].(map[string]any); ok {
+		if path, ok := h2Opts["path"].(string); ok {
+			h2Opts["path"] = safeURLDecode(path)
+		}
+		if host, ok := h2Opts["host"].(string); ok {
+			h2Opts["host"] = safeURLDecode(host)
+		}
+		// host 也可能是数组
+		if hosts, ok := h2Opts["host"].([]any); ok {
+			for i, h := range hosts {
+				if hs, ok := h.(string); ok {
+					hosts[i] = safeURLDecode(hs)
+				}
+			}
+		}
+	}
+
+	// 处理 grpc-opts
+	if grpcOpts, ok := proxy["grpc-opts"].(map[string]any); ok {
+		if serviceName, ok := grpcOpts["grpc-service-name"].(string); ok {
+			grpcOpts["grpc-service-name"] = safeURLDecode(serviceName)
+		}
+	}
+
+	// 处理顶层的 path 和 host 字段（某些协议可能直接放在顶层）
+	if path, ok := proxy["path"].(string); ok {
+		proxy["path"] = safeURLDecode(path)
+	}
+	if host, ok := proxy["host"].(string); ok {
+		proxy["host"] = safeURLDecode(host)
 	}
 }
 
@@ -893,9 +955,10 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 
 	log.Printf("[订阅获取] 成功解析订阅: URL=%s, 节点数量=%d", req.URL, len(clashConfig.Proxies))
 
-	// Convert nil values to empty strings in all proxies (e.g., for short-id field)
+	// Convert nil values to empty strings and decode URL-encoded fields in all proxies
 	for _, proxy := range clashConfig.Proxies {
 		convertNilToEmptyStringInMap(proxy)
+		decodeProxyURLFields(proxy)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

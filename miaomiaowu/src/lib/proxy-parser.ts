@@ -49,6 +49,18 @@ function base64Decode(str: string): string {
 }
 
 /**
+ * 安全的 URL 解码，解码失败时返回原字符串
+ */
+function safeDecodeURIComponent(str: string): string {
+  if (!str) return str
+  try {
+    return decodeURIComponent(str)
+  } catch {
+    return str
+  }
+}
+
+/**
  * 解析 URL 查询参数
  */
 function parseQueryString(query: string): Record<string, string> {
@@ -114,23 +126,24 @@ function parseVmess(url: string): ProxyNode | null {
     // WebSocket
     if (config.net === 'ws') {
       node['ws-opts'] = {
-        path: config.path || '/',
-        headers: config.host ? { Host: config.host } : {}
+        path: safeDecodeURIComponent(config.path) || '/',
+        headers: config.host ? { Host: safeDecodeURIComponent(config.host) } : {}
       }
     }
 
     // HTTP/2
     if (config.net === 'h2') {
+      const decodedHost = config.host ? safeDecodeURIComponent(config.host) : ''
       node['h2-opts'] = {
-        host: config.host ? (Array.isArray(config.host) ? config.host : [config.host]) : [],
-        path: config.path || '/'
+        host: decodedHost ? (Array.isArray(config.host) ? config.host.map(safeDecodeURIComponent) : [decodedHost]) : [],
+        path: safeDecodeURIComponent(config.path) || '/'
       }
     }
 
     // gRPC
     if (config.net === 'grpc') {
       node['grpc-opts'] = {
-        'grpc-service-name': config.path || config['grpc-service-name'] || ''
+        'grpc-service-name': safeDecodeURIComponent(config.path || config['grpc-service-name']) || ''
       }
     }
 
@@ -653,20 +666,20 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
           node.security = queryParams.security
         }
 
-        // 传输层配置
+        // 传输层配置（对 path 和 host 额外解码，处理双重编码情况）
         if (queryParams.type === 'ws') {
           node['ws-opts'] = {
-            path: queryParams.path || '/',
-            headers: queryParams.host ? { Host: queryParams.host } : {}
+            path: safeDecodeURIComponent(queryParams.path) || '/',
+            headers: queryParams.host ? { Host: safeDecodeURIComponent(queryParams.host) } : {}
           }
         } else if (queryParams.type === 'grpc') {
           node['grpc-opts'] = {
-            'grpc-service-name': queryParams.serviceName || queryParams.path || ''
+            'grpc-service-name': safeDecodeURIComponent(queryParams.serviceName || queryParams.path) || ''
           }
         } else if (queryParams.type === 'h2' || queryParams.type === 'http') {
           node['h2-opts'] = {
-            host: queryParams.host ? [queryParams.host] : [],
-            path: queryParams.path || '/'
+            host: queryParams.host ? [safeDecodeURIComponent(queryParams.host)] : [],
+            path: safeDecodeURIComponent(queryParams.path) || '/'
           }
         }
 
@@ -710,20 +723,20 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
           node['short-id'] = queryParams.sid || ''
         }
 
-        // 传输层配置
+        // 传输层配置（对 path 和 host 额外解码，处理双重编码情况）
         if (queryParams.type === 'ws') {
           node['ws-opts'] = {
-            path: queryParams.path || '/',
-            headers: queryParams.host ? { Host: queryParams.host } : {}
+            path: safeDecodeURIComponent(queryParams.path) || '/',
+            headers: queryParams.host ? { Host: safeDecodeURIComponent(queryParams.host) } : {}
           }
         } else if (queryParams.type === 'grpc') {
           node['grpc-opts'] = {
-            'grpc-service-name': queryParams.serviceName || queryParams.path || ''
+            'grpc-service-name': safeDecodeURIComponent(queryParams.serviceName || queryParams.path) || ''
           }
         } else if (queryParams.type === 'h2' || queryParams.type === 'http') {
           node['h2-opts'] = {
-            host: queryParams.host ? [queryParams.host] : [],
-            path: queryParams.path || '/'
+            host: queryParams.host ? [safeDecodeURIComponent(queryParams.host)] : [],
+            path: safeDecodeURIComponent(queryParams.path) || '/'
           }
         }
 
