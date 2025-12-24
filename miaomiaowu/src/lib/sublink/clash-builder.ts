@@ -324,6 +324,8 @@ export class ClashConfigBuilder {
         value.includes(',')
       ) {
         return `"${value}"`
+      } else if (value.startsWith('@')) {
+        return `"${value}"`
       }
       return value
     }
