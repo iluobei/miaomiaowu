@@ -1,5 +1,16 @@
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Search, X, Edit2, Check, Plus, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, X, Edit2, Check, Plus, Settings2, GripVertical } from 'lucide-react'
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   Sheet,
   SheetContent,
@@ -61,6 +72,60 @@ interface MobileEditNodesDialogProps {
   proxyProviderConfigs?: Array<{ id: number; name: string }>  // 节点集合配置列表
 }
 
+// 可排序节点组件
+interface SortableNodeItemProps {
+  id: string
+  proxy: string
+  onRemove: () => void
+}
+
+function SortableNodeItem({ id, proxy, onRemove }: SortableNodeItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id,
+    // 禁用拖拽结束时的动画，避免节点先回原位再移动
+    animateLayoutChanges: () => false,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between gap-2 p-2 rounded border hover:bg-accent ${
+        isDragging ? 'opacity-50 z-50 shadow-lg bg-background' : ''
+      }`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 -ml-1 touch-none"
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <span className="text-sm truncate flex-1"><Twemoji>{proxy}</Twemoji></span>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 w-6 p-0 shrink-0"
+        onClick={onRemove}
+      >
+        <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+      </Button>
+    </div>
+  )
+}
+
 export function MobileEditNodesDialog({
   open,
   onOpenChange,
@@ -82,6 +147,53 @@ export function MobileEditNodesDialog({
   const [currentEditingGroup, setCurrentEditingGroup] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTag, setSelectedTag] = useState<string>('all')
+
+  // 配置传感器 - 支持触摸和指针
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
+      },
+    })
+  )
+
+  // 处理拖拽结束
+  const handleDragEnd = (event: DragEndEvent, groupName: string) => {
+    const { active, over } = event
+
+    if (!over || active.id === over.id) return
+
+    const group = proxyGroups.find(g => g.name === groupName)
+    if (!group) return
+
+    // 从 id 中提取索引 (格式: groupName-index)
+    const activeIdStr = String(active.id)
+    const overIdStr = String(over.id)
+    const prefix = `${groupName}-`
+
+    if (!activeIdStr.startsWith(prefix) || !overIdStr.startsWith(prefix)) return
+
+    const oldIndex = parseInt(activeIdStr.slice(prefix.length), 10)
+    const newIndex = parseInt(overIdStr.slice(prefix.length), 10)
+
+    if (isNaN(oldIndex) || isNaN(newIndex) || oldIndex < 0 || newIndex < 0) return
+    if (oldIndex >= group.proxies.length || newIndex >= group.proxies.length) return
+
+    const newProxies = arrayMove(group.proxies, oldIndex, newIndex)
+    const newGroups = proxyGroups.map(g => {
+      if (g.name === groupName) {
+        return { ...g, proxies: newProxies }
+      }
+      return g
+    })
+    onProxyGroupsChange(newGroups)
+  }
 
   // 获取所有标签
   const allTags = useMemo(() => {
@@ -453,22 +565,25 @@ export function MobileEditNodesDialog({
                           </p>
                         ) : (
                           <>
-                            {group.proxies.map((proxy, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between gap-2 p-2 rounded border hover:bg-accent"
+                            <DndContext
+                              sensors={sensors}
+                              collisionDetection={closestCenter}
+                              onDragEnd={(e) => handleDragEnd(e, group.name)}
+                            >
+                              <SortableContext
+                                items={group.proxies.map((_, idx) => `${group.name}-${idx}`)}
+                                strategy={verticalListSortingStrategy}
                               >
-                                <span className="text-sm truncate flex-1"><Twemoji>{proxy}</Twemoji></span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 shrink-0"
-                                  onClick={() => onRemoveNodeFromGroup(group.name, idx)}
-                                >
-                                  <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
+                                {group.proxies.map((proxy, idx) => (
+                                  <SortableNodeItem
+                                    key={`${group.name}-${idx}`}
+                                    id={`${group.name}-${idx}`}
+                                    proxy={proxy}
+                                    onRemove={() => onRemoveNodeFromGroup(group.name, idx)}
+                                  />
+                                ))}
+                              </SortableContext>
+                            </DndContext>
                             {/* 节点集合（use）显示 */}
                             {(group.use || []).map((providerName, idx) => (
                               <div
