@@ -1393,6 +1393,18 @@ function NodesPage() {
     return Array.from(tags).sort()
   }, [savedNodes])
 
+  // 当选中的筛选器对应的节点都被删除时，自动重置为 'all'
+  useEffect(() => {
+    // 检查 tagFilter
+    if (tagFilter !== 'all' && (!tagCounts[tagFilter] || tagCounts[tagFilter] === 0)) {
+      setTagFilter('all')
+    }
+    // 检查 selectedProtocol
+    if (selectedProtocol !== 'all' && (!protocolCounts[selectedProtocol] || protocolCounts[selectedProtocol] === 0)) {
+      setSelectedProtocol('all')
+    }
+  }, [tagCounts, protocolCounts, tagFilter, selectedProtocol])
+
   return (
     <div className='min-h-svh bg-background'>
       <Topbar />
