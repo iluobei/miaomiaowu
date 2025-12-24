@@ -365,14 +365,14 @@ function TemplatesPage() {
 	return (
 		<div className="container mx-auto py-6 space-y-6">
 			<Card>
-				<CardHeader className="flex flex-row items-center justify-between">
+				<CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 					<div>
 						<CardTitle>模板管理</CardTitle>
 						<CardDescription>
 							管理 ACL4SSR 规则模板，从远程配置自动生成代理组和规则
 						</CardDescription>
 					</div>
-					<Button onClick={handleCreate}>
+					<Button onClick={handleCreate} className='w-full sm:w-auto'>
 						<Plus className="h-4 w-4 mr-2" />
 						新建模板
 					</Button>

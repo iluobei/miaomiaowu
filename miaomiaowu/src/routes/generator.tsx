@@ -11,6 +11,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -2244,20 +2245,20 @@ function SubscriptionGeneratorPage() {
                       预览生成的 YAML 配置文件
                     </CardDescription>
                   </div>
-                  <div className='flex gap-2'>
-                    <Button variant='outline' size='sm' className='flex-1' onClick={handleAutoGroupByRegion}>
-                      <MapPin className='mr-2 h-4 w-4' />
-                      按地区分组
+                  <ButtonGroup mode='responsive' hideIconOnMobile>
+                    <Button variant='outline' size='sm' onClick={handleAutoGroupByRegion}>
+                      <MapPin className='h-4 w-4' />
+                      地域分组
                     </Button>
-                    <Button variant='outline' size='sm' className='flex-1' onClick={handleOpenGroupDialog}>
-                      <Layers className='mr-2 h-4 w-4' />
+                    <Button variant='outline' size='sm' onClick={handleOpenGroupDialog}>
+                      <Layers className='h-4 w-4' />
                       手动分组
                     </Button>
-                    <Button size='sm' className='flex-1' onClick={handleOpenSaveDialog}>
-                      <Save className='mr-2 h-4 w-4' />
-                      保存为订阅
+                    <Button size='sm' onClick={handleOpenSaveDialog}>
+                      <Save className='h-4 w-4' />
+                      保存订阅
                     </Button>
-                  </div>
+                  </ButtonGroup>
                 </div>
               </CardHeader>
               <CardContent>
@@ -2272,7 +2273,7 @@ function SubscriptionGeneratorPage() {
                 <div className='mt-4 flex justify-end gap-2'>
                   <Button variant='outline' onClick={handleAutoGroupByRegion}>
                     <MapPin className='mr-2 h-4 w-4' />
-                    按地区分组
+                    地域分组
                   </Button>
                   <Button variant='outline' onClick={handleOpenGroupDialog}>
                     <Layers className='mr-2 h-4 w-4' />
@@ -2280,7 +2281,7 @@ function SubscriptionGeneratorPage() {
                   </Button>
                   <Button onClick={handleOpenSaveDialog}>
                     <Save className='mr-2 h-4 w-4' />
-                    保存为订阅
+                    保存订阅
                   </Button>
                 </div>
                 <div className='mt-4 rounded-lg border bg-muted/50 p-4'>
@@ -2385,6 +2386,7 @@ function SubscriptionGeneratorPage() {
           onRemoveNodeFromGroup={handleRemoveProxy}
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
+          proxyProviderConfigs={proxyProviderConfigs}
         />
       )}
 

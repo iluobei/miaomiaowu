@@ -2122,6 +2122,7 @@ function SubscribeFilesPage() {
                 <div className='flex justify-end mb-4'>
                   <Button
                     size='sm'
+                    className='w-full sm:w-auto'
                     onClick={() => {
                       setEditingProxyProvider(null)
                       setSelectedExternalSub(null)
@@ -2651,7 +2652,7 @@ function SubscribeFilesPage() {
           setConfigContent('')
         }
       }}>
-        <DialogContent className='!max-w-[80vw] w-[80vw] max-h-[90vh] flex flex-col'>
+        <DialogContent className='w-[95vw] sm:w-[80vw] sm:!max-w-[80vw] max-h-[90vh] flex flex-col'>
           <DialogHeader>
             <DialogTitle>编辑配置 - {editingConfigFile?.name}</DialogTitle>
             <DialogDescription>
@@ -2740,6 +2741,8 @@ function SubscribeFilesPage() {
           onRemoveNodeFromGroup={handleRemoveNodeFromGroup}
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
+          showSpecialNodesAtBottom={true}
+          proxyProviderConfigs={enableProxyProvider ? proxyProviderConfigs : []}
         />
       )}
 
@@ -2751,7 +2754,7 @@ function SubscribeFilesPage() {
           setEditingProxyProvider(null)
         }
       }}>
-        <DialogContent className='!max-w-fit w-auto max-h-[85vh] overflow-y-auto'>
+        <DialogContent className='w-[95vw] sm:w-auto sm:!max-w-fit max-h-[85vh] overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>{editingProxyProvider ? '编辑代理集合配置' : '创建代理集合配置'}</DialogTitle>
             <DialogDescription>
@@ -2763,15 +2766,15 @@ function SubscribeFilesPage() {
               }
             </DialogDescription>
           </DialogHeader>
-          <div className='w-[600px] max-w-[80vw]'>
+          <div className='w-full sm:w-[600px] sm:max-w-[80vw]'>
             <div className='space-y-6'>
               {/* 基础配置 */}
               <div className='space-y-4'>
                 <h4 className='font-medium text-sm'>基础配置</h4>
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                   {/* 外部订阅选择器 - 仅在创建模式下显示 */}
                   {!editingProxyProvider && (
-                    <div className='space-y-2 col-span-2'>
+                    <div className='space-y-2 sm:col-span-2'>
                       <Label htmlFor='pp-subscription'>外部订阅 *</Label>
                       <select
                         id='pp-subscription'
@@ -2877,7 +2880,7 @@ function SubscribeFilesPage() {
               {/* 请求头配置 */}
               <div className='space-y-4'>
                 <h4 className='font-medium text-sm'>请求头</h4>
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                   <div className='space-y-2'>
                     <Label htmlFor='pp-user-agent'>User-Agent</Label>
                     <Input
@@ -2909,8 +2912,8 @@ function SubscribeFilesPage() {
                   />
                 </div>
                 {proxyProviderForm.health_check_enabled && (
-                  <div className='grid grid-cols-2 gap-4'>
-                    <div className='space-y-2 col-span-2'>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                    <div className='space-y-2 sm:col-span-2'>
                       <Label htmlFor='pp-hc-url'>检查URL</Label>
                       <Input
                         id='pp-hc-url'
@@ -2960,7 +2963,7 @@ function SubscribeFilesPage() {
               {/* 高级配置处理方式 */}
               <div className='space-y-3'>
                 <h4 className='font-medium text-sm'>高级配置处理方式</h4>
-                <div className='grid grid-cols-2 gap-2'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                   <Button
                     type='button'
                     variant={proxyProviderForm.process_mode === 'client' ? 'default' : 'outline'}
@@ -2985,7 +2988,7 @@ function SubscribeFilesPage() {
               {/* 高级配置 */}
               <div className='space-y-4'>
                 <h4 className='font-medium text-sm'>高级配置 {proxyProviderForm.process_mode === 'client' ? '(输出到配置)' : '(由妙妙屋处理)'}</h4>
-                <div className='grid grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                   <div className='space-y-2'>
                     <Label htmlFor='pp-filter'>节点过滤(正则)</Label>
                     <Input
@@ -3046,7 +3049,7 @@ function SubscribeFilesPage() {
                   {/* 连接设置 */}
                   <div className='space-y-2'>
                     <Label className='text-xs text-muted-foreground'>连接设置</Label>
-                    <div className='grid grid-cols-2 gap-3'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
                       <div className='flex items-center justify-between'>
                         <Label htmlFor='pp-override-tfo' className='text-xs'>TCP Fast Open</Label>
                         <Switch
@@ -3091,7 +3094,7 @@ function SubscribeFilesPage() {
                           }))}
                         />
                       </div>
-                      <div className='flex items-center justify-between col-span-2'>
+                      <div className='flex items-center justify-between sm:col-span-2'>
                         <Label htmlFor='pp-override-skip-cert' className='text-xs'>跳过证书验证</Label>
                         <Switch
                           id='pp-override-skip-cert'
@@ -3123,7 +3126,7 @@ function SubscribeFilesPage() {
                   {/* 网络设置 */}
                   <div className='space-y-2'>
                     <Label className='text-xs text-muted-foreground'>网络设置</Label>
-                    <div className='grid grid-cols-2 gap-3'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
                       <div className='space-y-1'>
                         <Label htmlFor='pp-override-interface' className='text-xs'>出站接口</Label>
                         <Input
@@ -3177,7 +3180,7 @@ function SubscribeFilesPage() {
                   {/* 节点名称修改 */}
                   <div className='space-y-2'>
                     <Label className='text-xs text-muted-foreground'>节点名称修改</Label>
-                    <div className='grid grid-cols-2 gap-3'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
                       <div className='space-y-1'>
                         <Label htmlFor='pp-override-prefix' className='text-xs'>名称前缀</Label>
                         <Input

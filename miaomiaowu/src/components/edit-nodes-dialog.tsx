@@ -1144,13 +1144,13 @@ export function EditNodesDialog({
               </CardDescription>
             </div>
             {!isEditing && (
-              <>
+              <div className='flex items-center gap-1'>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant='ghost'
                       size='sm'
-                      className='h-6 w-6 p-0 flex-shrink-0'
+                      className='h-8 w-8 p-0 flex-shrink-0'
                       title='切换代理组类型'
                     >
                       <Settings2 className='h-4 w-4 text-muted-foreground hover:text-foreground' />
@@ -1166,7 +1166,7 @@ export function EditNodesDialog({
                 <Button
                   variant='ghost'
                   size='sm'
-                  className='h-6 w-6 p-0 flex-shrink-0'
+                  className='h-8 w-8 p-0 flex-shrink-0'
                   onClick={(e) => {
                     e.stopPropagation()
                     wrappedRemoveGroup(group.name)
@@ -1174,7 +1174,7 @@ export function EditNodesDialog({
                 >
                   <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </CardHeader>
