@@ -336,6 +336,7 @@ function SubscriptionGeneratorPage() {
       const response = await api.get('/api/user/config')
       return response.data as {
         use_new_template_system: boolean
+        enable_proxy_provider: boolean
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -343,6 +344,7 @@ function SubscriptionGeneratorPage() {
   })
 
   const useNewTemplateSystem = userConfig?.use_new_template_system !== false // 默认 true
+  const enableProxyProvider = userConfig?.enable_proxy_provider ?? false
 
   // 获取已保存的节点
   const { data: nodesData } = useQuery({
@@ -373,6 +375,17 @@ function SubscriptionGeneratorPage() {
     },
     enabled: Boolean(auth.accessToken) && !useNewTemplateSystem,
   })
+
+  // 获取代理集合配置列表
+  const { data: proxyProviderConfigsData } = useQuery({
+    queryKey: ['proxy-provider-configs'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/proxy-provider-configs')
+      return response.data as Array<{ id: number; name: string }>
+    },
+    enabled: Boolean(auth.accessToken) && enableProxyProvider,
+  })
+  const proxyProviderConfigs = proxyProviderConfigsData ?? []
 
   const savedNodes = nodesData?.nodes ?? []
   const enabledNodes = savedNodes.filter(n => n.enabled)
@@ -2358,6 +2371,7 @@ function SubscriptionGeneratorPage() {
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
           saveButtonText="确定"
+          proxyProviderConfigs={proxyProviderConfigs}
         />
       ) : (
         <MobileEditNodesDialog

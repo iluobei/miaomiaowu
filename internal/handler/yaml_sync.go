@@ -6,69 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"miaomiaowu/internal/util"
+
 	"gopkg.in/yaml.v3"
 )
-
-// reorderProxyFields reorders proxy configuration to put key fields first
-func reorderProxyFields(config map[string]any) *yaml.Node {
-	// Priority fields that should appear first
-	priorityFields := []string{"name", "type", "server", "port"}
-
-	// Create maps to store fields
-	fieldMap := make(map[string]any)
-	for k, v := range config {
-		fieldMap[k] = v
-	}
-
-	// Create a yaml.Node with mapping kind
-	node := &yaml.Node{
-		Kind: yaml.MappingNode,
-	}
-
-	// Add priority fields first
-	for _, key := range priorityFields {
-		if value, ok := fieldMap[key]; ok {
-			// Add key node
-			keyNode := &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Value: key,
-			}
-			node.Content = append(node.Content, keyNode)
-
-			// Add value node
-			valueNode := encodeValue(value)
-			node.Content = append(node.Content, valueNode)
-		}
-	}
-
-	// Add remaining fields
-	for key, value := range fieldMap {
-		// Skip priority fields (already added)
-		isPriority := false
-		for _, pf := range priorityFields {
-			if key == pf {
-				isPriority = true
-				break
-			}
-		}
-		if isPriority {
-			continue
-		}
-
-		// Add key node
-		keyNode := &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Value: key,
-		}
-		node.Content = append(node.Content, keyNode)
-
-		// Add value node
-		valueNode := encodeValue(value)
-		node.Content = append(node.Content, valueNode)
-	}
-
-	return node
-}
 
 // updateProxyNodeFields updates an existing proxy node with new field values while preserving original node styles
 func updateProxyNodeFields(proxyNode *yaml.Node, newConfig map[string]any) {
@@ -96,56 +37,13 @@ func updateProxyNodeFields(proxyNode *yaml.Node, newConfig map[string]any) {
 	}
 }
 
-// reorderProxyNodeFields reorders fields in a proxy node to put priority fields first
-func reorderProxyNodeFields(proxyNode *yaml.Node) {
+// reorderProxyNodeFieldsInPlace reorders fields in a proxy node in-place
+func reorderProxyNodeFieldsInPlace(proxyNode *yaml.Node) {
 	if proxyNode == nil || proxyNode.Kind != yaml.MappingNode {
 		return
 	}
-
-	priorityFields := []string{"name", "type", "server", "port"}
-
-	// Build a map of all fields
-	fieldMap := make(map[string][2]*yaml.Node) // fieldName -> [keyNode, valueNode]
-	remainingFields := [][2]*yaml.Node{}
-
-	for i := 0; i < len(proxyNode.Content); i += 2 {
-		if i+1 >= len(proxyNode.Content) {
-			break
-		}
-		keyNode := proxyNode.Content[i]
-		valueNode := proxyNode.Content[i+1]
-
-		// Check if this is a priority field
-		isPriority := false
-		for _, pf := range priorityFields {
-			if keyNode.Value == pf {
-				fieldMap[pf] = [2]*yaml.Node{keyNode, valueNode}
-				isPriority = true
-				break
-			}
-		}
-
-		if !isPriority {
-			remainingFields = append(remainingFields, [2]*yaml.Node{keyNode, valueNode})
-		}
-	}
-
-	// Rebuild content with priority fields first
-	newContent := []*yaml.Node{}
-
-	// Add priority fields in order
-	for _, fieldName := range priorityFields {
-		if nodes, exists := fieldMap[fieldName]; exists {
-			newContent = append(newContent, nodes[0], nodes[1])
-		}
-	}
-
-	// Add remaining fields
-	for _, nodes := range remainingFields {
-		newContent = append(newContent, nodes[0], nodes[1])
-	}
-
-	proxyNode.Content = newContent
+	reordered := util.ReorderProxyNode(proxyNode)
+	proxyNode.Content = reordered.Content
 }
 
 // updateValueNode updates a yaml.Node's value while trying to preserve its original type/style
@@ -601,12 +499,12 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 								if proxyName == oldNodeName {
 									if nameChanged {
 										// Replace entire proxy node with new config
-										proxiesNode.Content[j] = reorderProxyFields(newClashConfig)
+										proxiesNode.Content[j] = util.ReorderProxyFieldsToNode(newClashConfig)
 									} else {
 										// Update fields in-place, preserving original node styles
 										updateProxyNodeFields(proxyNode, newClashConfig)
 										// Reorder fields to put priority fields first
-										reorderProxyNodeFields(proxyNode)
+										reorderProxyNodeFieldsInPlace(proxyNode)
 									}
 								}
 							}

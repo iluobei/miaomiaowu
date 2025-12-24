@@ -117,6 +117,8 @@ func main() {
 	mux.Handle("/api/user/config", auth.RequireToken(tokenStore, handler.NewUserConfigHandler(repo)))
 	mux.Handle("/api/user/token", auth.RequireToken(tokenStore, handler.NewUserTokenHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo)))
+	mux.Handle("/api/user/proxy-provider-configs", auth.RequireToken(tokenStore, handler.NewProxyProviderConfigsHandler(repo)))
+	mux.Handle("/api/proxy-provider/", handler.NewProxyProviderServeHandler(repo))
 	mux.Handle("/api/traffic/summary", auth.RequireToken(tokenStore, trafficHandler))
 	mux.Handle("/api/subscriptions", auth.RequireToken(tokenStore, handler.NewSubscriptionListHandler(repo)))
 	mux.Handle("/api/dns/resolve", auth.RequireToken(tokenStore, handler.NewDNSHandler()))

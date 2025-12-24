@@ -21,6 +21,7 @@ type userConfigRequest struct {
 	CustomRulesEnabled   bool   `json:"custom_rules_enabled"`
 	EnableShortLink      bool   `json:"enable_short_link"`
 	UseNewTemplateSystem *bool  `json:"use_new_template_system"` // nil means not provided, default true
+	EnableProxyProvider  bool   `json:"enable_proxy_provider"`
 }
 
 type userConfigResponse struct {
@@ -34,6 +35,7 @@ type userConfigResponse struct {
 	CustomRulesEnabled   bool   `json:"custom_rules_enabled"`
 	EnableShortLink      bool   `json:"enable_short_link"`
 	UseNewTemplateSystem bool   `json:"use_new_template_system"`
+	EnableProxyProvider  bool   `json:"enable_proxy_provider"`
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -74,7 +76,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				EnableProbeBinding:   false,
 				CustomRulesEnabled:   true,  // 自定义规则始终启用
 				EnableShortLink:      false,
-				UseNewTemplateSystem: true, // 默认使用新模板系统
+				UseNewTemplateSystem: true,  // 默认使用新模板系统
+				EnableProxyProvider:  false,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -96,6 +99,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		CustomRulesEnabled:   true, // 自定义规则始终启用
 		EnableShortLink:      settings.EnableShortLink,
 		UseNewTemplateSystem: settings.UseNewTemplateSystem,
+		EnableProxyProvider:  settings.EnableProxyProvider,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -154,6 +158,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		CustomRulesEnabled:   true, // 自定义规则始终启用
 		EnableShortLink:      payload.EnableShortLink,
 		UseNewTemplateSystem: useNewTemplateSystem,
+		EnableProxyProvider:  payload.EnableProxyProvider,
 	}
 
 	if err := repo.UpsertUserSettings(r.Context(), settings); err != nil {
@@ -172,6 +177,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		CustomRulesEnabled:   true, // 自定义规则始终启用
 		EnableShortLink:      settings.EnableShortLink,
 		UseNewTemplateSystem: settings.UseNewTemplateSystem,
+		EnableProxyProvider:  settings.EnableProxyProvider,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

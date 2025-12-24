@@ -21,7 +21,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Copy } from 'lucide-react'
 import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
@@ -74,6 +79,120 @@ type ExternalSubscription = {
   expire: string | null
   created_at: string
   updated_at: string
+}
+
+type ProxyProviderConfig = {
+  id: number
+  external_subscription_id: number
+  name: string
+  type: string
+  interval: number
+  proxy: string
+  size_limit: number
+  header: string
+  health_check_enabled: boolean
+  health_check_url: string
+  health_check_interval: number
+  health_check_timeout: number
+  health_check_lazy: boolean
+  health_check_expected_status: number
+  filter: string
+  exclude_filter: string
+  exclude_type: string
+  override: string
+  process_mode: 'client' | 'mmw'
+  created_at: string
+  updated_at: string
+}
+
+// 代理协议类型列表
+const PROXY_TYPES = [
+  'vmess', 'vless', 'trojan', 'ss', 'ssr', 'socks5', 'http',
+  'hysteria', 'hysteria2', 'tuic', 'wireguard', 'anytls'
+]
+
+// IP 版本选项
+const IP_VERSION_OPTIONS = [
+  { value: '', label: '默认' },
+  { value: 'dual', label: 'dual (双栈)' },
+  { value: 'ipv4', label: 'ipv4' },
+  { value: 'ipv6', label: 'ipv6' },
+  { value: 'ipv4-prefer', label: 'ipv4-prefer' },
+  { value: 'ipv6-prefer', label: 'ipv6-prefer' },
+]
+
+// Override 表单类型
+type OverrideForm = {
+  tfo: boolean
+  mptcp: boolean
+  udp: boolean
+  udp_over_tcp: boolean
+  skip_cert_verify: boolean
+  dialer_proxy: string
+  interface_name: string
+  routing_mark: string
+  ip_version: '' | 'dual' | 'ipv4' | 'ipv6' | 'ipv4-prefer' | 'ipv6-prefer'
+  additional_prefix: string
+  additional_suffix: string
+}
+
+// 默认 Override 表单值
+const defaultOverrideForm: OverrideForm = {
+  tfo: false,
+  mptcp: false,
+  udp: true,
+  udp_over_tcp: false,
+  skip_cert_verify: false,
+  dialer_proxy: '',
+  interface_name: '',
+  routing_mark: '',
+  ip_version: '',
+  additional_prefix: '',
+  additional_suffix: '',
+}
+
+// Override 表单转 JSON (保存时)
+function overrideFormToJSON(form: OverrideForm): string {
+  const obj: Record<string, any> = {}
+
+  // 只添加非默认值的字段
+  if (form.tfo) obj['tfo'] = true
+  if (form.mptcp) obj['mptcp'] = true
+  if (!form.udp) obj['udp'] = false  // 默认 true，只有 false 时添加
+  if (form.udp_over_tcp) obj['udp-over-tcp'] = true
+  if (form.skip_cert_verify) obj['skip-cert-verify'] = true
+  if (form.dialer_proxy) obj['dialer-proxy'] = form.dialer_proxy
+  if (form.interface_name) obj['interface-name'] = form.interface_name
+  if (form.routing_mark) obj['routing-mark'] = parseInt(form.routing_mark)
+  if (form.ip_version) obj['ip-version'] = form.ip_version
+  if (form.additional_prefix) obj['additional-prefix'] = form.additional_prefix
+  if (form.additional_suffix) obj['additional-suffix'] = form.additional_suffix
+
+  return Object.keys(obj).length > 0 ? JSON.stringify(obj) : ''
+}
+
+// JSON 转 Override 表单 (编辑时)
+function jsonToOverrideForm(json: string): OverrideForm {
+  if (!json) return { ...defaultOverrideForm }
+
+  try {
+    const obj = JSON.parse(json)
+    return {
+      tfo: obj['tfo'] ?? false,
+      mptcp: obj['mptcp'] ?? false,
+      udp: obj['udp'] ?? true,
+      udp_over_tcp: obj['udp-over-tcp'] ?? false,
+      skip_cert_verify: obj['skip-cert-verify'] ?? false,
+      dialer_proxy: obj['dialer-proxy'] ?? '',
+      interface_name: obj['interface-name'] ?? '',
+      routing_mark: obj['routing-mark']?.toString() ?? '',
+      ip_version: obj['ip-version'] ?? '',
+      additional_prefix: obj['additional-prefix'] ?? '',
+      additional_suffix: obj['additional-suffix'] ?? '',
+    }
+  } catch {
+    return { ...defaultOverrideForm }
+  }
 }
 
 // 格式化流量
@@ -162,6 +281,32 @@ function SubscribeFilesPage() {
   // 外部订阅卡片折叠状态 - 默认折叠
   const [isExternalSubsExpanded, setIsExternalSubsExpanded] = useState(false)
 
+  // 代理集合对话框状态
+  const [proxyProviderDialogOpen, setProxyProviderDialogOpen] = useState(false)
+  const [selectedExternalSub, setSelectedExternalSub] = useState<ExternalSubscription | null>(null)
+  const [proxyProviderForm, setProxyProviderForm] = useState({
+    name: '',
+    type: 'http',
+    interval: 3600,
+    proxy: 'DIRECT',
+    size_limit: 0,
+    header_user_agent: 'Clash/v1.18.0',
+    header_authorization: '',
+    health_check_enabled: true,
+    health_check_url: 'https://www.gstatic.com/generate_204',
+    health_check_interval: 300,
+    health_check_timeout: 5000,
+    health_check_lazy: true,
+    health_check_expected_status: 204,
+    filter: '',
+    exclude_filter: '',
+    exclude_type: [] as string[],
+    override: { ...defaultOverrideForm },
+    process_mode: 'client' as 'client' | 'mmw',
+  })
+  const [editingProxyProvider, setEditingProxyProvider] = useState<ProxyProviderConfig | null>(null)
+  const [isProxyProvidersExpanded, setIsProxyProvidersExpanded] = useState(false)
+
   // 获取订阅文件列表
   const { data: filesData, isLoading } = useQuery({
     queryKey: ['subscribe-files'],
@@ -185,6 +330,39 @@ function SubscribeFilesPage() {
   })
 
   const externalSubs = externalSubsData ?? []
+
+  // 获取用户订阅 token（用于代理集合 MMW 模式）
+  const { data: userTokenData } = useQuery({
+    queryKey: ['user-token'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/token')
+      return response.data as { token: string }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+  const userToken = userTokenData?.token ?? ''
+
+  // 获取用户设置（用于判断是否显示节点集合）
+  const { data: userConfigData } = useQuery({
+    queryKey: ['user-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/config')
+      return response.data as { enable_proxy_provider: boolean }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+  const enableProxyProvider = userConfigData?.enable_proxy_provider ?? false
+
+  // 获取代理集合配置列表（仅在启用时查询）
+  const { data: proxyProviderConfigsData, isLoading: isProxyProviderConfigsLoading } = useQuery({
+    queryKey: ['proxy-provider-configs'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/proxy-provider-configs')
+      return response.data as ProxyProviderConfig[]
+    },
+    enabled: Boolean(auth.accessToken && enableProxyProvider),
+  })
+  const proxyProviderConfigs = proxyProviderConfigsData ?? []
 
   // 获取所有节点（用于在外部订阅卡片中显示节点名称）
   const { data: allNodesData } = useQuery({
@@ -347,6 +525,199 @@ function SubscribeFilesPage() {
       setSyncingSingleId(null)
     },
   })
+
+  // 创建代理集合配置
+  const createProxyProviderMutation = useMutation({
+    mutationFn: async (data: {
+      external_subscription_id: number
+      name: string
+      type: string
+      interval: number
+      proxy: string
+      size_limit: number
+      header: string
+      health_check_enabled: boolean
+      health_check_url: string
+      health_check_interval: number
+      health_check_timeout: number
+      health_check_lazy: boolean
+      health_check_expected_status: number
+      filter: string
+      exclude_filter: string
+      exclude_type: string
+      override: string
+      process_mode: string
+    }) => {
+      const response = await api.post('/api/user/proxy-provider-configs', data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      toast.success('代理集合配置创建成功')
+      setProxyProviderDialogOpen(false)
+      // 重置表单
+      setProxyProviderForm({
+        name: '',
+        type: 'http',
+        interval: 3600,
+        proxy: 'DIRECT',
+        size_limit: 0,
+        header_user_agent: 'Clash/v1.18.0',
+        header_authorization: '',
+        health_check_enabled: true,
+        health_check_url: 'https://www.gstatic.com/generate_204',
+        health_check_interval: 300,
+        health_check_timeout: 5000,
+        health_check_lazy: true,
+        health_check_expected_status: 204,
+        filter: '',
+        exclude_filter: '',
+        exclude_type: [],
+        override: { ...defaultOverrideForm },
+        process_mode: 'client',
+      })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '创建失败')
+    },
+  })
+
+  // 更新代理集合配置
+  const updateProxyProviderMutation = useMutation({
+    mutationFn: async (data: {
+      id: number
+      name: string
+      type: string
+      interval: number
+      proxy: string
+      size_limit: number
+      header: string
+      health_check_enabled: boolean
+      health_check_url: string
+      health_check_interval: number
+      health_check_timeout: number
+      health_check_lazy: boolean
+      health_check_expected_status: number
+      filter: string
+      exclude_filter: string
+      exclude_type: string
+      override: string
+      process_mode: string
+    }) => {
+      const response = await api.put(`/api/user/proxy-provider-configs?id=${data.id}`, data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      toast.success('代理集合配置更新成功')
+      setProxyProviderDialogOpen(false)
+      setEditingProxyProvider(null)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '更新失败')
+    },
+  })
+
+  // 删除代理集合配置
+  const deleteProxyProviderMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/api/user/proxy-provider-configs?id=${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      toast.success('代理集合配置已删除')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '删除失败')
+    },
+  })
+
+  // 生成代理集合YAML配置预览
+  const generateProxyProviderYAML = () => {
+    if (!selectedExternalSub) return ''
+
+    const form = proxyProviderForm
+    const isClientMode = form.process_mode === 'client'
+
+    // 构建配置对象
+    const config: Record<string, any> = {
+      type: form.type,
+      path: `./proxy_providers/${form.name}.yaml`,
+      interval: form.interval,
+    }
+
+    // URL
+    if (isClientMode) {
+      config.url = selectedExternalSub.url
+    } else {
+      // 妙妙屋处理模式，URL 指向后端接口
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '{妙妙屋地址}'
+      // 编辑模式使用实际 ID，新建模式使用占位符
+      const configId = editingProxyProvider?.id || '{config_id}'
+      config.url = `${baseUrl}/api/proxy-provider/${configId}?token=${userToken || '{user_token}'}`
+    }
+
+    // 下载代理
+    if (form.proxy && form.proxy !== 'DIRECT') {
+      config.proxy = form.proxy
+    }
+
+    // 文件大小限制
+    if (form.size_limit > 0) {
+      config['size-limit'] = form.size_limit
+    }
+
+    // 请求头
+    if (form.header_user_agent || form.header_authorization) {
+      config.header = {}
+      if (form.header_user_agent) {
+        config.header['User-Agent'] = form.header_user_agent.split(',').map((s: string) => s.trim())
+      }
+      if (form.header_authorization) {
+        config.header['Authorization'] = [form.header_authorization]
+      }
+    }
+
+    // 健康检查
+    if (form.health_check_enabled) {
+      config['health-check'] = {
+        enable: true,
+        url: form.health_check_url,
+        interval: form.health_check_interval,
+        timeout: form.health_check_timeout,
+        lazy: form.health_check_lazy,
+        'expected-status': form.health_check_expected_status,
+      }
+    }
+
+    // 高级配置（仅客户端模式输出）
+    if (isClientMode) {
+      if (form.filter) {
+        config.filter = form.filter
+      }
+      if (form.exclude_filter) {
+        config['exclude-filter'] = form.exclude_filter
+      }
+      if (form.exclude_type.length > 0) {
+        config['exclude-type'] = form.exclude_type.join('|')
+      }
+      // 将 override 表单转换为 JSON，然后解析为对象
+      const overrideJSON = overrideFormToJSON(form.override)
+      if (overrideJSON) {
+        try {
+          config.override = JSON.parse(overrideJSON)
+        } catch {
+          // 忽略无效JSON
+        }
+      }
+    }
+
+    // 生成YAML
+    const yamlObj: Record<string, any> = {}
+    yamlObj[form.name] = config
+
+    return dumpYAML(yamlObj, { indent: 2, lineWidth: -1 })
+  }
 
   // 获取文件内容
   const fileContentQuery = useQuery({
@@ -1590,7 +1961,7 @@ function SubscribeFilesPage() {
                       ),
                       headerClassName: 'text-center',
                       cellClassName: 'text-center',
-                      width: '100px'
+                      width: '130px'
                     }
                   ] as DataTableColumn<ExternalSubscription>[]}
 
@@ -1725,6 +2096,408 @@ function SubscribeFilesPage() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
+
+        {/* 代理集合配置 - 仅在启用时显示 */}
+        {enableProxyProvider && (
+        <Collapsible open={isProxyProvidersExpanded} onOpenChange={setIsProxyProvidersExpanded}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className='cursor-pointer hover:bg-muted/50 transition-colors'>
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <CardTitle className='text-base'>代理集合配置</CardTitle>
+                    <CardDescription>
+                      管理 Clash Meta proxy-providers 配置，用于按需加载代理节点
+                    </CardDescription>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <Badge variant='secondary'>{proxyProviderConfigs.length} 个配置</Badge>
+                    {isProxyProvidersExpanded ? <ChevronUp className='h-4 w-4' /> : <ChevronDown className='h-4 w-4' />}
+                  </div>
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className='pt-0'>
+                <div className='flex justify-end mb-4'>
+                  <Button
+                    size='sm'
+                    onClick={() => {
+                      setEditingProxyProvider(null)
+                      setSelectedExternalSub(null)
+                      setProxyProviderForm({
+                        name: '',
+                        type: 'http',
+                        interval: 3600,
+                        proxy: 'DIRECT',
+                        size_limit: 0,
+                        header_user_agent: 'Clash/v1.18.0',
+                        header_authorization: '',
+                        health_check_enabled: true,
+                        health_check_url: 'https://www.gstatic.com/generate_204',
+                        health_check_interval: 300,
+                        health_check_timeout: 5000,
+                        health_check_lazy: true,
+                        health_check_expected_status: 204,
+                        filter: '',
+                        exclude_filter: '',
+                        exclude_type: [],
+                        override: { ...defaultOverrideForm },
+                        process_mode: 'client',
+                      })
+                      setProxyProviderDialogOpen(true)
+                    }}
+                  >
+                    <Settings className='h-4 w-4 mr-2' />
+                    创建代理集合
+                  </Button>
+                </div>
+                {isProxyProviderConfigsLoading ? (
+                  <div className='text-center py-4 text-muted-foreground'>加载中...</div>
+                ) : proxyProviderConfigs.length === 0 ? (
+                  <div className='text-center py-8 text-muted-foreground'>
+                    <p>暂无代理集合配置</p>
+                    <p className='text-sm mt-1'>点击上方按钮创建你的第一个代理集合</p>
+                  </div>
+                ) : (
+                  <DataTable
+                    data={proxyProviderConfigs}
+                    getRowKey={(config) => config.id}
+                    columns={[
+                      {
+                        key: 'name',
+                        header: '名称',
+                        cell: (config) => (
+                          <div className='font-medium'>{config.name}</div>
+                        )
+                      },
+                      {
+                        key: 'external_subscription',
+                        header: '关联订阅',
+                        cell: (config) => {
+                          const sub = externalSubs.find(s => s.id === config.external_subscription_id)
+                          return sub ? (
+                            <Badge variant='outline'>{sub.name}</Badge>
+                          ) : (
+                            <span className='text-muted-foreground'>未知</span>
+                          )
+                        }
+                      },
+                      {
+                        key: 'process_mode',
+                        header: '处理模式',
+                        cell: (config) => (
+                          <Badge variant={config.process_mode === 'mmw' ? 'default' : 'secondary'}>
+                            {config.process_mode === 'mmw' ? '妙妙屋处理' : '客户端处理'}
+                          </Badge>
+                        ),
+                        headerClassName: 'text-center',
+                        cellClassName: 'text-center'
+                      },
+                      {
+                        key: 'filter',
+                        header: '过滤规则',
+                        cell: (config) => (
+                          <div className='text-xs text-muted-foreground max-w-[150px] truncate'>
+                            {config.filter || config.exclude_filter || config.exclude_type ? (
+                              <span>
+                                {config.filter && `保留: ${config.filter}`}
+                                {config.exclude_filter && ` 排除: ${config.exclude_filter}`}
+                                {config.exclude_type && ` 类型: ${config.exclude_type}`}
+                              </span>
+                            ) : '-'}
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'actions',
+                        header: '操作',
+                        cell: (config) => (
+                          <div className='flex items-center gap-1'>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  onClick={() => {
+                                    // 编辑配置
+                                    setEditingProxyProvider(config)
+                                    const sub = externalSubs.find(s => s.id === config.external_subscription_id)
+                                    setSelectedExternalSub(sub || null)
+                                    // 解析 header JSON
+                                    let headerUserAgent = 'Clash/v1.18.0'
+                                    let headerAuthorization = ''
+                                    if (config.header) {
+                                      try {
+                                        const headerObj = JSON.parse(config.header)
+                                        if (headerObj['User-Agent']) {
+                                          headerUserAgent = Array.isArray(headerObj['User-Agent'])
+                                            ? headerObj['User-Agent'].join(', ')
+                                            : headerObj['User-Agent']
+                                        }
+                                        if (headerObj['Authorization']) {
+                                          headerAuthorization = Array.isArray(headerObj['Authorization'])
+                                            ? headerObj['Authorization'][0]
+                                            : headerObj['Authorization']
+                                        }
+                                      } catch {}
+                                    }
+                                    setProxyProviderForm({
+                                      name: config.name,
+                                      type: config.type,
+                                      interval: config.interval,
+                                      proxy: config.proxy,
+                                      size_limit: config.size_limit,
+                                      header_user_agent: headerUserAgent,
+                                      header_authorization: headerAuthorization,
+                                      health_check_enabled: config.health_check_enabled,
+                                      health_check_url: config.health_check_url,
+                                      health_check_interval: config.health_check_interval,
+                                      health_check_timeout: config.health_check_timeout,
+                                      health_check_lazy: config.health_check_lazy,
+                                      health_check_expected_status: config.health_check_expected_status,
+                                      filter: config.filter,
+                                      exclude_filter: config.exclude_filter,
+                                      exclude_type: config.exclude_type ? config.exclude_type.split(',').map(s => s.trim()) : [],
+                                      override: jsonToOverrideForm(config.override),
+                                      process_mode: config.process_mode as 'client' | 'mmw',
+                                    })
+                                    setProxyProviderDialogOpen(true)
+                                  }}
+                                >
+                                  <Edit className='h-4 w-4' />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>编辑配置</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  onClick={() => {
+                                    // 复制 YAML 配置
+                                    const sub = externalSubs.find(s => s.id === config.external_subscription_id)
+                                    if (!sub) return
+                                    setSelectedExternalSub(sub)
+                                    // 解析 header
+                                    let headerUserAgent = ''
+                                    let headerAuthorization = ''
+                                    if (config.header) {
+                                      try {
+                                        const headerObj = JSON.parse(config.header)
+                                        if (headerObj['User-Agent']) {
+                                          headerUserAgent = Array.isArray(headerObj['User-Agent'])
+                                            ? headerObj['User-Agent'].join(', ')
+                                            : headerObj['User-Agent']
+                                        }
+                                        if (headerObj['Authorization']) {
+                                          headerAuthorization = Array.isArray(headerObj['Authorization'])
+                                            ? headerObj['Authorization'][0]
+                                            : headerObj['Authorization']
+                                        }
+                                      } catch {}
+                                    }
+                                    // 生成 YAML
+                                    const isClientMode = config.process_mode === 'client'
+                                    const yamlConfig: Record<string, any> = {
+                                      type: config.type,
+                                      path: `./proxy_providers/${config.name}.yaml`,
+                                      interval: config.interval,
+                                    }
+                                    if (isClientMode) {
+                                      yamlConfig.url = sub.url
+                                    } else {
+                                      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+                                      yamlConfig.url = `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`
+                                    }
+                                    if (config.proxy && config.proxy !== 'DIRECT') {
+                                      yamlConfig.proxy = config.proxy
+                                    }
+                                    if (config.size_limit > 0) {
+                                      yamlConfig['size-limit'] = config.size_limit
+                                    }
+                                    if (headerUserAgent || headerAuthorization) {
+                                      yamlConfig.header = {}
+                                      if (headerUserAgent) {
+                                        yamlConfig.header['User-Agent'] = headerUserAgent.split(',').map(s => s.trim())
+                                      }
+                                      if (headerAuthorization) {
+                                        yamlConfig.header['Authorization'] = [headerAuthorization]
+                                      }
+                                    }
+                                    if (config.health_check_enabled) {
+                                      yamlConfig['health-check'] = {
+                                        enable: true,
+                                        url: config.health_check_url,
+                                        interval: config.health_check_interval,
+                                        timeout: config.health_check_timeout,
+                                        lazy: config.health_check_lazy,
+                                        'expected-status': config.health_check_expected_status,
+                                      }
+                                    }
+                                    if (isClientMode) {
+                                      if (config.filter) yamlConfig.filter = config.filter
+                                      if (config.exclude_filter) yamlConfig['exclude-filter'] = config.exclude_filter
+                                      if (config.exclude_type) yamlConfig['exclude-type'] = config.exclude_type
+                                      if (config.override) {
+                                        try {
+                                          yamlConfig.override = JSON.parse(config.override)
+                                        } catch {}
+                                      }
+                                    }
+                                    const yamlObj: Record<string, any> = {}
+                                    yamlObj[config.name] = yamlConfig
+                                    const yamlStr = dumpYAML(yamlObj, { indent: 2, lineWidth: -1 })
+                                    navigator.clipboard.writeText(yamlStr)
+                                    toast.success('配置已复制到剪贴板')
+                                  }}
+                                >
+                                  <Copy className='h-4 w-4' />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>复制配置</TooltipContent>
+                            </Tooltip>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant='ghost' size='sm' className='text-destructive hover:text-destructive'>
+                                  <Trash2 className='h-4 w-4' />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    确定要删除代理集合配置 "{config.name}" 吗？此操作无法撤销。
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>取消</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteProxyProviderMutation.mutate(config.id)}>
+                                    删除
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ),
+                        headerClassName: 'text-center',
+                        cellClassName: 'text-center',
+                        width: '120px'
+                      }
+                    ] as DataTableColumn<ProxyProviderConfig>[]}
+                    mobileCard={{
+                      header: (config) => (
+                        <div className='flex items-center justify-between gap-2 mb-1'>
+                          <div className='flex items-center gap-2 flex-1 min-w-0'>
+                            <Badge variant={config.process_mode === 'mmw' ? 'default' : 'secondary'} className='shrink-0'>
+                              {config.process_mode === 'mmw' ? '妙妙屋' : '客户端'}
+                            </Badge>
+                            <div className='font-medium text-sm truncate'>{config.name}</div>
+                          </div>
+                          <div className='flex items-center gap-1'>
+                            <Button
+                              variant='outline'
+                              size='icon'
+                              className='size-8 shrink-0'
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                // 编辑
+                                setEditingProxyProvider(config)
+                                const sub = externalSubs.find(s => s.id === config.external_subscription_id)
+                                setSelectedExternalSub(sub || null)
+                                let headerUserAgent = 'Clash/v1.18.0'
+                                let headerAuthorization = ''
+                                if (config.header) {
+                                  try {
+                                    const headerObj = JSON.parse(config.header)
+                                    if (headerObj['User-Agent']) {
+                                      headerUserAgent = Array.isArray(headerObj['User-Agent'])
+                                        ? headerObj['User-Agent'].join(', ')
+                                        : headerObj['User-Agent']
+                                    }
+                                    if (headerObj['Authorization']) {
+                                      headerAuthorization = Array.isArray(headerObj['Authorization'])
+                                        ? headerObj['Authorization'][0]
+                                        : headerObj['Authorization']
+                                    }
+                                  } catch {}
+                                }
+                                setProxyProviderForm({
+                                  name: config.name,
+                                  type: config.type,
+                                  interval: config.interval,
+                                  proxy: config.proxy,
+                                  size_limit: config.size_limit,
+                                  header_user_agent: headerUserAgent,
+                                  header_authorization: headerAuthorization,
+                                  health_check_enabled: config.health_check_enabled,
+                                  health_check_url: config.health_check_url,
+                                  health_check_interval: config.health_check_interval,
+                                  health_check_timeout: config.health_check_timeout,
+                                  health_check_lazy: config.health_check_lazy,
+                                  health_check_expected_status: config.health_check_expected_status,
+                                  filter: config.filter,
+                                  exclude_filter: config.exclude_filter,
+                                  exclude_type: config.exclude_type ? config.exclude_type.split(',').map(s => s.trim()) : [],
+                                  override: jsonToOverrideForm(config.override),
+                                  process_mode: config.process_mode as 'client' | 'mmw',
+                                })
+                                setProxyProviderDialogOpen(true)
+                              }}
+                            >
+                              <Edit className='size-4' />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='size-8 shrink-0 text-destructive'
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Trash2 className='size-4' />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    确定要删除代理集合配置 "{config.name}" 吗？
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>取消</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteProxyProviderMutation.mutate(config.id)}>
+                                    删除
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      ),
+                      fields: [
+                        {
+                          label: '关联订阅',
+                          value: (config) => {
+                            const sub = externalSubs.find(s => s.id === config.external_subscription_id)
+                            return sub?.name || '未知'
+                          }
+                        },
+                        {
+                          label: '过滤规则',
+                          value: (config) => config.filter || config.exclude_filter || config.exclude_type || '-'
+                        }
+                      ]
+                    }}
+                  />
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+        )}
       </section>
 
       {/* 编辑文件 Dialog */}
@@ -1952,6 +2725,8 @@ function SubscribeFilesPage() {
           onRemoveGroup={handleRemoveGroup}
           onRenameGroup={handleRenameGroup}
           saveButtonText='应用并保存'
+          showSpecialNodesAtBottom={true}
+          proxyProviderConfigs={enableProxyProvider ? proxyProviderConfigs : []}
         />
       ) : (
         <MobileEditNodesDialog
@@ -1967,6 +2742,562 @@ function SubscribeFilesPage() {
           onRenameGroup={handleRenameGroup}
         />
       )}
+
+      {/* 代理集合配置对话框 */}
+      <Dialog open={proxyProviderDialogOpen} onOpenChange={(open) => {
+        setProxyProviderDialogOpen(open)
+        if (!open) {
+          setSelectedExternalSub(null)
+          setEditingProxyProvider(null)
+        }
+      }}>
+        <DialogContent className='!max-w-fit w-auto max-h-[85vh] overflow-y-auto'>
+          <DialogHeader>
+            <DialogTitle>{editingProxyProvider ? '编辑代理集合配置' : '创建代理集合配置'}</DialogTitle>
+            <DialogDescription>
+              {editingProxyProvider
+                ? `编辑代理集合 "${editingProxyProvider.name}" 的配置`
+                : selectedExternalSub
+                  ? `为外部订阅 "${selectedExternalSub.name}" 创建 proxy-provider 配置`
+                  : '创建新的 proxy-provider 配置'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className='w-[600px] max-w-[80vw]'>
+            <div className='space-y-6'>
+              {/* 基础配置 */}
+              <div className='space-y-4'>
+                <h4 className='font-medium text-sm'>基础配置</h4>
+                <div className='grid grid-cols-2 gap-4'>
+                  {/* 外部订阅选择器 - 仅在创建模式下显示 */}
+                  {!editingProxyProvider && (
+                    <div className='space-y-2 col-span-2'>
+                      <Label htmlFor='pp-subscription'>外部订阅 *</Label>
+                      <select
+                        id='pp-subscription'
+                        className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors'
+                        value={selectedExternalSub?.id || ''}
+                        onChange={(e) => {
+                          const sub = externalSubs.find(s => s.id === Number(e.target.value))
+                          setSelectedExternalSub(sub || null)
+                        }}
+                      >
+                        <option value=''>请选择外部订阅</option>
+                        {externalSubs.map(sub => (
+                          <option key={sub.id} value={sub.id}>{sub.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-name'>代理集合名称</Label>
+                    <Input
+                      id='pp-name'
+                      value={proxyProviderForm.name}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder='例如: 机场A'
+                    />
+                  </div>
+                  {/* 妙妙屋处理模式显示 URL */}
+                  {proxyProviderForm.process_mode === 'mmw' && (
+                    <div className='space-y-2'>
+                      <Label>订阅 URL</Label>
+                      <div className='flex items-center gap-2'>
+                        <Input
+                          value={(() => {
+                            const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+                            const configId = editingProxyProvider?.id || '{config_id}'
+                            return `${baseUrl}/api/proxy-provider/${configId}?token=${userToken || '{user_token}'}`
+                          })()}
+                          readOnly
+                          className='font-mono text-xs bg-muted'
+                        />
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          onClick={() => {
+                            const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+                            const configId = editingProxyProvider?.id || '{config_id}'
+                            const url = `${baseUrl}/api/proxy-provider/${configId}?token=${userToken || '{user_token}'}`
+                            navigator.clipboard.writeText(url)
+                            toast.success('URL 已复制')
+                          }}
+                        >
+                          <Copy className='h-4 w-4' />
+                        </Button>
+                      </div>
+                      {!editingProxyProvider && (
+                        <p className='text-xs text-muted-foreground'>保存后将生成实际的 config_id</p>
+                      )}
+                    </div>
+                  )}
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-type'>类型</Label>
+                    <select
+                      id='pp-type'
+                      className='flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors'
+                      value={proxyProviderForm.type}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, type: e.target.value }))}
+                    >
+                      <option value='http'>http</option>
+                      <option value='file'>file</option>
+                    </select>
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-interval'>更新间隔(秒)</Label>
+                    <Input
+                      id='pp-interval'
+                      type='number'
+                      value={proxyProviderForm.interval}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, interval: parseInt(e.target.value) || 3600 }))}
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-proxy'>下载代理</Label>
+                    <Input
+                      id='pp-proxy'
+                      value={proxyProviderForm.proxy}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, proxy: e.target.value }))}
+                      placeholder='DIRECT'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-size-limit'>文件大小限制</Label>
+                    <Input
+                      id='pp-size-limit'
+                      type='number'
+                      value={proxyProviderForm.size_limit}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, size_limit: parseInt(e.target.value) || 0 }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 请求头配置 */}
+              <div className='space-y-4'>
+                <h4 className='font-medium text-sm'>请求头</h4>
+                <div className='grid grid-cols-2 gap-4'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-user-agent'>User-Agent</Label>
+                    <Input
+                      id='pp-user-agent'
+                      value={proxyProviderForm.header_user_agent}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, header_user_agent: e.target.value }))}
+                      placeholder='Clash/v1.18.0'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-authorization'>Authorization</Label>
+                    <Input
+                      id='pp-authorization'
+                      value={proxyProviderForm.header_authorization}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, header_authorization: e.target.value }))}
+                      placeholder='token xxx'
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 健康检查配置 */}
+              <div className='space-y-4'>
+                <div className='flex items-center justify-between'>
+                  <h4 className='font-medium text-sm'>健康检查</h4>
+                  <Switch
+                    checked={proxyProviderForm.health_check_enabled}
+                    onCheckedChange={(checked) => setProxyProviderForm(prev => ({ ...prev, health_check_enabled: checked }))}
+                  />
+                </div>
+                {proxyProviderForm.health_check_enabled && (
+                  <div className='grid grid-cols-2 gap-4'>
+                    <div className='space-y-2 col-span-2'>
+                      <Label htmlFor='pp-hc-url'>检查URL</Label>
+                      <Input
+                        id='pp-hc-url'
+                        value={proxyProviderForm.health_check_url}
+                        onChange={(e) => setProxyProviderForm(prev => ({ ...prev, health_check_url: e.target.value }))}
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='pp-hc-interval'>检查间隔(秒)</Label>
+                      <Input
+                        id='pp-hc-interval'
+                        type='number'
+                        value={proxyProviderForm.health_check_interval}
+                        onChange={(e) => setProxyProviderForm(prev => ({ ...prev, health_check_interval: parseInt(e.target.value) || 300 }))}
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='pp-hc-timeout'>超时(ms)</Label>
+                      <Input
+                        id='pp-hc-timeout'
+                        type='number'
+                        value={proxyProviderForm.health_check_timeout}
+                        onChange={(e) => setProxyProviderForm(prev => ({ ...prev, health_check_timeout: parseInt(e.target.value) || 5000 }))}
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='pp-hc-status'>期望状态码</Label>
+                      <Input
+                        id='pp-hc-status'
+                        type='number'
+                        value={proxyProviderForm.health_check_expected_status}
+                        onChange={(e) => setProxyProviderForm(prev => ({ ...prev, health_check_expected_status: parseInt(e.target.value) || 204 }))}
+                      />
+                    </div>
+                    <div className='flex items-center space-x-2'>
+                      <Checkbox
+                        id='pp-hc-lazy'
+                        checked={proxyProviderForm.health_check_lazy}
+                        onCheckedChange={(checked) => setProxyProviderForm(prev => ({ ...prev, health_check_lazy: !!checked }))}
+                      />
+                      <Label htmlFor='pp-hc-lazy' className='text-sm'>懒惰模式</Label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 高级配置处理方式 */}
+              <div className='space-y-3'>
+                <h4 className='font-medium text-sm'>高级配置处理方式</h4>
+                <div className='grid grid-cols-2 gap-2'>
+                  <Button
+                    type='button'
+                    variant={proxyProviderForm.process_mode === 'client' ? 'default' : 'outline'}
+                    className='h-auto py-3 px-4 flex flex-col items-start text-left'
+                    onClick={() => setProxyProviderForm(prev => ({ ...prev, process_mode: 'client' }))}
+                  >
+                    <span className='font-medium'>由客户端处理</span>
+                    <span className='text-xs opacity-70 font-normal'>高级配置输出到订阅配置中</span>
+                  </Button>
+                  <Button
+                    type='button'
+                    variant={proxyProviderForm.process_mode === 'mmw' ? 'default' : 'outline'}
+                    className='h-auto py-3 px-4 flex flex-col items-start text-left'
+                    onClick={() => setProxyProviderForm(prev => ({ ...prev, process_mode: 'mmw' }))}
+                  >
+                    <span className='font-medium'>由妙妙屋处理</span>
+                    <span className='text-xs opacity-70 font-normal'>URL 指向妙妙屋接口</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* 高级配置 */}
+              <div className='space-y-4'>
+                <h4 className='font-medium text-sm'>高级配置 {proxyProviderForm.process_mode === 'client' ? '(输出到配置)' : '(由妙妙屋处理)'}</h4>
+                <div className='grid grid-cols-2 gap-4'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-filter'>节点过滤(正则)</Label>
+                    <Input
+                      id='pp-filter'
+                      value={proxyProviderForm.filter}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, filter: e.target.value }))}
+                      placeholder='例如: 香港|日本'
+                    />
+                    <p className='text-xs text-muted-foreground'>保留匹配的节点</p>
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-exclude-filter'>节点排除(正则)</Label>
+                    <Input
+                      id='pp-exclude-filter'
+                      value={proxyProviderForm.exclude_filter}
+                      onChange={(e) => setProxyProviderForm(prev => ({ ...prev, exclude_filter: e.target.value }))}
+                      placeholder='例如: 过期|剩余'
+                    />
+                    <p className='text-xs text-muted-foreground'>排除匹配的节点</p>
+                  </div>
+                </div>
+                <div className='space-y-2'>
+                  <Label>排除协议类型</Label>
+                  <div className='flex flex-wrap gap-1.5'>
+                    {PROXY_TYPES.map(type => {
+                      const isSelected = proxyProviderForm.exclude_type.includes(type)
+                      return (
+                        <Button
+                          key={type}
+                          type='button'
+                          variant={isSelected ? 'default' : 'outline'}
+                          size='sm'
+                          className='h-7 px-2.5 text-xs'
+                          onClick={() => {
+                            if (isSelected) {
+                              setProxyProviderForm(prev => ({
+                                ...prev,
+                                exclude_type: prev.exclude_type.filter(t => t !== type)
+                              }))
+                            } else {
+                              setProxyProviderForm(prev => ({
+                                ...prev,
+                                exclude_type: [...prev.exclude_type, type]
+                              }))
+                            }
+                          }}
+                        >
+                          {type}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {/* 覆写配置 */}
+                <div className='space-y-3'>
+                  <h4 className='font-medium text-sm'>覆写配置</h4>
+
+                  {/* 连接设置 */}
+                  <div className='space-y-2'>
+                    <Label className='text-xs text-muted-foreground'>连接设置</Label>
+                    <div className='grid grid-cols-2 gap-3'>
+                      <div className='flex items-center justify-between'>
+                        <Label htmlFor='pp-override-tfo' className='text-xs'>TCP Fast Open</Label>
+                        <Switch
+                          id='pp-override-tfo'
+                          checked={proxyProviderForm.override.tfo}
+                          onCheckedChange={(checked) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, tfo: checked }
+                          }))}
+                        />
+                      </div>
+                      <div className='flex items-center justify-between'>
+                        <Label htmlFor='pp-override-mptcp' className='text-xs'>Multipath TCP</Label>
+                        <Switch
+                          id='pp-override-mptcp'
+                          checked={proxyProviderForm.override.mptcp}
+                          onCheckedChange={(checked) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, mptcp: checked }
+                          }))}
+                        />
+                      </div>
+                      <div className='flex items-center justify-between'>
+                        <Label htmlFor='pp-override-udp' className='text-xs'>启用 UDP</Label>
+                        <Switch
+                          id='pp-override-udp'
+                          checked={proxyProviderForm.override.udp}
+                          onCheckedChange={(checked) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, udp: checked }
+                          }))}
+                        />
+                      </div>
+                      <div className='flex items-center justify-between'>
+                        <Label htmlFor='pp-override-uot' className='text-xs'>UDP over TCP</Label>
+                        <Switch
+                          id='pp-override-uot'
+                          checked={proxyProviderForm.override.udp_over_tcp}
+                          onCheckedChange={(checked) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, udp_over_tcp: checked }
+                          }))}
+                        />
+                      </div>
+                      <div className='flex items-center justify-between col-span-2'>
+                        <Label htmlFor='pp-override-skip-cert' className='text-xs'>跳过证书验证</Label>
+                        <Switch
+                          id='pp-override-skip-cert'
+                          checked={proxyProviderForm.override.skip_cert_verify}
+                          onCheckedChange={(checked) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, skip_cert_verify: checked }
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 代理设置 */}
+                  <div className='space-y-2'>
+                    <Label htmlFor='pp-override-dialer-proxy' className='text-xs text-muted-foreground'>链式代理 (dialer-proxy)</Label>
+                    <Input
+                      id='pp-override-dialer-proxy'
+                      value={proxyProviderForm.override.dialer_proxy}
+                      onChange={(e) => setProxyProviderForm(prev => ({
+                        ...prev,
+                        override: { ...prev.override, dialer_proxy: e.target.value }
+                      }))}
+                      placeholder='例如: 节点选择'
+                      className='h-8 text-sm'
+                    />
+                  </div>
+
+                  {/* 网络设置 */}
+                  <div className='space-y-2'>
+                    <Label className='text-xs text-muted-foreground'>网络设置</Label>
+                    <div className='grid grid-cols-2 gap-3'>
+                      <div className='space-y-1'>
+                        <Label htmlFor='pp-override-interface' className='text-xs'>出站接口</Label>
+                        <Input
+                          id='pp-override-interface'
+                          value={proxyProviderForm.override.interface_name}
+                          onChange={(e) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, interface_name: e.target.value }
+                          }))}
+                          placeholder='例如: eth0'
+                          className='h-8 text-sm'
+                        />
+                      </div>
+                      <div className='space-y-1'>
+                        <Label htmlFor='pp-override-routing-mark' className='text-xs'>路由标记</Label>
+                        <Input
+                          id='pp-override-routing-mark'
+                          value={proxyProviderForm.override.routing_mark}
+                          onChange={(e) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, routing_mark: e.target.value }
+                          }))}
+                          placeholder='例如: 255'
+                          className='h-8 text-sm'
+                        />
+                      </div>
+                    </div>
+                    <div className='space-y-1'>
+                      <Label htmlFor='pp-override-ip-version' className='text-xs'>IP 版本</Label>
+                      <Select
+                        value={proxyProviderForm.override.ip_version}
+                        onValueChange={(value) => setProxyProviderForm(prev => ({
+                          ...prev,
+                          override: { ...prev.override, ip_version: value as OverrideForm['ip_version'] }
+                        }))}
+                      >
+                        <SelectTrigger id='pp-override-ip-version' className='h-8 text-sm'>
+                          <SelectValue placeholder='选择 IP 版本' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {IP_VERSION_OPTIONS.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value || '_default'}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* 节点名称修改 */}
+                  <div className='space-y-2'>
+                    <Label className='text-xs text-muted-foreground'>节点名称修改</Label>
+                    <div className='grid grid-cols-2 gap-3'>
+                      <div className='space-y-1'>
+                        <Label htmlFor='pp-override-prefix' className='text-xs'>名称前缀</Label>
+                        <Input
+                          id='pp-override-prefix'
+                          value={proxyProviderForm.override.additional_prefix}
+                          onChange={(e) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, additional_prefix: e.target.value }
+                          }))}
+                          placeholder='例如: [机场A]'
+                          className='h-8 text-sm'
+                        />
+                      </div>
+                      <div className='space-y-1'>
+                        <Label htmlFor='pp-override-suffix' className='text-xs'>名称后缀</Label>
+                        <Input
+                          id='pp-override-suffix'
+                          value={proxyProviderForm.override.additional_suffix}
+                          onChange={(e) => setProxyProviderForm(prev => ({
+                            ...prev,
+                            override: { ...prev.override, additional_suffix: e.target.value }
+                          }))}
+                          placeholder='例如: -Premium'
+                          className='h-8 text-sm'
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 生成的配置预览 */}
+              <div className='space-y-2'>
+                <div className='flex items-center justify-between'>
+                  <h4 className='font-medium text-sm'>生成的配置预览</h4>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => {
+                      const preview = generateProxyProviderYAML()
+                      navigator.clipboard.writeText(preview)
+                      toast.success('配置已复制到剪贴板')
+                    }}
+                  >
+                    <Copy className='h-4 w-4 mr-1' />
+                    复制
+                  </Button>
+                </div>
+                <pre className='text-xs bg-muted p-3 rounded-md overflow-x-auto whitespace-pre-wrap'>
+                  {generateProxyProviderYAML()}
+                </pre>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setProxyProviderDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                // 构建 header JSON
+                const headerObj: Record<string, string[]> = {}
+                if (proxyProviderForm.header_user_agent) {
+                  headerObj['User-Agent'] = proxyProviderForm.header_user_agent.split(',').map(s => s.trim())
+                }
+                if (proxyProviderForm.header_authorization) {
+                  headerObj['Authorization'] = [proxyProviderForm.header_authorization]
+                }
+
+                const payload = {
+                  name: proxyProviderForm.name,
+                  type: proxyProviderForm.type,
+                  interval: proxyProviderForm.interval,
+                  proxy: proxyProviderForm.proxy,
+                  size_limit: proxyProviderForm.size_limit,
+                  header: Object.keys(headerObj).length > 0 ? JSON.stringify(headerObj) : '',
+                  health_check_enabled: proxyProviderForm.health_check_enabled,
+                  health_check_url: proxyProviderForm.health_check_url,
+                  health_check_interval: proxyProviderForm.health_check_interval,
+                  health_check_timeout: proxyProviderForm.health_check_timeout,
+                  health_check_lazy: proxyProviderForm.health_check_lazy,
+                  health_check_expected_status: proxyProviderForm.health_check_expected_status,
+                  filter: proxyProviderForm.filter,
+                  exclude_filter: proxyProviderForm.exclude_filter,
+                  exclude_type: proxyProviderForm.exclude_type.join(','),
+                  override: overrideFormToJSON(proxyProviderForm.override),
+                  process_mode: proxyProviderForm.process_mode,
+                }
+
+                if (editingProxyProvider) {
+                  // 编辑模式
+                  updateProxyProviderMutation.mutate({
+                    id: editingProxyProvider.id,
+                    external_subscription_id: editingProxyProvider.external_subscription_id,
+                    ...payload,
+                  })
+                } else {
+                  // 创建模式
+                  if (!selectedExternalSub) {
+                    toast.error('请选择外部订阅')
+                    return
+                  }
+                  createProxyProviderMutation.mutate({
+                    external_subscription_id: selectedExternalSub.id,
+                    ...payload,
+                  })
+                }
+              }}
+              disabled={
+                !proxyProviderForm.name ||
+                (!editingProxyProvider && !selectedExternalSub) ||
+                createProxyProviderMutation.isPending ||
+                updateProxyProviderMutation.isPending
+              }
+            >
+              {editingProxyProvider ? '更新配置' : '保存配置'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 缺失节点替换对话框 */}
       <Dialog open={missingNodesDialogOpen} onOpenChange={setMissingNodesDialogOpen}>

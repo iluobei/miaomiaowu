@@ -247,6 +247,7 @@ type UserSettings struct {
 	CustomRulesEnabled   bool   // Enable custom rules feature
 	EnableShortLink      bool   // Enable short link feature for subscriptions
 	UseNewTemplateSystem bool   // Use new template system (database-based), default true
+	EnableProxyProvider  bool   // Enable proxy provider feature
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -290,6 +291,32 @@ type CustomRuleApplication struct {
 	AppliedContent  string // JSON-serialized content that was applied
 	ContentHash     string // SHA256 hash of the content for quick comparison
 	AppliedAt       time.Time
+}
+
+// ProxyProviderConfig represents a proxy-provider configuration for external subscription
+type ProxyProviderConfig struct {
+	ID                       int64
+	Username                 string
+	ExternalSubscriptionID   int64
+	Name                     string // 代理集合名称
+	Type                     string // http/file
+	Interval                 int    // 更新间隔(秒)
+	Proxy                    string // 下载代理
+	SizeLimit                int    // 文件大小限制
+	Header                   string // JSON: {"User-Agent": [...], "Authorization": [...]}
+	HealthCheckEnabled       bool
+	HealthCheckURL           string
+	HealthCheckInterval      int
+	HealthCheckTimeout       int
+	HealthCheckLazy          bool
+	HealthCheckExpectedStatus int
+	Filter                   string // 正则: 保留匹配的节点
+	ExcludeFilter            string // 正则: 排除匹配的节点
+	ExcludeType              string // 排除的协议类型，逗号分隔
+	Override                 string // JSON: 覆写配置
+	ProcessMode              string // 'client'=客户端处理, 'mmw'=妙妙屋处理
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }
 
 var (
@@ -721,6 +748,11 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 		return err
 	}
 
+	// Add enable_proxy_provider to user_settings table
+	if err := r.ensureUserSettingsColumn("enable_proxy_provider", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
 	// Add file_short_code column to subscribe_files table (3-character code)
 	if err := r.ensureSubscribeFileColumn("file_short_code", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
@@ -808,6 +840,40 @@ CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);
 
 	if _, err := r.db.Exec(templatesSchema); err != nil {
 		return fmt.Errorf("migrate templates: %w", err)
+	}
+
+	// Proxy provider configs table
+	const proxyProviderConfigsSchema = `
+CREATE TABLE IF NOT EXISTS proxy_provider_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    external_subscription_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'http',
+    interval INTEGER DEFAULT 3600,
+    proxy TEXT DEFAULT 'DIRECT',
+    size_limit INTEGER DEFAULT 0,
+    header TEXT,
+    health_check_enabled INTEGER DEFAULT 1,
+    health_check_url TEXT DEFAULT 'https://www.gstatic.com/generate_204',
+    health_check_interval INTEGER DEFAULT 300,
+    health_check_timeout INTEGER DEFAULT 5000,
+    health_check_lazy INTEGER DEFAULT 1,
+    health_check_expected_status INTEGER DEFAULT 204,
+    filter TEXT,
+    exclude_filter TEXT,
+    exclude_type TEXT,
+    override TEXT,
+    process_mode TEXT DEFAULT 'client',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (external_subscription_id) REFERENCES external_subscriptions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_proxy_provider_configs_username ON proxy_provider_configs(username);
+CREATE INDEX IF NOT EXISTS idx_proxy_provider_configs_external_subscription_id ON proxy_provider_configs(external_subscription_id);
+`
+	if _, err := r.db.Exec(proxyProviderConfigsSchema); err != nil {
+		return fmt.Errorf("migrate proxy_provider_configs: %w", err)
 	}
 
 	return nil
@@ -2855,9 +2921,9 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
-	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt int
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &settings.CreatedAt, &settings.UpdatedAt)
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt int
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -2872,6 +2938,7 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	settings.CustomRulesEnabled = customRulesEnabledInt == 1
 	settings.EnableShortLink = enableShortLinkInt == 1
 	settings.UseNewTemplateSystem = useNewTemplateSystemInt == 1
+	settings.EnableProxyProvider = enableProxyProviderInt == 1
 
 	return settings, nil
 }
@@ -2922,6 +2989,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		useNewTemplateSystemInt = 0
 	}
 
+	enableProxyProviderInt := 0
+	if settings.EnableProxyProvider {
+		enableProxyProviderInt = 1
+	}
+
 	matchRule := strings.TrimSpace(settings.MatchRule)
 	if matchRule == "" {
 		matchRule = "node_name"
@@ -2938,8 +3010,8 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
@@ -2951,10 +3023,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			custom_rules_enabled = excluded.custom_rules_enabled,
 			enable_short_link = excluded.enable_short_link,
 			use_new_template_system = excluded.use_new_template_system,
+			enable_proxy_provider = excluded.enable_proxy_provider,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 
@@ -3609,5 +3682,240 @@ func (r *TrafficRepository) GetSubscribeFilesWithAutoSync(ctx context.Context) (
 	}
 
 	return files, nil
+}
+
+// ==================== ProxyProviderConfig CRUD ====================
+
+// CreateProxyProviderConfig creates a new proxy provider config
+func (r *TrafficRepository) CreateProxyProviderConfig(ctx context.Context, config *ProxyProviderConfig) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("traffic repository not initialized")
+	}
+
+	healthCheckEnabled := 0
+	if config.HealthCheckEnabled {
+		healthCheckEnabled = 1
+	}
+	healthCheckLazy := 0
+	if config.HealthCheckLazy {
+		healthCheckLazy = 1
+	}
+
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO proxy_provider_configs (
+			username, external_subscription_id, name, type, interval, proxy, size_limit, header,
+			health_check_enabled, health_check_url, health_check_interval, health_check_timeout,
+			health_check_lazy, health_check_expected_status,
+			filter, exclude_filter, exclude_type, override, process_mode
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		config.Username, config.ExternalSubscriptionID, config.Name, config.Type,
+		config.Interval, config.Proxy, config.SizeLimit, config.Header,
+		healthCheckEnabled, config.HealthCheckURL, config.HealthCheckInterval, config.HealthCheckTimeout,
+		healthCheckLazy, config.HealthCheckExpectedStatus,
+		config.Filter, config.ExcludeFilter, config.ExcludeType, config.Override, config.ProcessMode,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("create proxy provider config: %w", err)
+	}
+
+	return result.LastInsertId()
+}
+
+// GetProxyProviderConfig retrieves a proxy provider config by ID
+func (r *TrafficRepository) GetProxyProviderConfig(ctx context.Context, id int64) (*ProxyProviderConfig, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, username, external_subscription_id, name, type, interval, proxy, size_limit,
+			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
+			health_check_timeout, health_check_lazy, health_check_expected_status,
+			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
+			COALESCE(override, ''), process_mode, created_at, updated_at
+		FROM proxy_provider_configs WHERE id = ?
+	`, id)
+
+	var config ProxyProviderConfig
+	var healthCheckEnabled, healthCheckLazy int
+	err := row.Scan(
+		&config.ID, &config.Username, &config.ExternalSubscriptionID, &config.Name, &config.Type,
+		&config.Interval, &config.Proxy, &config.SizeLimit, &config.Header,
+		&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
+		&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
+		&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
+		&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get proxy provider config: %w", err)
+	}
+
+	config.HealthCheckEnabled = healthCheckEnabled != 0
+	config.HealthCheckLazy = healthCheckLazy != 0
+
+	return &config, nil
+}
+
+// ListProxyProviderConfigs returns all proxy provider configs for a user
+func (r *TrafficRepository) ListProxyProviderConfigs(ctx context.Context, username string) ([]ProxyProviderConfig, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, username, external_subscription_id, name, type, interval, proxy, size_limit,
+			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
+			health_check_timeout, health_check_lazy, health_check_expected_status,
+			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
+			COALESCE(override, ''), process_mode, created_at, updated_at
+		FROM proxy_provider_configs WHERE username = ? ORDER BY id ASC
+	`, username)
+	if err != nil {
+		return nil, fmt.Errorf("list proxy provider configs: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []ProxyProviderConfig
+	for rows.Next() {
+		var config ProxyProviderConfig
+		var healthCheckEnabled, healthCheckLazy int
+		err := rows.Scan(
+			&config.ID, &config.Username, &config.ExternalSubscriptionID, &config.Name, &config.Type,
+			&config.Interval, &config.Proxy, &config.SizeLimit, &config.Header,
+			&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
+			&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
+			&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
+			&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan proxy provider config: %w", err)
+		}
+		config.HealthCheckEnabled = healthCheckEnabled != 0
+		config.HealthCheckLazy = healthCheckLazy != 0
+		configs = append(configs, config)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate proxy provider configs: %w", err)
+	}
+
+	return configs, nil
+}
+
+// ListProxyProviderConfigsBySubscription returns all proxy provider configs for an external subscription
+func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.Context, externalSubscriptionID int64) ([]ProxyProviderConfig, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, username, external_subscription_id, name, type, interval, proxy, size_limit,
+			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
+			health_check_timeout, health_check_lazy, health_check_expected_status,
+			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
+			COALESCE(override, ''), process_mode, created_at, updated_at
+		FROM proxy_provider_configs WHERE external_subscription_id = ? ORDER BY id ASC
+	`, externalSubscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("list proxy provider configs by subscription: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []ProxyProviderConfig
+	for rows.Next() {
+		var config ProxyProviderConfig
+		var healthCheckEnabled, healthCheckLazy int
+		err := rows.Scan(
+			&config.ID, &config.Username, &config.ExternalSubscriptionID, &config.Name, &config.Type,
+			&config.Interval, &config.Proxy, &config.SizeLimit, &config.Header,
+			&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
+			&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
+			&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
+			&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan proxy provider config: %w", err)
+		}
+		config.HealthCheckEnabled = healthCheckEnabled != 0
+		config.HealthCheckLazy = healthCheckLazy != 0
+		configs = append(configs, config)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate proxy provider configs: %w", err)
+	}
+
+	return configs, nil
+}
+
+// UpdateProxyProviderConfig updates an existing proxy provider config
+func (r *TrafficRepository) UpdateProxyProviderConfig(ctx context.Context, config *ProxyProviderConfig) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	healthCheckEnabled := 0
+	if config.HealthCheckEnabled {
+		healthCheckEnabled = 1
+	}
+	healthCheckLazy := 0
+	if config.HealthCheckLazy {
+		healthCheckLazy = 1
+	}
+
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE proxy_provider_configs SET
+			name = ?, type = ?, interval = ?, proxy = ?, size_limit = ?, header = ?,
+			health_check_enabled = ?, health_check_url = ?, health_check_interval = ?,
+			health_check_timeout = ?, health_check_lazy = ?, health_check_expected_status = ?,
+			filter = ?, exclude_filter = ?, exclude_type = ?, override = ?, process_mode = ?,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND username = ?
+	`,
+		config.Name, config.Type, config.Interval, config.Proxy, config.SizeLimit, config.Header,
+		healthCheckEnabled, config.HealthCheckURL, config.HealthCheckInterval,
+		config.HealthCheckTimeout, healthCheckLazy, config.HealthCheckExpectedStatus,
+		config.Filter, config.ExcludeFilter, config.ExcludeType, config.Override, config.ProcessMode,
+		config.ID, config.Username,
+	)
+	if err != nil {
+		return fmt.Errorf("update proxy provider config: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return errors.New("proxy provider config not found or not owned by user")
+	}
+
+	return nil
+}
+
+// DeleteProxyProviderConfig deletes a proxy provider config
+func (r *TrafficRepository) DeleteProxyProviderConfig(ctx context.Context, id int64, username string) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	result, err := r.db.ExecContext(ctx, `DELETE FROM proxy_provider_configs WHERE id = ? AND username = ?`, id, username)
+	if err != nil {
+		return fmt.Errorf("delete proxy provider config: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return errors.New("proxy provider config not found or not owned by user")
+	}
+
+	return nil
 }
 
