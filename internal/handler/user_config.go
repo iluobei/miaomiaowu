@@ -11,27 +11,29 @@ import (
 )
 
 type userConfigRequest struct {
-	ForceSyncExternal  bool   `json:"force_sync_external"`
-	MatchRule          string `json:"match_rule"`
-	SyncScope          string `json:"sync_scope"`
-	KeepNodeName       bool   `json:"keep_node_name"`
-	CacheExpireMinutes int    `json:"cache_expire_minutes"`
-	SyncTraffic        bool   `json:"sync_traffic"`
-	EnableProbeBinding bool   `json:"enable_probe_binding"`
-	CustomRulesEnabled bool   `json:"custom_rules_enabled"`
-	EnableShortLink    bool   `json:"enable_short_link"`
+	ForceSyncExternal    bool   `json:"force_sync_external"`
+	MatchRule            string `json:"match_rule"`
+	SyncScope            string `json:"sync_scope"`
+	KeepNodeName         bool   `json:"keep_node_name"`
+	CacheExpireMinutes   int    `json:"cache_expire_minutes"`
+	SyncTraffic          bool   `json:"sync_traffic"`
+	EnableProbeBinding   bool   `json:"enable_probe_binding"`
+	CustomRulesEnabled   bool   `json:"custom_rules_enabled"`
+	EnableShortLink      bool   `json:"enable_short_link"`
+	UseNewTemplateSystem *bool  `json:"use_new_template_system"` // nil means not provided, default true
 }
 
 type userConfigResponse struct {
-	ForceSyncExternal  bool   `json:"force_sync_external"`
-	MatchRule          string `json:"match_rule"`
-	SyncScope          string `json:"sync_scope"`
-	KeepNodeName       bool   `json:"keep_node_name"`
-	CacheExpireMinutes int    `json:"cache_expire_minutes"`
-	SyncTraffic        bool   `json:"sync_traffic"`
-	EnableProbeBinding bool   `json:"enable_probe_binding"`
-	CustomRulesEnabled bool   `json:"custom_rules_enabled"`
-	EnableShortLink    bool   `json:"enable_short_link"`
+	ForceSyncExternal    bool   `json:"force_sync_external"`
+	MatchRule            string `json:"match_rule"`
+	SyncScope            string `json:"sync_scope"`
+	KeepNodeName         bool   `json:"keep_node_name"`
+	CacheExpireMinutes   int    `json:"cache_expire_minutes"`
+	SyncTraffic          bool   `json:"sync_traffic"`
+	EnableProbeBinding   bool   `json:"enable_probe_binding"`
+	CustomRulesEnabled   bool   `json:"custom_rules_enabled"`
+	EnableShortLink      bool   `json:"enable_short_link"`
+	UseNewTemplateSystem bool   `json:"use_new_template_system"`
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -63,15 +65,16 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		if errors.Is(err, storage.ErrUserSettingsNotFound) {
 			// Return default settings if not found
 			resp := userConfigResponse{
-				ForceSyncExternal:  false,
-				MatchRule:          "node_name",
-				SyncScope:          "saved_only",
-				KeepNodeName:       true,
-				CacheExpireMinutes: 0,
-				SyncTraffic:        false,
-				EnableProbeBinding: false,
-				CustomRulesEnabled: true, // 自定义规则始终启用
-				EnableShortLink:    false,
+				ForceSyncExternal:    false,
+				MatchRule:            "node_name",
+				SyncScope:            "saved_only",
+				KeepNodeName:         true,
+				CacheExpireMinutes:   0,
+				SyncTraffic:          false,
+				EnableProbeBinding:   false,
+				CustomRulesEnabled:   true,  // 自定义规则始终启用
+				EnableShortLink:      false,
+				UseNewTemplateSystem: true, // 默认使用新模板系统
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -83,15 +86,16 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 	}
 
 	resp := userConfigResponse{
-		ForceSyncExternal:  settings.ForceSyncExternal,
-		MatchRule:          settings.MatchRule,
-		SyncScope:          settings.SyncScope,
-		KeepNodeName:       settings.KeepNodeName,
-		CacheExpireMinutes: settings.CacheExpireMinutes,
-		SyncTraffic:        settings.SyncTraffic,
-		EnableProbeBinding: settings.EnableProbeBinding,
-		CustomRulesEnabled: true, // 自定义规则始终启用
-		EnableShortLink:    settings.EnableShortLink,
+		ForceSyncExternal:    settings.ForceSyncExternal,
+		MatchRule:            settings.MatchRule,
+		SyncScope:            settings.SyncScope,
+		KeepNodeName:         settings.KeepNodeName,
+		CacheExpireMinutes:   settings.CacheExpireMinutes,
+		SyncTraffic:          settings.SyncTraffic,
+		EnableProbeBinding:   settings.EnableProbeBinding,
+		CustomRulesEnabled:   true, // 自定义规则始终启用
+		EnableShortLink:      settings.EnableShortLink,
+		UseNewTemplateSystem: settings.UseNewTemplateSystem,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -132,17 +136,24 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		cacheExpireMinutes = 0
 	}
 
+	// Handle use_new_template_system, default to true if not provided
+	useNewTemplateSystem := true
+	if payload.UseNewTemplateSystem != nil {
+		useNewTemplateSystem = *payload.UseNewTemplateSystem
+	}
+
 	settings := storage.UserSettings{
-		Username:           username,
-		ForceSyncExternal:  payload.ForceSyncExternal,
-		MatchRule:          matchRule,
-		SyncScope:          syncScope,
-		KeepNodeName:       payload.KeepNodeName,
-		CacheExpireMinutes: cacheExpireMinutes,
-		SyncTraffic:        payload.SyncTraffic,
-		EnableProbeBinding: payload.EnableProbeBinding,
-		CustomRulesEnabled: true, // 自定义规则始终启用
-		EnableShortLink:    payload.EnableShortLink,
+		Username:             username,
+		ForceSyncExternal:    payload.ForceSyncExternal,
+		MatchRule:            matchRule,
+		SyncScope:            syncScope,
+		KeepNodeName:         payload.KeepNodeName,
+		CacheExpireMinutes:   cacheExpireMinutes,
+		SyncTraffic:          payload.SyncTraffic,
+		EnableProbeBinding:   payload.EnableProbeBinding,
+		CustomRulesEnabled:   true, // 自定义规则始终启用
+		EnableShortLink:      payload.EnableShortLink,
+		UseNewTemplateSystem: useNewTemplateSystem,
 	}
 
 	if err := repo.UpsertUserSettings(r.Context(), settings); err != nil {
@@ -151,15 +162,16 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	}
 
 	resp := userConfigResponse{
-		ForceSyncExternal:  settings.ForceSyncExternal,
-		MatchRule:          settings.MatchRule,
-		SyncScope:          settings.SyncScope,
-		KeepNodeName:       settings.KeepNodeName,
-		CacheExpireMinutes: settings.CacheExpireMinutes,
-		SyncTraffic:        settings.SyncTraffic,
-		EnableProbeBinding: settings.EnableProbeBinding,
-		CustomRulesEnabled: true, // 自定义规则始终启用
-		EnableShortLink:    settings.EnableShortLink,
+		ForceSyncExternal:    settings.ForceSyncExternal,
+		MatchRule:            settings.MatchRule,
+		SyncScope:            settings.SyncScope,
+		KeepNodeName:         settings.KeepNodeName,
+		CacheExpireMinutes:   settings.CacheExpireMinutes,
+		SyncTraffic:          settings.SyncTraffic,
+		EnableProbeBinding:   settings.EnableProbeBinding,
+		CustomRulesEnabled:   true, // 自定义规则始终启用
+		EnableShortLink:      settings.EnableShortLink,
+		UseNewTemplateSystem: settings.UseNewTemplateSystem,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

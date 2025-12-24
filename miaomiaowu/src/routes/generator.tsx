@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Copy, Settings, FileText } from 'lucide-react'
+import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Copy, Settings, FileText, Upload } from 'lucide-react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
@@ -299,6 +299,18 @@ function SubscriptionGeneratorPage() {
     enable_include_all: true,
   })
 
+  // 旧模板系统管理状态
+  const [oldTemplateManageDialogOpen, setOldTemplateManageDialogOpen] = useState(false)
+  const [oldTemplateEditDialogOpen, setOldTemplateEditDialogOpen] = useState(false)
+  const [editingOldTemplate, setEditingOldTemplate] = useState<string | null>(null)
+  const [oldTemplateContent, setOldTemplateContent] = useState('')
+  const [isOldTemplateLoading, setIsOldTemplateLoading] = useState(false)
+  const [deletingOldTemplate, setDeletingOldTemplate] = useState<string | null>(null)
+  const [isOldTemplateDeleteDialogOpen, setIsOldTemplateDeleteDialogOpen] = useState(false)
+  const [isOldTemplateRenameDialogOpen, setIsOldTemplateRenameDialogOpen] = useState(false)
+  const [renamingOldTemplate, setRenamingOldTemplate] = useState<string | null>(null)
+  const [newOldTemplateName, setNewOldTemplateName] = useState('')
+
   // 保存订阅对话框状态
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [subscribeName, setSubscribeName] = useState('')
@@ -317,6 +329,21 @@ function SubscriptionGeneratorPage() {
   const [replacementChoice, setReplacementChoice] = useState<string>('DIRECT')
   const [pendingConfigAfterGrouping, setPendingConfigAfterGrouping] = useState<string>('')
 
+  // 获取用户配置
+  const { data: userConfig } = useQuery({
+    queryKey: ['user-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/config')
+      return response.data as {
+        use_new_template_system: boolean
+      }
+    },
+    enabled: Boolean(auth.accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const useNewTemplateSystem = userConfig?.use_new_template_system !== false // 默认 true
+
   // 获取已保存的节点
   const { data: nodesData } = useQuery({
     queryKey: ['nodes'],
@@ -327,14 +354,24 @@ function SubscriptionGeneratorPage() {
     enabled: Boolean(auth.accessToken),
   })
 
-  // 获取数据库模板列表
+  // 获取数据库模板列表（新模板系统）
   const { data: dbTemplates = [] } = useQuery<Template[]>({
     queryKey: ['templates'],
     queryFn: async () => {
       const response = await api.get('/api/admin/templates')
       return response.data.templates || []
     },
-    enabled: Boolean(auth.accessToken),
+    enabled: Boolean(auth.accessToken) && useNewTemplateSystem,
+  })
+
+  // 获取旧模板列表（旧模板系统）
+  const { data: oldTemplates = [] } = useQuery<string[]>({
+    queryKey: ['rule-templates'],
+    queryFn: async () => {
+      const response = await api.get('/api/admin/rule-templates')
+      return response.data.templates || []
+    },
+    enabled: Boolean(auth.accessToken) && !useNewTemplateSystem,
   })
 
   const savedNodes = nodesData?.nodes ?? []
@@ -342,13 +379,23 @@ function SubscriptionGeneratorPage() {
 
   // 合并后台模板和预设模板（后台模板放在最前面）
   const allTemplates = useMemo(() => {
-    const dbTemplateItems: ACL4SSRPreset[] = dbTemplates.map(t => ({
-      name: `db-${t.id}`,
-      url: t.rule_source,
-      label: t.name,
-    }))
-    return [...dbTemplateItems, ...ALL_CUSTOM_TEMPLATES]
-  }, [dbTemplates])
+    if (useNewTemplateSystem) {
+      // 新模板系统：数据库模板 + 预设模板
+      const dbTemplateItems: ACL4SSRPreset[] = dbTemplates.map(t => ({
+        name: `db-${t.id}`,
+        url: t.rule_source,
+        label: t.name,
+      }))
+      return [...dbTemplateItems, ...ALL_CUSTOM_TEMPLATES]
+    } else {
+      // 旧模板系统：从 rule_templates 目录读取的 YAML 文件
+      return oldTemplates.map(filename => ({
+        name: filename,
+        url: `/api/admin/rule-templates/${filename}`,
+        label: filename.replace(/\.(yaml|yml)$/, ''),
+      }))
+    }
+  }, [dbTemplates, oldTemplates, useNewTemplateSystem])
 
   // 默认选择第一个模板
   useEffect(() => {
@@ -407,6 +454,73 @@ function SubscriptionGeneratorPage() {
     },
   })
 
+  // 旧模板更新 mutation
+  const updateOldTemplateMutation = useMutation({
+    mutationFn: async ({ filename, content }: { filename: string; content: string }) => {
+      await api.put(`/api/admin/rule-templates/${filename}`, { content })
+    },
+    onSuccess: () => {
+      setOldTemplateEditDialogOpen(false)
+      setEditingOldTemplate(null)
+      setOldTemplateContent('')
+      toast.success('模板已保存')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '保存模板时出错')
+    },
+  })
+
+  // 旧模板删除 mutation
+  const deleteOldTemplateMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      await api.delete(`/api/admin/rule-templates/${filename}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
+      setIsOldTemplateDeleteDialogOpen(false)
+      setDeletingOldTemplate(null)
+      toast.success('模板已删除')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '删除模板时出错')
+    },
+  })
+
+  // 旧模板上传 mutation
+  const uploadOldTemplateMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('template', file)
+      const response = await api.post('/api/admin/rule-templates/upload', formData)
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
+      toast.success(`模板 ${data.filename} 上传成功`)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '上传模板时出错')
+    },
+  })
+
+  // 旧模板重命名 mutation
+  const renameOldTemplateMutation = useMutation({
+    mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
+      const response = await api.post('/api/admin/rule-templates/rename', { old_name: oldName, new_name: newName })
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
+      setIsOldTemplateRenameDialogOpen(false)
+      setRenamingOldTemplate(null)
+      setNewOldTemplateName('')
+      toast.success(`模板已重命名为 ${data.filename}`)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '重命名模板时出错')
+    },
+  })
+
   // 重置模板表单
   const resetTemplateForm = () => {
     setTemplateFormData({
@@ -442,6 +556,64 @@ function SubscriptionGeneratorPage() {
   const handleDeleteTemplate = (id: number) => {
     setDeletingTemplateId(id)
     setIsTemplateDeleteDialogOpen(true)
+  }
+
+  // 旧模板管理函数
+  const handleEditOldTemplate = async (filename: string) => {
+    setEditingOldTemplate(filename)
+    setIsOldTemplateLoading(true)
+    setOldTemplateEditDialogOpen(true)
+
+    try {
+      const response = await api.get(`/api/admin/rule-templates/${filename}`)
+      setOldTemplateContent(response.data.content || '')
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '获取模板内容失败')
+      setOldTemplateEditDialogOpen(false)
+    } finally {
+      setIsOldTemplateLoading(false)
+    }
+  }
+
+  const handleSaveOldTemplate = () => {
+    if (!editingOldTemplate) return
+    updateOldTemplateMutation.mutate({
+      filename: editingOldTemplate,
+      content: oldTemplateContent,
+    })
+  }
+
+  const handleDeleteOldTemplate = (filename: string) => {
+    setDeletingOldTemplate(filename)
+    setIsOldTemplateDeleteDialogOpen(true)
+  }
+
+  const handleUploadOldTemplate = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.yaml,.yml'
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        uploadOldTemplateMutation.mutate(file)
+      }
+    }
+    input.click()
+  }
+
+  const handleRenameOldTemplate = (filename: string) => {
+    setRenamingOldTemplate(filename)
+    // 去掉扩展名作为默认值
+    setNewOldTemplateName(filename.replace(/\.(yaml|yml)$/, ''))
+    setIsOldTemplateRenameDialogOpen(true)
+  }
+
+  const handleConfirmRenameOldTemplate = () => {
+    if (!renamingOldTemplate || !newOldTemplateName.trim()) return
+    renameOldTemplateMutation.mutate({
+      oldName: renamingOldTemplate,
+      newName: newOldTemplateName.trim(),
+    })
   }
 
   const handlePreviewTemplate = async (template: Template) => {
@@ -505,6 +677,13 @@ function SubscriptionGeneratorPage() {
     const selectedTemplate = allTemplates.find(t => t.url === selectedTemplateUrl)
     const templateName = selectedTemplate?.label || '模板源文件'
 
+    // 旧模板系统：直接打开编辑对话框
+    if (!useNewTemplateSystem && selectedTemplate) {
+      handleEditOldTemplate(selectedTemplate.name)
+      return
+    }
+
+    // 新模板系统：打开只读预览
     setIsSourcePreviewLoading(true)
     setIsSourcePreviewDialogOpen(true)
     setSourcePreviewTitle(templateName)
@@ -607,7 +786,7 @@ function SubscriptionGeneratorPage() {
     return allProxies.filter(name => !usedNodes.has(name))
   }, [allProxies, proxyGroups, showAllNodes])
 
-  // 使用 ACL4SSR 模板转换功能加载模板
+  // 加载模板（根据模板系统选择不同的加载方式）
   const handleLoadTemplate = async () => {
     if (selectedNodeIds.size === 0) {
       toast.error('请选择至少一个节点')
@@ -637,33 +816,55 @@ function SubscriptionGeneratorPage() {
         return
       }
 
-      // 提取节点名称列表用于后端显式填充 proxies 字段
-      const proxyNames = proxies.map(p => p.name)
+      let finalConfig: string
 
-      // 调用转换 API 获取配置（使用预设 URL 作为规则源）
-      const convertResponse = await api.post('/api/admin/templates/convert', {
-        template_url: '',  // 使用默认模板
-        rule_source: selectedTemplateUrl,
-        category: 'clash',
-        use_proxy: false,
-        enable_include_all: true,
-        proxy_names: proxyNames,  // 传递节点名称列表，后端将显式填充 proxies 字段
-      })
+      if (useNewTemplateSystem) {
+        // 新模板系统：使用 ACL4SSR 模板转换功能
+        const proxyNames = proxies.map(p => p.name)
 
-      // 解析生成的配置
-      const templateConfig = yaml.load(convertResponse.data.content) as any
+        const convertResponse = await api.post('/api/admin/templates/convert', {
+          template_url: '',  // 使用默认模板
+          rule_source: selectedTemplateUrl,
+          category: 'clash',
+          use_proxy: false,
+          enable_include_all: true,
+          proxy_names: proxyNames,
+        })
 
-      // 插入代理节点，并重新排序字段
-      templateConfig.proxies = proxies.map(proxy => reorderProxyFields(proxy))
+        // 解析生成的配置
+        const templateConfig = yaml.load(convertResponse.data.content) as any
 
-      // 确保 short-id 字段始终作为字符串
-      const processedConfig = ensureShortIdAsString(templateConfig)
+        // 插入代理节点，并重新排序字段
+        templateConfig.proxies = proxies.map(proxy => reorderProxyFields(proxy))
 
-      // 转换回 YAML
-      let finalConfig = yaml.dump(processedConfig, YAML_DUMP_OPTIONS)
+        // 确保 short-id 字段始终作为字符串
+        const processedConfig = ensureShortIdAsString(templateConfig)
 
-      // 修复 short-id 空值显示
-      finalConfig = fixShortIdInYaml(finalConfig)
+        // 转换回 YAML
+        finalConfig = yaml.dump(processedConfig, YAML_DUMP_OPTIONS)
+
+        // 修复 short-id 空值显示
+        finalConfig = fixShortIdInYaml(finalConfig)
+      } else {
+        // 旧模板系统：直接读取 YAML 文件并填充 proxies
+        const response = await api.get(selectedTemplateUrl)
+        const templateContent = response.data.content as string
+
+        // 解析模板
+        const templateConfig = yaml.load(templateContent) as any
+
+        // 插入代理节点，并重新排序字段
+        templateConfig.proxies = proxies.map(proxy => reorderProxyFields(proxy))
+
+        // 确保 short-id 字段始终作为字符串
+        const processedConfig = ensureShortIdAsString(templateConfig)
+
+        // 转换回 YAML
+        finalConfig = yaml.dump(processedConfig, YAML_DUMP_OPTIONS)
+
+        // 修复 short-id 空值显示
+        finalConfig = fixShortIdInYaml(finalConfig)
+      }
 
       // 应用自定义规则
       try {
@@ -1950,14 +2151,25 @@ function SubscriptionGeneratorPage() {
                       >
                         <FileText className='h-4 w-4' />
                       </Button>
-                      <Button
-                        variant='outline'
-                        size='icon'
-                        onClick={() => setTemplateManageDialogOpen(true)}
-                        title='模板管理'
-                      >
-                        <Settings className='h-4 w-4' />
-                      </Button>
+                      {useNewTemplateSystem ? (
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          onClick={() => setTemplateManageDialogOpen(true)}
+                          title='模板管理'
+                        >
+                          <Settings className='h-4 w-4' />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          onClick={() => setOldTemplateManageDialogOpen(true)}
+                          title='模板管理'
+                        >
+                          <Settings className='h-4 w-4' />
+                        </Button>
+                      )}
                     </div>
                     <div className='flex gap-2'>
                       <div
@@ -2474,6 +2686,163 @@ function SubscriptionGeneratorPage() {
               </pre>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 旧模板管理对话框 */}
+      <Dialog open={oldTemplateManageDialogOpen} onOpenChange={setOldTemplateManageDialogOpen}>
+        <DialogContent className='max-w-2xl'>
+          <DialogHeader>
+            <DialogTitle>模板管理</DialogTitle>
+            <DialogDescription>
+              管理 rule_templates 目录下的 YAML 模板文件
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4'>
+            <div className='flex justify-end'>
+              <Button
+                size='sm'
+                onClick={handleUploadOldTemplate}
+                disabled={uploadOldTemplateMutation.isPending}
+              >
+                <Upload className='h-4 w-4 mr-2' />
+                {uploadOldTemplateMutation.isPending ? '上传中...' : '上传模板'}
+              </Button>
+            </div>
+            <DataTable
+              columns={[
+                {
+                  header: '文件名',
+                  cell: (filename: string) => (
+                    <span className='font-medium'>{filename}</span>
+                  ),
+                },
+                {
+                  header: '操作',
+                  cell: (filename: string) => (
+                    <div className='flex items-center gap-1'>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handleRenameOldTemplate(filename)}
+                        title='重命名'
+                      >
+                        <Pencil className='h-4 w-4' />
+                      </Button>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        onClick={() => handleDeleteOldTemplate(filename)}
+                        title='删除'
+                      >
+                        <Trash2 className='h-4 w-4 text-destructive' />
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={oldTemplates}
+              getRowKey={(filename: string) => filename}
+              emptyText='暂无模板文件'
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 旧模板编辑对话框 */}
+      <Dialog open={oldTemplateEditDialogOpen} onOpenChange={setOldTemplateEditDialogOpen}>
+        <DialogContent className='sm:max-w-[80vw] max-h-[90vh]'>
+          <DialogHeader>
+            <DialogTitle>编辑模板 - {editingOldTemplate}</DialogTitle>
+            <DialogDescription>
+              编辑 YAML 模板文件内容
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='overflow-auto max-h-[60vh]'>
+            {isOldTemplateLoading ? (
+              <div className='flex items-center justify-center py-8'>
+                <span className='text-muted-foreground'>正在加载模板内容...</span>
+              </div>
+            ) : (
+              <Textarea
+                className='font-mono text-xs min-h-[400px]'
+                value={oldTemplateContent}
+                onChange={(e) => setOldTemplateContent(e.target.value)}
+                placeholder='模板内容'
+              />
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setOldTemplateEditDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleSaveOldTemplate}
+              disabled={updateOldTemplateMutation.isPending || isOldTemplateLoading}
+            >
+              {updateOldTemplateMutation.isPending ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 旧模板删除确认对话框 */}
+      <AlertDialog open={isOldTemplateDeleteDialogOpen} onOpenChange={setIsOldTemplateDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除模板文件 "{deletingOldTemplate}" 吗？此操作不可恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingOldTemplate && deleteOldTemplateMutation.mutate(deletingOldTemplate)}
+              className='bg-destructive text-white hover:bg-destructive/90'
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 旧模板重命名对话框 */}
+      <Dialog open={isOldTemplateRenameDialogOpen} onOpenChange={setIsOldTemplateRenameDialogOpen}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>重命名模板</DialogTitle>
+            <DialogDescription>
+              将 "{renamingOldTemplate}" 重命名为新文件名
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='new-template-name'>新文件名</Label>
+              <div className='flex items-center gap-2'>
+                <Input
+                  id='new-template-name'
+                  value={newOldTemplateName}
+                  onChange={(e) => setNewOldTemplateName(e.target.value)}
+                  placeholder='输入新的模板名称'
+                />
+                <span className='text-muted-foreground'>.yaml</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setIsOldTemplateRenameDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={handleConfirmRenameOldTemplate}
+              disabled={!newOldTemplateName.trim() || renameOldTemplateMutation.isPending}
+            >
+              {renameOldTemplateMutation.isPending ? '重命名中...' : '确认'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

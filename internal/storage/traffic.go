@@ -236,18 +236,19 @@ type SubscribeFile struct {
 
 // UserSettings represents user-specific configuration.
 type UserSettings struct {
-	Username            string
-	ForceSyncExternal   bool
-	MatchRule           string // "node_name", "server_port", or "type_server_port"
-	SyncScope           string // "saved_only" or "all"
-	KeepNodeName        bool   // Keep current node name when syncing
-	CacheExpireMinutes  int    // Cache expiration time in minutes
-	SyncTraffic         bool   // Sync traffic info from external subscriptions
-	EnableProbeBinding  bool   // Enable probe server binding for nodes
-	CustomRulesEnabled  bool   // Enable custom rules feature
-	EnableShortLink     bool   // Enable short link feature for subscriptions
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	Username             string
+	ForceSyncExternal    bool
+	MatchRule            string // "node_name", "server_port", or "type_server_port"
+	SyncScope            string // "saved_only" or "all"
+	KeepNodeName         bool   // Keep current node name when syncing
+	CacheExpireMinutes   int    // Cache expiration time in minutes
+	SyncTraffic          bool   // Sync traffic info from external subscriptions
+	EnableProbeBinding   bool   // Enable probe server binding for nodes
+	CustomRulesEnabled   bool   // Enable custom rules feature
+	EnableShortLink      bool   // Enable short link feature for subscriptions
+	UseNewTemplateSystem bool   // Use new template system (database-based), default true
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ExternalSubscription represents an external subscription URL imported by user.
@@ -712,6 +713,11 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 
 	// Add enable_short_link to user_settings table
 	if err := r.ensureUserSettingsColumn("enable_short_link", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add use_new_template_system to user_settings table (default true)
+	if err := r.ensureUserSettingsColumn("use_new_template_system", "INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
 
@@ -2849,9 +2855,9 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
-	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt int
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &settings.CreatedAt, &settings.UpdatedAt)
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt int
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -2865,6 +2871,7 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	settings.EnableProbeBinding = enableProbeBindingInt == 1
 	settings.CustomRulesEnabled = customRulesEnabledInt == 1
 	settings.EnableShortLink = enableShortLinkInt == 1
+	settings.UseNewTemplateSystem = useNewTemplateSystemInt == 1
 
 	return settings, nil
 }
@@ -2910,6 +2917,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		enableShortLinkInt = 1
 	}
 
+	useNewTemplateSystemInt := 1 // default to true
+	if !settings.UseNewTemplateSystem {
+		useNewTemplateSystemInt = 0
+	}
+
 	matchRule := strings.TrimSpace(settings.MatchRule)
 	if matchRule == "" {
 		matchRule = "node_name"
@@ -2926,8 +2938,8 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
@@ -2938,10 +2950,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			enable_probe_binding = excluded.enable_probe_binding,
 			custom_rules_enabled = excluded.custom_rules_enabled,
 			enable_short_link = excluded.enable_short_link,
+			use_new_template_system = excluded.use_new_template_system,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 

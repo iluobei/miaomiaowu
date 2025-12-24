@@ -39,6 +39,7 @@ function SystemSettingsPage() {
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
   const [enableShortLink, setEnableShortLink] = useState(false)
+  const [useNewTemplateSystem, setUseNewTemplateSystem] = useState(true)
 
   const { data: userConfig, isLoading: loadingConfig } = useQuery({
     queryKey: ['user-config'],
@@ -53,6 +54,7 @@ function SystemSettingsPage() {
         sync_traffic: boolean
         enable_probe_binding: boolean
         enable_short_link: boolean
+        use_new_template_system: boolean
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -69,6 +71,7 @@ function SystemSettingsPage() {
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
       setEnableShortLink(userConfig.enable_short_link || false)
+      setUseNewTemplateSystem(userConfig.use_new_template_system !== false) // 默认为 true
     }
   }, [userConfig])
 
@@ -82,6 +85,7 @@ function SystemSettingsPage() {
       sync_traffic: boolean
       enable_probe_binding: boolean
       enable_short_link: boolean
+      use_new_template_system: boolean
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -99,6 +103,7 @@ function SystemSettingsPage() {
       setSyncTraffic(variables.sync_traffic)
       setEnableProbeBinding(variables.enable_probe_binding)
       setEnableShortLink(variables.enable_short_link)
+      setUseNewTemplateSystem(variables.use_new_template_system)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -146,6 +151,7 @@ function SystemSettingsPage() {
                       sync_traffic: checked,
                       enable_probe_binding: enableProbeBinding,
                       enable_short_link: enableShortLink,
+                      use_new_template_system: useNewTemplateSystem,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -173,6 +179,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
                       enable_short_link: enableShortLink,
+                      use_new_template_system: useNewTemplateSystem,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -197,6 +204,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             enable_short_link: enableShortLink,
+                            use_new_template_system: useNewTemplateSystem,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -244,6 +252,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             enable_short_link: enableShortLink,
+                            use_new_template_system: useNewTemplateSystem,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -291,6 +300,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             enable_short_link: enableShortLink,
+                            use_new_template_system: useNewTemplateSystem,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -318,6 +328,7 @@ function SystemSettingsPage() {
                             sync_traffic: syncTraffic,
                             enable_probe_binding: enableProbeBinding,
                             enable_short_link: enableShortLink,
+                            use_new_template_system: useNewTemplateSystem,
                           })
                         }}
                         disabled={loadingConfig || updateConfigMutation.isPending}
@@ -363,6 +374,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: checked,
                       enable_short_link: enableShortLink,
+                      use_new_template_system: useNewTemplateSystem,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -413,6 +425,7 @@ function SystemSettingsPage() {
                       sync_traffic: syncTraffic,
                       enable_probe_binding: enableProbeBinding,
                       enable_short_link: checked,
+                      use_new_template_system: useNewTemplateSystem,
                     })
                   }}
                   disabled={loadingConfig || updateConfigMutation.isPending}
@@ -426,6 +439,53 @@ function SystemSettingsPage() {
                     • 可在个人设置页面重置短链接
                     <br />
                     • 重置Token时会同时重置短链接
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 模板系统设置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>模板系统设置</CardTitle>
+              <CardDescription>配置订阅生成使用的模板系统</CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div className='flex items-center justify-between space-x-2 pt-2'>
+                <div className='flex-1 space-y-1'>
+                  <Label htmlFor='use-new-template-system' className='cursor-pointer'>
+                    使用新模板系统
+                  </Label>
+                  <p className='text-sm text-muted-foreground'>
+                    开启后使用数据库模板，关闭后使用 rule_templates 目录下的模板文件
+                  </p>
+                </div>
+                <Switch
+                  id='use-new-template-system'
+                  checked={useNewTemplateSystem}
+                  onCheckedChange={(checked) => {
+                    updateConfigMutation.mutate({
+                      force_sync_external: forceSyncExternal,
+                      match_rule: matchRule,
+                      sync_scope: syncScope,
+                      keep_node_name: keepNodeName,
+                      cache_expire_minutes: cacheExpireMinutes,
+                      sync_traffic: syncTraffic,
+                      enable_probe_binding: enableProbeBinding,
+                      enable_short_link: enableShortLink,
+                      use_new_template_system: checked,
+                    })
+                  }}
+                  disabled={loadingConfig || updateConfigMutation.isPending}
+                />
+              </div>
+              {!useNewTemplateSystem && (
+                <div className='rounded-lg border bg-muted/40 p-4'>
+                  <p className='text-sm text-muted-foreground'>
+                    • 旧模板系统从 rule_templates 目录读取 YAML 模板文件
+                    <br />
+                    • 新模板系统使用数据库存储的模板，支持在网页端管理
                   </p>
                 </div>
               )}
