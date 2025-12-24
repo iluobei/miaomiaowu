@@ -789,11 +789,23 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         break
 
       case 'tuic':
-        node.uuid = password
-        node.password = queryParams.password || ''
+        // TUIC 格式: tuic://uuid:password@server:port?params#name
+        // 注意: `:` 可能被 URL 编码为 `%3A`
+        {
+          const decodedAuth = safeDecodeURIComponent(password)
+          const colonIndex = decodedAuth.indexOf(':')
+          if (colonIndex !== -1) {
+            node.uuid = decodedAuth.substring(0, colonIndex)
+            node.password = decodedAuth.substring(colonIndex + 1)
+          } else {
+            // 兼容旧格式：只有 uuid，password 在查询参数中
+            node.uuid = decodedAuth
+            node.password = queryParams.password || ''
+          }
+        }
         node.sni = queryParams.sni || server
         node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : ['h3']
-        node.skipCertVerify = queryParams.allowInsecure === '1'
+        node.skipCertVerify = queryParams.allowInsecure === '1' || queryParams.allow_insecure === '1'
         node['congestion-controller'] = queryParams.congestion_control || 'bbr'
         node['udp-relay-mode'] = queryParams.udp_relay_mode || 'native'
 

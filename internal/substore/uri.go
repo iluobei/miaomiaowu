@@ -456,6 +456,7 @@ func (p *URIProducer) encodeHysteria(proxy Proxy) (string, error) {
 }
 
 // encodeTUIC encodes TUIC proxy to tuic:// URI
+// 标准格式: tuic://uuid:password@server:port?params#name
 func (p *URIProducer) encodeTUIC(proxy Proxy) (string, error) {
 	server := GetString(proxy, "server")
 	port := GetInt(proxy, "port")
@@ -490,13 +491,14 @@ func (p *URIProducer) encodeTUIC(proxy Proxy) (string, error) {
 		params.Set("udp_relay_mode", udpMode)
 	}
 
-	// Password
+	// 构建 auth 部分: uuid:password (如果有password)
+	auth := uuid
 	if password != "" {
-		params.Set("password", password)
+		auth = uuid + ":" + password
 	}
 
 	uri := fmt.Sprintf("tuic://%s@%s:%d?%s#%s",
-		uuid, server, port, params.Encode(), url.PathEscape(name))
+		url.PathEscape(auth), server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
 }
 
