@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -828,22 +829,38 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	// 添加User-Agent头
 	httpReq.Header.Set("User-Agent", userAgent)
 
+	log.Printf("[订阅获取] 开始请求外部订阅: URL=%s, User-Agent=%s", req.URL, userAgent)
+
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		log.Printf("[订阅获取] 请求失败: URL=%s, 错误=%v", req.URL, err)
 		writeError(w, http.StatusBadRequest, errors.New("无法获取订阅内容: "+err.Error()))
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		writeError(w, http.StatusBadRequest, errors.New("订阅服务器返回错误状态"))
+	log.Printf("[订阅获取] 收到响应: URL=%s, 状态码=%d, 状态=%s, Content-Type=%s, Content-Length=%d",
+		req.URL, resp.StatusCode, resp.Status, resp.Header.Get("Content-Type"), resp.ContentLength)
+
+	// 读取响应内容（无论成功还是失败都需要读取以便记录日志）
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[订阅获取] 读取响应体失败: URL=%s, 错误=%v", req.URL, err)
+		writeError(w, http.StatusInternalServerError, errors.New("读取订阅内容失败"))
 		return
 	}
 
-	// 读取响应内容
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("读取订阅内容失败"))
+	log.Printf("[订阅获取] 响应体大小: URL=%s, 大小=%d 字节", req.URL, len(body))
+
+	if resp.StatusCode != http.StatusOK {
+		// 记录详细的错误响应内容
+		bodyPreview := string(body)
+		if len(bodyPreview) > 500 {
+			bodyPreview = bodyPreview[:500] + "...(截断)"
+		}
+		log.Printf("[订阅获取] 服务器返回错误状态: URL=%s, 状态码=%d, 状态=%s, 响应头=%v, 响应内容=%s",
+			req.URL, resp.StatusCode, resp.Status, resp.Header, bodyPreview)
+		writeError(w, http.StatusBadRequest, fmt.Errorf("订阅服务器返回错误状态: %d %s", resp.StatusCode, resp.Status))
 		return
 	}
 
@@ -853,14 +870,28 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := yaml.Unmarshal(body, &clashConfig); err != nil {
+		// 记录解析失败时的内容预览
+		bodyPreview := string(body)
+		if len(bodyPreview) > 500 {
+			bodyPreview = bodyPreview[:500] + "...(截断)"
+		}
+		log.Printf("[订阅获取] YAML解析失败: URL=%s, 错误=%v, 内容预览=%s", req.URL, err, bodyPreview)
 		writeError(w, http.StatusBadRequest, errors.New("解析订阅内容失败: "+err.Error()))
 		return
 	}
 
 	if len(clashConfig.Proxies) == 0 {
+		// 记录没有找到节点时的内容预览
+		bodyPreview := string(body)
+		if len(bodyPreview) > 500 {
+			bodyPreview = bodyPreview[:500] + "...(截断)"
+		}
+		log.Printf("[订阅获取] 订阅中没有找到代理节点: URL=%s, 内容预览=%s", req.URL, bodyPreview)
 		writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
 		return
 	}
+
+	log.Printf("[订阅获取] 成功解析订阅: URL=%s, 节点数量=%d", req.URL, len(clashConfig.Proxies))
 
 	// Convert nil values to empty strings in all proxies (e.g., for short-id field)
 	for _, proxy := range clashConfig.Proxies {
