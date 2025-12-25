@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -2677,14 +2678,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 </div>
 
                 {/* 桌面端表格视图 (>=1024px) */}
-                <div className='hidden lg:block rounded-md border overflow-auto'>
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onDragCancel={handleDragCancel}
-                  >
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  <div className='hidden lg:block rounded-md border overflow-auto'>
                     <SortableContext
                       items={filteredNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
@@ -3153,14 +3154,17 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         </TableBody>
                       </Table>
                     </SortableContext>
+                  </div>
 
+                  {createPortal(
                     <DragOverlay dropAnimation={null}>
                       {activeId && (
                         <DragOverlayContent nodes={dragOverlayNodes} protocolColors={PROTOCOL_COLORS} />
                       )}
-                    </DragOverlay>
-                  </DndContext>
-                </div>
+                    </DragOverlay>,
+                    document.body
+                  )}
+                </DndContext>
               </CardContent>
             </Card>
           )}
