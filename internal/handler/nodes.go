@@ -961,9 +961,23 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		decodeProxyURLFields(proxy)
 	}
 
+	// 从 Content-Disposition 头中提取订阅名称作为建议的标签
+	suggestedTag := ""
+	contentDisposition := resp.Header.Get("Content-Disposition")
+	if contentDisposition != "" {
+		suggestedTag = parseFilenameFromContentDisposition(contentDisposition)
+		// 移除文件扩展名
+		if suggestedTag != "" {
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".yaml")
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".yml")
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".txt")
+		}
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
-		"proxies": clashConfig.Proxies,
-		"count":   len(clashConfig.Proxies),
+		"proxies":       clashConfig.Proxies,
+		"count":         len(clashConfig.Proxies),
+		"suggested_tag": suggestedTag,
 	})
 }
 

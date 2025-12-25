@@ -1289,9 +1289,21 @@ function NodesPage() {
         url,
         user_agent: userAgent
       })
-      return response.data as { proxies: ClashProxy[]; count: number }
+      return response.data as { proxies: ClashProxy[]; count: number; suggested_tag?: string }
     },
     onSuccess: async (data, variables) => {
+      // 优先使用后端返回的 suggested_tag（从 Content-Disposition 提取）
+      // 其次使用 URL hostname
+      let defaultTag = data.suggested_tag || ''
+      if (!defaultTag) {
+        try {
+          const urlObj = new URL(variables.url)
+          defaultTag = urlObj.hostname || '外部订阅'
+        } catch {
+          defaultTag = '外部订阅'
+        }
+      }
+
       // 将Clash节点转换为TempNode格式
       const parsed: TempNode[] = data.proxies.map((clashNode) => {
         // Clash节点已经是标准格式，直接作为ProxyNode和ClashProxy使用
@@ -1305,15 +1317,6 @@ function NodesPage() {
         const name = proxyNode.name || '未知'
         const parsedProxy = cloneProxyWithName(proxyNode, name)
         const clashProxy = cloneProxyWithName(clashNode, name)
-
-        // 提取服务器名称用于标签
-        let defaultTag = '外部订阅'
-        try {
-          const urlObj = new URL(variables.url)
-          defaultTag = urlObj.hostname || '外部订阅'
-        } catch {
-          // URL解析失败时使用默认标签
-        }
 
         return {
           id: Math.random().toString(36).substring(7),
@@ -1329,16 +1332,9 @@ function NodesPage() {
       setTempNodes(parsed)
       setCurrentTag('subscription') // 订阅导入
 
-      // 如果用户没有设置标签，自动使用服务器地址作为标签
+      // 如果用户没有设置标签，自动使用 suggested_tag 或服务器地址作为标签
       if (!subscriptionTag.trim()) {
-        let serverName = '外部订阅'
-        try {
-          const urlObj = new URL(variables.url)
-          serverName = urlObj.hostname || '外部订阅'
-        } catch {
-          // URL解析失败时使用默认标签
-        }
-        setSubscriptionTag(serverName)
+        setSubscriptionTag(defaultTag)
       }
 
       toast.success(`成功导入 ${data.count} 个节点`)
