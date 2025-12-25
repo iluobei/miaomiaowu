@@ -314,6 +314,7 @@ type ProxyProviderConfig struct {
 	Filter                   string // 正则: 保留匹配的节点
 	ExcludeFilter            string // 正则: 排除匹配的节点
 	ExcludeType              string // 排除的协议类型，逗号分隔
+	GeoIPFilter              string // 地理位置过滤，国家代码如 "HK" 或 "HK,TW"（仅 MMW 模式生效）
 	Override                 string // JSON: 覆写配置
 	ProcessMode              string // 'client'=客户端处理, 'mmw'=妙妙屋处理
 	CreatedAt                time.Time
@@ -869,6 +870,7 @@ CREATE TABLE IF NOT EXISTS proxy_provider_configs (
     filter TEXT,
     exclude_filter TEXT,
     exclude_type TEXT,
+    geo_ip_filter TEXT,
     override TEXT,
     process_mode TEXT DEFAULT 'client',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -880,6 +882,11 @@ CREATE INDEX IF NOT EXISTS idx_proxy_provider_configs_external_subscription_id O
 `
 	if _, err := r.db.Exec(proxyProviderConfigsSchema); err != nil {
 		return fmt.Errorf("migrate proxy_provider_configs: %w", err)
+	}
+
+	// 添加 geo_ip_filter 列（为旧数据库迁移）
+	if err := r.ensureProxyProviderConfigColumn("geo_ip_filter", "TEXT"); err != nil {
+		return fmt.Errorf("ensure geo_ip_filter column: %w", err)
 	}
 
 	return nil
@@ -1616,6 +1623,38 @@ func (r *TrafficRepository) ensureExternalSubscriptionColumn(name, definition st
 	}
 
 	alter := fmt.Sprintf("ALTER TABLE external_subscriptions ADD COLUMN %s %s", name, definition)
+	if _, err := r.db.Exec(alter); err != nil {
+		return fmt.Errorf("add column %s: %w", name, err)
+	}
+
+	return nil
+}
+
+func (r *TrafficRepository) ensureProxyProviderConfigColumn(name, definition string) error {
+	rows, err := r.db.Query(`PRAGMA table_info(proxy_provider_configs)`)
+	if err != nil {
+		return fmt.Errorf("proxy_provider_configs table info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			colName    string
+			colType    string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &defaultVal, &pk); err != nil {
+			return fmt.Errorf("scan table info: %w", err)
+		}
+		if strings.EqualFold(colName, name) {
+			return nil
+		}
+	}
+
+	alter := fmt.Sprintf("ALTER TABLE proxy_provider_configs ADD COLUMN %s %s", name, definition)
 	if _, err := r.db.Exec(alter); err != nil {
 		return fmt.Errorf("add column %s: %w", name, err)
 	}
@@ -3739,14 +3778,14 @@ func (r *TrafficRepository) CreateProxyProviderConfig(ctx context.Context, confi
 			username, external_subscription_id, name, type, interval, proxy, size_limit, header,
 			health_check_enabled, health_check_url, health_check_interval, health_check_timeout,
 			health_check_lazy, health_check_expected_status,
-			filter, exclude_filter, exclude_type, override, process_mode
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			filter, exclude_filter, exclude_type, geo_ip_filter, override, process_mode
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		config.Username, config.ExternalSubscriptionID, config.Name, config.Type,
 		config.Interval, config.Proxy, config.SizeLimit, config.Header,
 		healthCheckEnabled, config.HealthCheckURL, config.HealthCheckInterval, config.HealthCheckTimeout,
 		healthCheckLazy, config.HealthCheckExpectedStatus,
-		config.Filter, config.ExcludeFilter, config.ExcludeType, config.Override, config.ProcessMode,
+		config.Filter, config.ExcludeFilter, config.ExcludeType, config.GeoIPFilter, config.Override, config.ProcessMode,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("create proxy provider config: %w", err)
@@ -3766,7 +3805,7 @@ func (r *TrafficRepository) GetProxyProviderConfig(ctx context.Context, id int64
 			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
 			health_check_timeout, health_check_lazy, health_check_expected_status,
 			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
-			COALESCE(override, ''), process_mode, created_at, updated_at
+			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
 		FROM proxy_provider_configs WHERE id = ?
 	`, id)
 
@@ -3778,7 +3817,7 @@ func (r *TrafficRepository) GetProxyProviderConfig(ctx context.Context, id int64
 		&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
 		&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
 		&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
-		&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+		&config.GeoIPFilter, &config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -3804,7 +3843,7 @@ func (r *TrafficRepository) ListProxyProviderConfigs(ctx context.Context, userna
 			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
 			health_check_timeout, health_check_lazy, health_check_expected_status,
 			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
-			COALESCE(override, ''), process_mode, created_at, updated_at
+			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
 		FROM proxy_provider_configs WHERE username = ? ORDER BY id ASC
 	`, username)
 	if err != nil {
@@ -3822,7 +3861,7 @@ func (r *TrafficRepository) ListProxyProviderConfigs(ctx context.Context, userna
 			&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
 			&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
 			&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
-			&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+			&config.GeoIPFilter, &config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan proxy provider config: %w", err)
@@ -3850,7 +3889,7 @@ func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.C
 			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
 			health_check_timeout, health_check_lazy, health_check_expected_status,
 			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
-			COALESCE(override, ''), process_mode, created_at, updated_at
+			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
 		FROM proxy_provider_configs WHERE external_subscription_id = ? ORDER BY id ASC
 	`, externalSubscriptionID)
 	if err != nil {
@@ -3868,7 +3907,7 @@ func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.C
 			&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
 			&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
 			&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
-			&config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+			&config.GeoIPFilter, &config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan proxy provider config: %w", err)
@@ -3905,14 +3944,14 @@ func (r *TrafficRepository) UpdateProxyProviderConfig(ctx context.Context, confi
 			name = ?, type = ?, interval = ?, proxy = ?, size_limit = ?, header = ?,
 			health_check_enabled = ?, health_check_url = ?, health_check_interval = ?,
 			health_check_timeout = ?, health_check_lazy = ?, health_check_expected_status = ?,
-			filter = ?, exclude_filter = ?, exclude_type = ?, override = ?, process_mode = ?,
+			filter = ?, exclude_filter = ?, exclude_type = ?, geo_ip_filter = ?, override = ?, process_mode = ?,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND username = ?
 	`,
 		config.Name, config.Type, config.Interval, config.Proxy, config.SizeLimit, config.Header,
 		healthCheckEnabled, config.HealthCheckURL, config.HealthCheckInterval,
 		config.HealthCheckTimeout, healthCheckLazy, config.HealthCheckExpectedStatus,
-		config.Filter, config.ExcludeFilter, config.ExcludeType, config.Override, config.ProcessMode,
+		config.Filter, config.ExcludeFilter, config.ExcludeType, config.GeoIPFilter, config.Override, config.ProcessMode,
 		config.ID, config.Username,
 	)
 	if err != nil {

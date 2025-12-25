@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"miaomiaowu/internal/storage"
@@ -18,6 +20,74 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// GeoIP 缓存和 API 配置
+const ipInfoToken = "cddae164b36656"
+
+type geoIPResponse struct {
+	IP          string `json:"ip"`
+	CountryCode string `json:"country_code"`
+}
+
+var geoIPCache = sync.Map{} // map[string]string (ip -> countryCode)
+
+// 订阅内容缓存（5分钟过期）
+const subscriptionCacheTTL = 5 * time.Minute
+
+type subscriptionCacheEntry struct {
+	content   []byte
+	fetchedAt time.Time
+}
+
+var subscriptionCache = sync.Map{} // map[string]*subscriptionCacheEntry (url -> entry)
+
+// getGeoIPCountryCode 查询 IP 的国家代码
+func getGeoIPCountryCode(ipOrHost string) string {
+	if ipOrHost == "" {
+		return ""
+	}
+
+	// 如果是域名，先解析为 IP
+	ip := ipOrHost
+	if net.ParseIP(ipOrHost) == nil {
+		// 是域名，需要解析
+		ips, err := net.LookupIP(ipOrHost)
+		if err != nil || len(ips) == 0 {
+			log.Printf("[GeoIP] Failed to resolve domain %s: %v", ipOrHost, err)
+			return ""
+		}
+		ip = ips[0].String()
+	}
+
+	// 检查缓存
+	if cached, ok := geoIPCache.Load(ip); ok {
+		return cached.(string)
+	}
+
+	// 查询 API
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("https://api.ipinfo.io/lite/%s?token=%s", ip, ipInfoToken))
+	if err != nil {
+		log.Printf("[GeoIP] Failed to query IP %s: %v", ip, err)
+		// 缓存空结果避免重复查询
+		geoIPCache.Store(ip, "")
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var result geoIPResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("[GeoIP] Failed to decode response for IP %s: %v", ip, err)
+		geoIPCache.Store(ip, "")
+		return ""
+	}
+
+	// 缓存结果
+	countryCode := strings.ToUpper(result.CountryCode)
+	geoIPCache.Store(ip, countryCode)
+	log.Printf("[GeoIP] IP %s -> Country: %s", ip, countryCode)
+	return countryCode
+}
 
 // NewProxyProviderServeHandler handles serving filtered proxies for "妙妙屋处理" mode
 // URL: /api/proxy-provider/{config_id}?token={user_token}
@@ -105,10 +175,24 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 	})
 }
 
-// fetchAndFilterProxiesYAML fetches proxies from external subscription and applies filters
-// Returns YAML bytes preserving original field order with 2-space indentation
-func fetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) ([]byte, error) {
-	// Fetch subscription content
+// fetchSubscriptionContent fetches subscription content with caching (5 min TTL)
+func fetchSubscriptionContent(sub *storage.ExternalSubscription) ([]byte, error) {
+	cacheKey := sub.URL
+
+	// 检查缓存
+	if cached, ok := subscriptionCache.Load(cacheKey); ok {
+		entry := cached.(*subscriptionCacheEntry)
+		if time.Since(entry.fetchedAt) < subscriptionCacheTTL {
+			log.Printf("[SubscriptionCache] Hit for URL: %s", sub.URL)
+			return entry.content, nil
+		}
+		// 缓存过期，删除
+		subscriptionCache.Delete(cacheKey)
+	}
+
+	log.Printf("[SubscriptionCache] Miss for URL: %s, fetching...", sub.URL)
+
+	// 拉取订阅内容
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, sub.URL, nil)
 	if err != nil {
@@ -134,6 +218,24 @@ func fetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storag
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	// 存入缓存
+	subscriptionCache.Store(cacheKey, &subscriptionCacheEntry{
+		content:   body,
+		fetchedAt: time.Now(),
+	})
+
+	return body, nil
+}
+
+// fetchAndFilterProxiesYAML fetches proxies from external subscription and applies filters
+// Returns YAML bytes preserving original field order with 2-space indentation
+func fetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) ([]byte, error) {
+	// Fetch subscription content (with caching)
+	body, err := fetchSubscriptionContent(sub)
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse YAML content using yaml.Node to preserve order
@@ -182,7 +284,9 @@ func fetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storag
 	}
 	encoder.Close()
 
-	return buf.Bytes(), nil
+	// Fix emoji escapes and quoted numbers
+	result := RemoveUnicodeEscapeQuotes(buf.String())
+	return []byte(result), nil
 }
 
 // findProxiesNode finds the proxies node in YAML document
@@ -223,7 +327,7 @@ func reorderProxiesNode(proxiesNode *yaml.Node) {
 	}
 }
 
-// applyFiltersToNode applies filter, exclude-filter, and exclude-type to proxies node
+// applyFiltersToNode applies filter, exclude-filter, exclude-type and geo-ip-filter to proxies node
 func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderConfig) *yaml.Node {
 	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
 		return proxiesNode
@@ -263,22 +367,26 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 		}
 	}
 
+	// Build GeoIP filter country codes map
+	geoIPCountryCodes := make(map[string]bool)
+	if config.GeoIPFilter != "" {
+		for _, code := range strings.Split(config.GeoIPFilter, ",") {
+			geoIPCountryCodes[strings.TrimSpace(strings.ToUpper(code))] = true
+		}
+	}
+
 	// Filter proxies
 	for _, proxyNode := range proxiesNode.Content {
 		if proxyNode.Kind != yaml.MappingNode {
 			continue
 		}
 
-		// Extract name and type from proxy node
+		// Extract name, type and server from proxy node
 		name := util.GetNodeFieldValue(proxyNode, "name")
 		proxyType := util.GetNodeFieldValue(proxyNode, "type")
+		server := util.GetNodeFieldValue(proxyNode, "server")
 
-		// Apply filter (keep matching)
-		if filterRegex != nil && !filterRegex.MatchString(name) {
-			continue
-		}
-
-		// Apply exclude-filter (remove matching)
+		// Apply exclude-filter first (remove matching names)
 		if excludeRegex != nil && excludeRegex.MatchString(name) {
 			continue
 		}
@@ -288,6 +396,41 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 			continue
 		}
 
+		// Apply filter and GeoIP matching
+		// If filter is set, use it as primary matching method
+		// If GeoIP filter is also set, nodes not matching the regex can still be included if IP matches
+		if filterRegex != nil {
+			if filterRegex.MatchString(name) {
+				// Node name matches filter regex, include it
+				result.Content = append(result.Content, proxyNode)
+				continue
+			}
+
+			// Node name doesn't match, check GeoIP if available
+			if len(geoIPCountryCodes) > 0 && server != "" {
+				countryCode := getGeoIPCountryCode(server)
+				if countryCode != "" && geoIPCountryCodes[countryCode] {
+					// IP location matches, include the node
+					result.Content = append(result.Content, proxyNode)
+					continue
+				}
+			}
+			// Neither regex nor GeoIP matched, skip this node
+			continue
+		}
+
+		// No filter regex, only GeoIP filter
+		if len(geoIPCountryCodes) > 0 {
+			if server != "" {
+				countryCode := getGeoIPCountryCode(server)
+				if countryCode != "" && geoIPCountryCodes[countryCode] {
+					result.Content = append(result.Content, proxyNode)
+				}
+			}
+			continue
+		}
+
+		// No filter at all, include the node
 		result.Content = append(result.Content, proxyNode)
 	}
 

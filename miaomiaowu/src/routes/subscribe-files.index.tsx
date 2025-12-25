@@ -27,7 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Copy } from 'lucide-react'
-import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -109,6 +109,40 @@ type ProxyProviderConfig = {
 const PROXY_TYPES = [
   'vmess', 'vless', 'trojan', 'ss', 'ssr', 'socks5', 'http',
   'hysteria', 'hysteria2', 'tuic', 'wireguard', 'anytls'
+]
+
+// 地域分裂配置（用于 Pro 批量创建）
+// countryCode 用于 GeoIP 匹配（仅 MMW 模式生效）
+const REGION_CONFIGS = [
+  { name: '香港节点', emoji: '🇭🇰', filter: '港|HK|hk|Hong Kong|HongKong|hongkong', countryCode: 'HK' },
+  { name: '美国节点', emoji: '🇺🇸', filter: '美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates', countryCode: 'US' },
+  { name: '日本节点', emoji: '🇯🇵', filter: '日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan', countryCode: 'JP' },
+  { name: '新加坡节点', emoji: '🇸🇬', filter: '新加坡|坡|狮城|SG|Singapore', countryCode: 'SG' },
+  { name: '台湾节点', emoji: '🇹🇼', filter: '台|新北|彰化|TW|Taiwan', countryCode: 'TW' },
+  { name: '韩国节点', emoji: '🇰🇷', filter: '韩|KR|Korea|KOR|首尔', countryCode: 'KR' },
+  { name: '加拿大节点', emoji: '🇨🇦', filter: '加拿大|CA|Canada', countryCode: 'CA' },
+  { name: '英国节点', emoji: '🇬🇧', filter: '英|UK|伦敦|英格兰|GB|United Kingdom', countryCode: 'GB' },
+  { name: '法国节点', emoji: '🇫🇷', filter: '法|FR|France|巴黎', countryCode: 'FR' },
+  { name: '德国节点', emoji: '🇩🇪', filter: '德|DE|Germany|法兰克福', countryCode: 'DE' },
+  { name: '荷兰节点', emoji: '🇳🇱', filter: '荷|NL|Netherlands|阿姆斯特丹', countryCode: 'NL' },
+  { name: '土耳其节点', emoji: '🇹🇷', filter: '土耳其|TR|Turkey|伊斯坦布尔', countryCode: 'TR' },
+  { name: '其他地区', emoji: '🌍', filter: '', excludeFilter: '港|HK|hk|Hong Kong|HongKong|hongkong|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan|新加坡|坡|狮城|SG|Singapore|台|新北|彰化|TW|Taiwan|韩|KR|Korea|KOR|首尔|加拿大|CA|Canada|英|UK|伦敦|英格兰|GB|United Kingdom|法|FR|France|巴黎|德|DE|Germany|法兰克福|荷|NL|Netherlands|阿姆斯特丹|土耳其|TR|Turkey|伊斯坦布尔', countryCode: '' },
+]
+
+// 协议分裂配置（用于 Pro 批量创建）
+const PROTOCOL_CONFIGS = [
+  { name: 'anytls', excludeType: 'wireguard|vmess|vless|trojan|ss|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'wireguard', excludeType: 'anytls|vmess|vless|trojan|ss|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'vmess', excludeType: 'anytls|wireguard|vless|trojan|ss|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'vless', excludeType: 'anytls|wireguard|vmess|trojan|ss|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'trojan', excludeType: 'anytls|wireguard|vmess|vless|ss|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'ss', excludeType: 'anytls|wireguard|vmess|vless|trojan|socks5|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'socks5', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|http|ssr|hysteria|tuic|hysteria2' },
+  { name: 'http', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|socks5|ssr|hysteria|tuic|hysteria2' },
+  { name: 'ssr', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|socks5|http|hysteria|tuic|hysteria2' },
+  { name: 'hysteria', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|socks5|http|ssr|tuic|hysteria2' },
+  { name: 'tuic', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|socks5|http|ssr|hysteria|hysteria2' },
+  { name: 'hysteria2', excludeType: 'anytls|wireguard|vmess|vless|trojan|ss|socks5|http|ssr|hysteria|tuic' },
 ]
 
 // IP 版本选项
@@ -306,6 +340,25 @@ function SubscribeFilesPage() {
   })
   const [editingProxyProvider, setEditingProxyProvider] = useState<ProxyProviderConfig | null>(null)
   const [isProxyProvidersExpanded, setIsProxyProvidersExpanded] = useState(false)
+
+  // 代理集合Pro对话框状态
+  const [proxyProviderProDialogOpen, setProxyProviderProDialogOpen] = useState(false)
+  const [proSelectedExternalSub, setProSelectedExternalSub] = useState<ExternalSubscription | null>(null)
+  const [proNamePrefix, setProNamePrefix] = useState('')
+  const [proCreatingRegion, setProCreatingRegion] = useState(false)
+  const [proCreatingProtocol, setProCreatingProtocol] = useState(false)
+  const [proCreationResults, setProCreationResults] = useState<Array<{name: string, success: boolean, error?: string}>>([])
+
+  // 代理集合批量操作状态
+  const [selectedProxyProviderIds, setSelectedProxyProviderIds] = useState<Set<number>>(new Set())
+  const [proxyProviderFilterSubId, setProxyProviderFilterSubId] = useState<number | 'all'>('all')
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
+
+  // 代理集合预览状态（MMW 模式）
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
+  const [previewContent, setPreviewContent] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewConfigName, setPreviewConfigName] = useState('')
 
   // 获取订阅文件列表
   const { data: filesData, isLoading } = useQuery({
@@ -631,6 +684,217 @@ function SubscribeFilesPage() {
       toast.error(error.response?.data?.error || '删除失败')
     },
   })
+
+  // 批量删除代理集合配置
+  const batchDeleteProxyProviderMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      // 并行删除所有选中的配置
+      const results = await Promise.allSettled(
+        ids.map(id => api.delete(`/api/user/proxy-provider-configs?id=${id}`))
+      )
+      const failed = results.filter(r => r.status === 'rejected').length
+      if (failed > 0) {
+        throw new Error(`${failed} 个配置删除失败`)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      setSelectedProxyProviderIds(new Set())
+      setBatchDeleteDialogOpen(false)
+      toast.success('批量删除成功')
+    },
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      setSelectedProxyProviderIds(new Set())
+      setBatchDeleteDialogOpen(false)
+      toast.error(error.message || '批量删除失败')
+    },
+  })
+
+  // 过滤后的代理集合配置列表
+  const filteredProxyProviderConfigs = useMemo(() => {
+    if (proxyProviderFilterSubId === 'all') {
+      return proxyProviderConfigs
+    }
+    return proxyProviderConfigs.filter(c => c.external_subscription_id === proxyProviderFilterSubId)
+  }, [proxyProviderConfigs, proxyProviderFilterSubId])
+
+  // 处理全选/取消全选
+  const handleSelectAllProxyProviders = (checked: boolean) => {
+    if (checked) {
+      setSelectedProxyProviderIds(new Set(filteredProxyProviderConfigs.map(c => c.id)))
+    } else {
+      setSelectedProxyProviderIds(new Set())
+    }
+  }
+
+  // 处理单个选中/取消选中
+  const handleSelectProxyProvider = (id: number, checked: boolean) => {
+    setSelectedProxyProviderIds(prev => {
+      const newSet = new Set(prev)
+      if (checked) {
+        newSet.add(id)
+      } else {
+        newSet.delete(id)
+      }
+      return newSet
+    })
+  }
+
+  // 快速切换代理集合处理模式
+  const toggleProcessModeMutation = useMutation({
+    mutationFn: async (config: ProxyProviderConfig) => {
+      const newMode = config.process_mode === 'mmw' ? 'client' : 'mmw'
+      await api.put(`/api/user/proxy-provider-configs?id=${config.id}`, {
+        ...config,
+        process_mode: newMode,
+      })
+      return newMode
+    },
+    onSuccess: (newMode) => {
+      queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+      toast.success(`已切换为${newMode === 'mmw' ? '妙妙屋处理' : '客户端处理'}`)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '切换失败')
+    },
+  })
+
+  // 批量创建代理集合 - 按地域
+  // 使用 MMW 模式以支持 GeoIP 匹配
+  const handleBatchCreateByRegion = async () => {
+    if (!proSelectedExternalSub) {
+      toast.error('请先选择外部订阅')
+      return
+    }
+    if (!proNamePrefix.trim()) {
+      toast.error('请输入名称前缀')
+      return
+    }
+
+    setProCreatingRegion(true)
+    setProCreationResults([])
+    const results: Array<{name: string, success: boolean, error?: string}> = []
+    const prefix = proNamePrefix.trim()
+
+    for (const region of REGION_CONFIGS) {
+      const providerName = `${prefix}-${region.emoji}${region.name}`
+      try {
+        await api.post('/api/user/proxy-provider-configs', {
+          external_subscription_id: proSelectedExternalSub.id,
+          name: providerName,
+          type: 'http',
+          interval: 3600,
+          proxy: 'DIRECT',
+          size_limit: 0,
+          header: JSON.stringify({ 'User-Agent': ['Clash/v1.18.0'] }),
+          health_check_enabled: true,
+          health_check_url: 'https://www.gstatic.com/generate_204',
+          health_check_interval: 300,
+          health_check_timeout: 5000,
+          health_check_lazy: true,
+          health_check_expected_status: 204,
+          filter: region.filter || '',
+          exclude_filter: region.excludeFilter || '',
+          exclude_type: '',
+          geo_ip_filter: region.countryCode || '', // GeoIP 过滤（仅 MMW 模式生效）
+          override: '',
+          process_mode: 'mmw', // 使用 MMW 模式以支持 GeoIP 匹配
+        })
+        results.push({ name: providerName, success: true })
+      } catch (error: any) {
+        results.push({ name: providerName, success: false, error: error.response?.data?.error || '创建失败' })
+      }
+      // 更新结果以显示进度
+      setProCreationResults([...results])
+    }
+
+    setProCreatingRegion(false)
+    queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+
+    const successCount = results.filter(r => r.success).length
+    toast.success(`创建完成: ${successCount}/${results.length} 个代理集合`)
+  }
+
+  // 批量创建代理集合 - 按协议
+  // 使用 MMW 模式（妙妙屋处理）
+  const handleBatchCreateByProtocol = async () => {
+    if (!proSelectedExternalSub) {
+      toast.error('请先选择外部订阅')
+      return
+    }
+    if (!proNamePrefix.trim()) {
+      toast.error('请输入名称前缀')
+      return
+    }
+
+    setProCreatingProtocol(true)
+    setProCreationResults([])
+    const results: Array<{name: string, success: boolean, error?: string}> = []
+    const prefix = proNamePrefix.trim()
+
+    for (const protocol of PROTOCOL_CONFIGS) {
+      const providerName = `${prefix}-${protocol.name}`
+      try {
+        await api.post('/api/user/proxy-provider-configs', {
+          external_subscription_id: proSelectedExternalSub.id,
+          name: providerName,
+          type: 'http',
+          interval: 3600,
+          proxy: 'DIRECT',
+          size_limit: 0,
+          header: JSON.stringify({ 'User-Agent': ['Clash/v1.18.0'] }),
+          health_check_enabled: true,
+          health_check_url: 'https://www.gstatic.com/generate_204',
+          health_check_interval: 300,
+          health_check_timeout: 5000,
+          health_check_lazy: true,
+          health_check_expected_status: 204,
+          filter: '',
+          exclude_filter: '',
+          exclude_type: protocol.excludeType,
+          override: '',
+          process_mode: 'mmw', // 使用 MMW 模式（妙妙屋处理）
+        })
+        results.push({ name: providerName, success: true })
+      } catch (error: any) {
+        results.push({ name: providerName, success: false, error: error.response?.data?.error || '创建失败' })
+      }
+      // 更新结果以显示进度
+      setProCreationResults([...results])
+    }
+
+    setProCreatingProtocol(false)
+    queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
+
+    const successCount = results.filter(r => r.success).length
+    toast.success(`创建完成: ${successCount}/${results.length} 个代理集合`)
+  }
+
+  // 预览妙妙屋处理后的配置
+  const handlePreviewProxyProvider = async (config: ProxyProviderConfig) => {
+    if (config.process_mode !== 'mmw') {
+      toast.error('仅妙妙屋处理模式支持预览')
+      return
+    }
+
+    setPreviewConfigName(config.name)
+    setPreviewContent('')
+    setPreviewLoading(true)
+    setPreviewDialogOpen(true)
+
+    try {
+      const response = await api.get(`/api/proxy-provider/${config.id}?token=${userToken}`, {
+        responseType: 'text',
+      })
+      setPreviewContent(response.data)
+    } catch (error: any) {
+      setPreviewContent(`# 预览失败\n# ${error.response?.data || error.message || '未知错误'}`)
+      toast.error('预览失败')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   // 生成代理集合YAML配置预览
   const generateProxyProviderYAML = () => {
@@ -2119,52 +2383,145 @@ function SubscribeFilesPage() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className='pt-0'>
-                <div className='flex justify-end mb-4'>
-                  <Button
-                    size='sm'
-                    className='w-full sm:w-auto'
-                    onClick={() => {
-                      setEditingProxyProvider(null)
-                      setSelectedExternalSub(null)
-                      setProxyProviderForm({
-                        name: '',
-                        type: 'http',
-                        interval: 3600,
-                        proxy: 'DIRECT',
-                        size_limit: 0,
-                        header_user_agent: 'Clash/v1.18.0',
-                        header_authorization: '',
-                        health_check_enabled: true,
-                        health_check_url: 'https://www.gstatic.com/generate_204',
-                        health_check_interval: 300,
-                        health_check_timeout: 5000,
-                        health_check_lazy: true,
-                        health_check_expected_status: 204,
-                        filter: '',
-                        exclude_filter: '',
-                        exclude_type: [],
-                        override: { ...defaultOverrideForm },
-                        process_mode: 'client',
-                      })
-                      setProxyProviderDialogOpen(true)
-                    }}
-                  >
-                    <Settings className='h-4 w-4 mr-2' />
-                    创建代理集合
-                  </Button>
+                {/* 操作栏 */}
+                <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4'>
+                  {/* 左侧：选中状态 */}
+                  <div className='flex items-center gap-2'>
+                    {selectedProxyProviderIds.size > 0 && (
+                      <>
+                        <Badge variant='secondary'>{selectedProxyProviderIds.size} 项已选</Badge>
+                        <Button
+                          size='sm'
+                          variant='destructive'
+                          onClick={() => setBatchDeleteDialogOpen(true)}
+                        >
+                          <Trash2 className='h-4 w-4 mr-1' />
+                          批量删除
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {/* 右侧：创建按钮 */}
+                  <div className='flex flex-col sm:flex-row gap-2'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      className='w-full sm:w-auto'
+                      onClick={() => {
+                        setProSelectedExternalSub(null)
+                        setProCreationResults([])
+                        setProxyProviderProDialogOpen(true)
+                      }}
+                    >
+                      <Settings className='h-4 w-4 mr-2' />
+                      创建代理集合Pro
+                    </Button>
+                    <Button
+                      size='sm'
+                      className='w-full sm:w-auto'
+                      onClick={() => {
+                        setEditingProxyProvider(null)
+                        setSelectedExternalSub(null)
+                        setProxyProviderForm({
+                          name: '',
+                          type: 'http',
+                          interval: 3600,
+                          proxy: 'DIRECT',
+                          size_limit: 0,
+                          header_user_agent: 'Clash/v1.18.0',
+                          header_authorization: '',
+                          health_check_enabled: true,
+                          health_check_url: 'https://www.gstatic.com/generate_204',
+                          health_check_interval: 300,
+                          health_check_timeout: 5000,
+                          health_check_lazy: true,
+                          health_check_expected_status: 204,
+                          filter: '',
+                          exclude_filter: '',
+                          exclude_type: [],
+                          override: { ...defaultOverrideForm },
+                          process_mode: 'client',
+                        })
+                        setProxyProviderDialogOpen(true)
+                      }}
+                    >
+                      <Settings className='h-4 w-4 mr-2' />
+                      创建代理集合
+                    </Button>
+                  </div>
                 </div>
+                {/* 订阅筛选按钮 - 点击自动选中/反选该订阅下的所有代理集合 */}
+                {externalSubs.length > 0 && (
+                  <div className='flex flex-wrap gap-2 mb-4'>
+                    <Button
+                      size='sm'
+                      variant={proxyProviderFilterSubId === 'all' ? 'default' : 'outline'}
+                      onClick={() => {
+                        setProxyProviderFilterSubId('all')
+                        setSelectedProxyProviderIds(new Set())
+                      }}
+                    >
+                      全部 ({proxyProviderConfigs.length})
+                    </Button>
+                    {externalSubs.map(sub => {
+                      const subConfigs = proxyProviderConfigs.filter(c => c.external_subscription_id === sub.id)
+                      const subConfigIds = new Set(subConfigs.map(c => c.id))
+                      // 检查是否已全选该订阅下的配置
+                      const isAllSelected = subConfigs.length > 0 && subConfigs.every(c => selectedProxyProviderIds.has(c.id))
+                      return (
+                        <Button
+                          key={sub.id}
+                          size='sm'
+                          variant={proxyProviderFilterSubId === sub.id ? 'default' : 'outline'}
+                          onClick={() => {
+                            setProxyProviderFilterSubId(sub.id)
+                            if (isAllSelected) {
+                              // 已全选，则取消选中
+                              setSelectedProxyProviderIds(new Set())
+                            } else {
+                              // 未全选，则选中该订阅下的所有配置
+                              setSelectedProxyProviderIds(subConfigIds)
+                            }
+                          }}
+                        >
+                          {sub.name} ({subConfigs.length})
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
                 {isProxyProviderConfigsLoading ? (
                   <div className='text-center py-4 text-muted-foreground'>加载中...</div>
-                ) : proxyProviderConfigs.length === 0 ? (
+                ) : filteredProxyProviderConfigs.length === 0 ? (
                   <div className='text-center py-8 text-muted-foreground'>
                     <p>暂无代理集合配置</p>
                     <p className='text-sm mt-1'>点击上方按钮创建你的第一个代理集合</p>
                   </div>
                 ) : (
                   <DataTable
-                    data={proxyProviderConfigs}
+                    data={filteredProxyProviderConfigs}
                     getRowKey={(config) => config.id}
                     columns={[
+                      {
+                        key: 'select',
+                        header: (
+                          <Checkbox
+                            checked={filteredProxyProviderConfigs.length > 0 && filteredProxyProviderConfigs.every(c => selectedProxyProviderIds.has(c.id))}
+                            onCheckedChange={handleSelectAllProxyProviders}
+                            aria-label='全选'
+                          />
+                        ),
+                        cell: (config) => (
+                          <Checkbox
+                            checked={selectedProxyProviderIds.has(config.id)}
+                            onCheckedChange={(checked) => handleSelectProxyProvider(config.id, checked as boolean)}
+                            aria-label={`选择 ${config.name}`}
+                          />
+                        ),
+                        width: '40px',
+                        cellClassName: 'text-center',
+                        headerClassName: 'text-center'
+                      },
                       {
                         key: 'name',
                         header: '名称',
@@ -2188,9 +2545,27 @@ function SubscribeFilesPage() {
                         key: 'process_mode',
                         header: '处理模式',
                         cell: (config) => (
-                          <Badge variant={config.process_mode === 'mmw' ? 'default' : 'secondary'}>
-                            {config.process_mode === 'mmw' ? '妙妙屋处理' : '客户端处理'}
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                className='h-auto p-0.5'
+                                onClick={() => toggleProcessModeMutation.mutate(config)}
+                                disabled={toggleProcessModeMutation.isPending}
+                              >
+                                <Badge
+                                  variant={config.process_mode === 'mmw' ? 'default' : 'secondary'}
+                                  className='cursor-pointer hover:opacity-80'
+                                >
+                                  {config.process_mode === 'mmw' ? '妙妙屋处理' : '客户端处理'}
+                                </Badge>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              点击切换为{config.process_mode === 'mmw' ? '客户端处理' : '妙妙屋处理'}
+                            </TooltipContent>
+                          </Tooltip>
                         ),
                         headerClassName: 'text-center',
                         cellClassName: 'text-center'
@@ -2215,6 +2590,20 @@ function SubscribeFilesPage() {
                         header: '操作',
                         cell: (config) => (
                           <div className='flex items-center gap-1'>
+                            {config.process_mode === 'mmw' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => handlePreviewProxyProvider(config)}
+                                  >
+                                    <Eye className='h-4 w-4' />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>预览处理结果</TooltipContent>
+                              </Tooltip>
+                            )}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -2391,12 +2780,53 @@ function SubscribeFilesPage() {
                       header: (config) => (
                         <div className='flex items-center justify-between gap-2 mb-1'>
                           <div className='flex items-center gap-2 flex-1 min-w-0'>
-                            <Badge variant={config.process_mode === 'mmw' ? 'default' : 'secondary'} className='shrink-0'>
-                              {config.process_mode === 'mmw' ? '妙妙屋' : '客户端'}
-                            </Badge>
+                            <Checkbox
+                              checked={selectedProxyProviderIds.has(config.id)}
+                              onCheckedChange={(checked) => handleSelectProxyProvider(config.id, checked as boolean)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`选择 ${config.name}`}
+                              className='shrink-0'
+                            />
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  className='h-auto p-0 shrink-0'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleProcessModeMutation.mutate(config)
+                                  }}
+                                  disabled={toggleProcessModeMutation.isPending}
+                                >
+                                  <Badge
+                                    variant={config.process_mode === 'mmw' ? 'default' : 'secondary'}
+                                    className='cursor-pointer hover:opacity-80'
+                                  >
+                                    {config.process_mode === 'mmw' ? '妙妙屋' : '客户端'}
+                                  </Badge>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                点击切换为{config.process_mode === 'mmw' ? '客户端处理' : '妙妙屋处理'}
+                              </TooltipContent>
+                            </Tooltip>
                             <div className='font-medium text-sm truncate'>{config.name}</div>
                           </div>
                           <div className='flex items-center gap-1'>
+                            {config.process_mode === 'mmw' && (
+                              <Button
+                                variant='outline'
+                                size='icon'
+                                className='size-8 shrink-0'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handlePreviewProxyProvider(config)
+                                }}
+                              >
+                                <Eye className='size-4' />
+                              </Button>
+                            )}
                             <Button
                               variant='outline'
                               size='icon'
@@ -2745,6 +3175,27 @@ function SubscribeFilesPage() {
           proxyProviderConfigs={enableProxyProvider ? proxyProviderConfigs : []}
         />
       )}
+
+      {/* 批量删除代理集合确认对话框 */}
+      <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认批量删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除选中的 {selectedProxyProviderIds.size} 个代理集合配置吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => batchDeleteProxyProviderMutation.mutate(Array.from(selectedProxyProviderIds))}
+              disabled={batchDeleteProxyProviderMutation.isPending}
+            >
+              {batchDeleteProxyProviderMutation.isPending ? '删除中...' : '确认删除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 代理集合配置对话框 */}
       <Dialog open={proxyProviderDialogOpen} onOpenChange={(open) => {
@@ -3371,6 +3822,144 @@ function SubscribeFilesPage() {
             </Button>
             <Button onClick={handleApplyReplacement}>
               应用替换
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 代理集合Pro对话框 */}
+      <Dialog open={proxyProviderProDialogOpen} onOpenChange={setProxyProviderProDialogOpen}>
+        <DialogContent className='max-w-md'>
+          <DialogHeader>
+            <DialogTitle>创建代理集合Pro</DialogTitle>
+            <DialogDescription>批量创建代理集合，支持按地域或协议分裂</DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            {/* 选择外部订阅 */}
+            <div className='space-y-2'>
+              <Label>选择外部订阅</Label>
+              <Select
+                value={proSelectedExternalSub?.id?.toString() || ''}
+                onValueChange={(v) => {
+                  const sub = externalSubs.find(s => s.id === parseInt(v))
+                  setProSelectedExternalSub(sub || null)
+                  setProNamePrefix(sub?.name || '')
+                  setProCreationResults([])
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder='请选择外部订阅' />
+                </SelectTrigger>
+                <SelectContent>
+                  {externalSubs.map(sub => (
+                    <SelectItem key={sub.id} value={sub.id.toString()}>
+                      {sub.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 名称前缀输入框 */}
+            <div className='space-y-2'>
+              <Label>名称前缀</Label>
+              <Input
+                placeholder='输入名称前缀'
+                value={proNamePrefix}
+                onChange={(e) => setProNamePrefix(e.target.value)}
+              />
+              <p className='text-xs text-muted-foreground'>
+                生成的代理集合名称格式: 前缀-地域/协议
+              </p>
+            </div>
+
+            {/* 分裂按钮 */}
+            <div className='flex gap-2'>
+              <Button
+                className='flex-1'
+                disabled={!proSelectedExternalSub || !proNamePrefix.trim() || proCreatingRegion || proCreatingProtocol}
+                onClick={handleBatchCreateByRegion}
+              >
+                {proCreatingRegion && <RefreshCw className='h-4 w-4 mr-2 animate-spin' />}
+                按地域分裂
+              </Button>
+              <Button
+                className='flex-1'
+                variant='outline'
+                disabled={!proSelectedExternalSub || !proNamePrefix.trim() || proCreatingRegion || proCreatingProtocol}
+                onClick={handleBatchCreateByProtocol}
+              >
+                {proCreatingProtocol && <RefreshCw className='h-4 w-4 mr-2 animate-spin' />}
+                按代理协议分裂
+              </Button>
+            </div>
+
+            {/* 创建结果 */}
+            {proCreationResults.length > 0 && (
+              <div className='space-y-2'>
+                <Label>创建结果 ({proCreationResults.filter(r => r.success).length}/{proCreationResults.length})</Label>
+                <ScrollArea className='h-[200px] border rounded-md p-2'>
+                  {proCreationResults.map((result, idx) => (
+                    <div key={idx} className='flex items-center gap-2 text-sm py-1'>
+                      {result.success ? (
+                        <Badge variant='default' className='bg-green-500'>成功</Badge>
+                      ) : (
+                        <Badge variant='destructive'>失败</Badge>
+                      )}
+                      <span className='truncate flex-1'>{result.name}</span>
+                      {result.error && <span className='text-destructive text-xs'>({result.error})</span>}
+                    </div>
+                  ))}
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setProxyProviderProDialogOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 代理集合预览对话框（MMW 模式） */}
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className='max-w-3xl max-h-[80vh]'>
+          <DialogHeader>
+            <DialogTitle>预览处理结果 - {previewConfigName}</DialogTitle>
+            <DialogDescription>妙妙屋处理后的代理节点配置</DialogDescription>
+          </DialogHeader>
+
+          <div className='relative'>
+            {previewLoading ? (
+              <div className='flex items-center justify-center py-8'>
+                <RefreshCw className='h-6 w-6 animate-spin text-muted-foreground' />
+                <span className='ml-2 text-muted-foreground'>加载中...</span>
+              </div>
+            ) : (
+              <ScrollArea className='h-[50vh] border rounded-md'>
+                <pre className='p-4 text-xs font-mono whitespace-pre-wrap break-all'>{previewContent}</pre>
+              </ScrollArea>
+            )}
+          </div>
+
+          <DialogFooter className='flex-row gap-2 sm:justify-between'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => {
+                navigator.clipboard.writeText(previewContent)
+                toast.success('已复制到剪贴板')
+              }}
+              disabled={previewLoading || !previewContent}
+            >
+              <Copy className='h-4 w-4 mr-2' />
+              复制
+            </Button>
+            <Button variant='outline' onClick={() => setPreviewDialogOpen(false)}>
+              关闭
             </Button>
           </DialogFooter>
         </DialogContent>

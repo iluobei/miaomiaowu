@@ -212,7 +212,7 @@ func (r *TrafficRepository) DeleteNode(ctx context.Context, id int64, username s
 	}
 
 	// 检查该 raw_url 是否还有其他节点使用
-	// 如果没有，则删除对应的外部订阅
+	// 如果没有，则删除对应的外部订阅及其关联的代理集合配置
 	if rawURL != "" {
 		var count int
 		err = r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE username = ? AND raw_url = ?`, username, rawURL).Scan(&count)
@@ -223,6 +223,14 @@ func (r *TrafficRepository) DeleteNode(ctx context.Context, id int64, username s
 
 		// 如果没有节点使用该订阅链接，删除外部订阅
 		if count == 0 {
+			// 首先获取外部订阅的 ID
+			var subID int64
+			err = r.db.QueryRowContext(ctx, `SELECT id FROM external_subscriptions WHERE username = ? AND url = ?`, username, rawURL).Scan(&subID)
+			if err == nil && subID > 0 {
+				// 删除关联的代理集合配置
+				_, _ = r.db.ExecContext(ctx, `DELETE FROM proxy_provider_configs WHERE external_subscription_id = ?`, subID)
+			}
+			// 删除外部订阅
 			_, err = r.db.ExecContext(ctx, `DELETE FROM external_subscriptions WHERE username = ? AND url = ?`, username, rawURL)
 			if err != nil {
 				// 记录错误但不影响删除节点的操作

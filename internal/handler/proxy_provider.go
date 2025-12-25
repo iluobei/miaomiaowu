@@ -21,43 +21,45 @@ type proxyProviderConfigRequest struct {
 	SizeLimit              int    `json:"size_limit"`
 	Header                 string `json:"header"` // JSON string
 
-	HealthCheckEnabled       bool   `json:"health_check_enabled"`
-	HealthCheckURL           string `json:"health_check_url"`
-	HealthCheckInterval      int    `json:"health_check_interval"`
-	HealthCheckTimeout       int    `json:"health_check_timeout"`
-	HealthCheckLazy          bool   `json:"health_check_lazy"`
-	HealthCheckExpectedStatus int   `json:"health_check_expected_status"`
+	HealthCheckEnabled        bool   `json:"health_check_enabled"`
+	HealthCheckURL            string `json:"health_check_url"`
+	HealthCheckInterval       int    `json:"health_check_interval"`
+	HealthCheckTimeout        int    `json:"health_check_timeout"`
+	HealthCheckLazy           bool   `json:"health_check_lazy"`
+	HealthCheckExpectedStatus int    `json:"health_check_expected_status"`
 
 	Filter        string `json:"filter"`
 	ExcludeFilter string `json:"exclude_filter"`
 	ExcludeType   string `json:"exclude_type"`
-	Override      string `json:"override"` // JSON string
+	GeoIPFilter   string `json:"geo_ip_filter"` // 国家代码，逗号分隔，如 "HK,TW"（仅 MMW 模式生效）
+	Override      string `json:"override"`      // JSON string
 
 	ProcessMode string `json:"process_mode"` // 'client' or 'mmw'
 }
 
 type proxyProviderConfigResponse struct {
-	ID                       int64  `json:"id"`
-	ExternalSubscriptionID   int64  `json:"external_subscription_id"`
-	Name                     string `json:"name"`
-	Type                     string `json:"type"`
-	Interval                 int    `json:"interval"`
-	Proxy                    string `json:"proxy"`
-	SizeLimit                int    `json:"size_limit"`
-	Header                   string `json:"header"`
-	HealthCheckEnabled       bool   `json:"health_check_enabled"`
-	HealthCheckURL           string `json:"health_check_url"`
-	HealthCheckInterval      int    `json:"health_check_interval"`
-	HealthCheckTimeout       int    `json:"health_check_timeout"`
-	HealthCheckLazy          bool   `json:"health_check_lazy"`
-	HealthCheckExpectedStatus int   `json:"health_check_expected_status"`
-	Filter                   string `json:"filter"`
-	ExcludeFilter            string `json:"exclude_filter"`
-	ExcludeType              string `json:"exclude_type"`
-	Override                 string `json:"override"`
-	ProcessMode              string `json:"process_mode"`
-	CreatedAt                string `json:"created_at"`
-	UpdatedAt                string `json:"updated_at"`
+	ID                        int64  `json:"id"`
+	ExternalSubscriptionID    int64  `json:"external_subscription_id"`
+	Name                      string `json:"name"`
+	Type                      string `json:"type"`
+	Interval                  int    `json:"interval"`
+	Proxy                     string `json:"proxy"`
+	SizeLimit                 int    `json:"size_limit"`
+	Header                    string `json:"header"`
+	HealthCheckEnabled        bool   `json:"health_check_enabled"`
+	HealthCheckURL            string `json:"health_check_url"`
+	HealthCheckInterval       int    `json:"health_check_interval"`
+	HealthCheckTimeout        int    `json:"health_check_timeout"`
+	HealthCheckLazy           bool   `json:"health_check_lazy"`
+	HealthCheckExpectedStatus int    `json:"health_check_expected_status"`
+	Filter                    string `json:"filter"`
+	ExcludeFilter             string `json:"exclude_filter"`
+	ExcludeType               string `json:"exclude_type"`
+	GeoIPFilter               string `json:"geo_ip_filter"`
+	Override                  string `json:"override"`
+	ProcessMode               string `json:"process_mode"`
+	CreatedAt                 string `json:"created_at"`
+	UpdatedAt                 string `json:"updated_at"`
 }
 
 func NewProxyProviderConfigsHandler(repo *storage.TrafficRepository) http.Handler {
@@ -184,25 +186,26 @@ func handleCreateProxyProviderConfig(w http.ResponseWriter, r *http.Request, rep
 	}
 
 	config := &storage.ProxyProviderConfig{
-		Username:                 username,
+		Username:                  username,
 		ExternalSubscriptionID:   payload.ExternalSubscriptionID,
-		Name:                     name,
-		Type:                     configType,
-		Interval:                 interval,
-		Proxy:                    proxy,
-		SizeLimit:                payload.SizeLimit,
-		Header:                   payload.Header,
-		HealthCheckEnabled:       payload.HealthCheckEnabled,
-		HealthCheckURL:           healthCheckURL,
-		HealthCheckInterval:      healthCheckInterval,
-		HealthCheckTimeout:       healthCheckTimeout,
-		HealthCheckLazy:          payload.HealthCheckLazy,
+		Name:                      name,
+		Type:                      configType,
+		Interval:                  interval,
+		Proxy:                     proxy,
+		SizeLimit:                 payload.SizeLimit,
+		Header:                    payload.Header,
+		HealthCheckEnabled:        payload.HealthCheckEnabled,
+		HealthCheckURL:            healthCheckURL,
+		HealthCheckInterval:       healthCheckInterval,
+		HealthCheckTimeout:        healthCheckTimeout,
+		HealthCheckLazy:           payload.HealthCheckLazy,
 		HealthCheckExpectedStatus: healthCheckExpectedStatus,
-		Filter:                   payload.Filter,
-		ExcludeFilter:            payload.ExcludeFilter,
-		ExcludeType:              payload.ExcludeType,
-		Override:                 payload.Override,
-		ProcessMode:              processMode,
+		Filter:                    payload.Filter,
+		ExcludeFilter:             payload.ExcludeFilter,
+		ExcludeType:               payload.ExcludeType,
+		GeoIPFilter:               payload.GeoIPFilter,
+		Override:                  payload.Override,
+		ProcessMode:               processMode,
 	}
 
 	id, err := repo.CreateProxyProviderConfig(r.Context(), config)
@@ -309,6 +312,7 @@ func handleUpdateProxyProviderConfig(w http.ResponseWriter, r *http.Request, rep
 		Filter:                    payload.Filter,
 		ExcludeFilter:             payload.ExcludeFilter,
 		ExcludeType:               payload.ExcludeType,
+		GeoIPFilter:               payload.GeoIPFilter,
 		Override:                  payload.Override,
 		ProcessMode:               processMode,
 	}
@@ -370,6 +374,7 @@ func toProxyProviderConfigResponse(config storage.ProxyProviderConfig) proxyProv
 		Filter:                    config.Filter,
 		ExcludeFilter:             config.ExcludeFilter,
 		ExcludeType:               config.ExcludeType,
+		GeoIPFilter:               config.GeoIPFilter,
 		Override:                  config.Override,
 		ProcessMode:               config.ProcessMode,
 		CreatedAt:                 config.CreatedAt.Format(time.RFC3339),

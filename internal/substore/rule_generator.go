@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+// extractNoResolve extracts the no-resolve suffix from a rule
+// Returns: rule content (without no-resolve) and suffix (",no-resolve" or empty string)
+func extractNoResolve(rule string) (string, string) {
+	if strings.HasSuffix(rule, ",no-resolve") {
+		return strings.TrimSuffix(rule, ",no-resolve"), ",no-resolve"
+	}
+	return rule, ""
+}
+
 // GenerateClashRules generates Clash format rules (RULE-SET mode)
 // Returns rules string and rule-providers string
 func GenerateClashRules(rulesets []ACLRuleset) (rulesStr string, providersStr string, err error) {
@@ -22,9 +31,11 @@ func GenerateClashRules(rulesets []ACLRuleset) (rulesStr string, providersStr st
 				rules = append(rules, fmt.Sprintf("MATCH,%s", rs.Group))
 			} else if strings.HasPrefix(rule, "GEOIP,") {
 				geo := strings.TrimPrefix(rule, "GEOIP,")
-				rules = append(rules, fmt.Sprintf("GEOIP,%s,%s", geo, rs.Group))
+				geoContent, noResolve := extractNoResolve(geo)
+				rules = append(rules, fmt.Sprintf("GEOIP,%s,%s%s", geoContent, rs.Group, noResolve))
 			} else {
-				rules = append(rules, fmt.Sprintf("%s,%s", rule, rs.Group))
+				ruleContent, noResolve := extractNoResolve(rule)
+				rules = append(rules, fmt.Sprintf("%s,%s%s", ruleContent, rs.Group, noResolve))
 			}
 		} else if strings.HasPrefix(rs.RuleURL, "http") {
 			// Remote rule, extract name
