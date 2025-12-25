@@ -486,7 +486,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	attachmentName := url.PathEscape("妙妙屋-" + displayName + ext)
+	// 使用订阅名称
+	attachmentName := url.PathEscape(displayName)
 
 	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
 	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
@@ -575,9 +576,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		log.Printf("[Subscription] Setting subscription-userinfo header: %s", headerValue)
 	}
 	w.Header().Set("profile-update-interval", "24")
-	if clientType == "" {
-		w.Header().Set("content-disposition", "attachment;filename*=UTF-8''"+attachmentName)
-	}
+	w.Header().Set("content-disposition", "attachment;filename*=UTF-8''"+attachmentName)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
