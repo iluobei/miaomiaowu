@@ -38,12 +38,15 @@ import { Badge } from '@/components/ui/badge'
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
+	SelectLabel,
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { ACL4SSR_PRESETS, Aethersailor_PRESETS, type ACL4SSRPreset } from '@/lib/template-presets'
 
 export const Route = createFileRoute('/templates/')({
 	component: TemplatesPage,
@@ -60,69 +63,6 @@ interface Template {
 	created_at: string
 	updated_at: string
 }
-
-interface ACL4SSRPreset {
-	name: string
-	url: string
-	label: string
-}
-
-const Aethersailor_PRESETS: ACL4SSRPreset[] = [
-	{ name: 'Custom_Clash', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash.ini', label: 'Aethersailor - 标准 (推荐使用)' },
-	{ name: 'Custom_Clash_Full', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Full.ini', label: 'Aethersailor - 全分组	(节点较多)' },
-	{ name: 'Custom_Clash_GFW', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_GFW.ini', label: 'Aethersailor - 极简 (GFW)' },
-	{ name: 'Custom_Clash_Lite', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Lite.ini', label: 'Aethersailor - 轻量 (国内直连，国外代理)' },
-	// { name: 'Custom_Clash_Mainland', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Mainland.ini', label: 'Aethersailor - 标准 (推荐使用)' },
-	// { name: 'Custom_Clash_SSRDOG', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_SSRDOG.ini', label: 'Aethersailor - 标准 (推荐使用)' },
-	// { name: 'Custom_Clash_Test', url: 'https://raw.githubusercontent.com//Aethersailor/Custom_OpenClash_Rules/main/cfg/Custom_Clash_Test.ini', label: 'Aethersailor - 标准 (推荐使用)' },
-]
-
-// 内置 ACL4SSR 预设列表
-const ACL4SSR_PRESETS: ACL4SSRPreset[] = [
-	// 作者自用
-	{ name: 'sublinkPro作者自用', url: 'https://raw.githubusercontent.com/ZeroDeng01/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_NoCountry.ini', label: 'sublinkPro作者自用 - 不区分国家' },
-	// 标准版
-	{ name: 'ACL4SSR', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR.ini', label: '标准版 - 典型分组' },
-	{ name: 'ACL4SSR_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_AdblockPlus.ini', label: '标准版 - 典型分组+去广告' },
-	// 回国版
-	{ name: 'ACL4SSR_BackCN', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_BackCN.ini', label: '回国版 - 回国专用' },
-	// 精简版
-	{ name: 'ACL4SSR_Mini', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini.ini', label: '精简版 - 少量分组' },
-	{ name: 'ACL4SSR_Mini_Fallback', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_Fallback.ini', label: '精简版 - 故障转移' },
-	{ name: 'ACL4SSR_Mini_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_MultiMode.ini', label: '精简版 - 多模式 (自动/手动)' },
-	{ name: 'ACL4SSR_Mini_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Mini_NoAuto.ini', label: '精简版 - 无自动测速' },
-	// 无苹果/微软分流版
-	{ name: 'ACL4SSR_NoApple', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoApple.ini', label: '无苹果 - 无苹果分流' },
-	{ name: 'ACL4SSR_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto.ini', label: '无测速 - 无自动测速' },
-	{ name: 'ACL4SSR_NoAuto_NoApple', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto_NoApple.ini', label: '无测速&苹果 - 无测速&无苹果分流' },
-	{ name: 'ACL4SSR_NoAuto_NoApple_NoMicrosoft', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoAuto_NoApple_NoMicrosoft.ini', label: '无测速&苹果&微软 - 无测速&无苹果&无微软分流' },
-	{ name: 'ACL4SSR_NoMicrosoft', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_NoMicrosoft.ini', label: '无微软 - 无微软分流' },
-	// 在线版
-	{ name: 'ACL4SSR_Online', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online.ini', label: '在线版 - 典型分组' },
-	{ name: 'ACL4SSR_Online_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_AdblockPlus.ini', label: '在线版 - 典型分组+去广告' },
-	// 在线全分组版
-	{ name: 'ACL4SSR_Online_Full', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full.ini', label: '在线全分组 - 比较全' },
-	{ name: 'ACL4SSR_Online_Full_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_AdblockPlus.ini', label: '在线全分组 - 带广告拦截' },
-	{ name: 'ACL4SSR_Online_Full_Google', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_Google.ini', label: '在线全分组 - 谷歌分流' },
-	{ name: 'ACL4SSR_Online_Full_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_MultiMode.ini', label: '在线全分组 - 多模式' },
-	{ name: 'ACL4SSR_Online_Full_Netflix', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_Netflix.ini', label: '在线全分组 - 奈飞分流' },
-	{ name: 'ACL4SSR_Online_Full_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Full_NoAuto.ini', label: '在线全分组 - 无自动测速' },
-	// 在线精简版
-	{ name: 'ACL4SSR_Online_Mini', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini.ini', label: '在线精简版 - 少量分组' },
-	{ name: 'ACL4SSR_Online_Mini_AdblockPlus', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_AdblockPlus.ini', label: '在线精简版 - 带广告拦截' },
-	{ name: 'ACL4SSR_Online_Mini_Ai', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_Ai.ini', label: '在线精简版 - AI' },
-	{ name: 'ACL4SSR_Online_Mini_Fallback', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_Fallback.ini', label: '在线精简版 - 故障转移' },
-	{ name: 'ACL4SSR_Online_Mini_MultiCountry', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_MultiCountry.ini', label: '在线精简版 - 多国家' },
-	{ name: 'ACL4SSR_Online_Mini_MultiMode', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_MultiMode.ini', label: '在线精简版 - 多模式' },
-	{ name: 'ACL4SSR_Online_Mini_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_NoAuto.ini', label: '在线精简版 - 无自动测速' },
-	{ name: 'ACL4SSR_Online_MultiCountry', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_MultiCountry.ini', label: '在线版 - 多国家' },
-	{ name: 'ACL4SSR_Online_NoAuto', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_NoAuto.ini', label: '在线版 - 无自动测速' },
-	{ name: 'ACL4SSR_Online_NoReject', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_NoReject.ini', label: '在线版 - 无拒绝规则' },
-	// 特殊版
-	{ name: 'ACL4SSR_WithChinaIp', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithChinaIp.ini', label: '特殊版 - 包含回国IP' },
-	{ name: 'ACL4SSR_WithChinaIp_WithGFW', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithChinaIp_WithGFW.ini', label: '特殊版 - 包含回国IP&GFW列表' },
-	{ name: 'ACL4SSR_WithGFW', url: 'https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_WithGFW.ini', label: '特殊版 - 包含GFW列表' },
-]
 
 type TemplateFormData = Omit<Template, 'id' | 'created_at' | 'updated_at'>
 
@@ -284,6 +224,42 @@ function TemplatesPage() {
 		setFormData({ ...formData, rule_source: url })
 	}
 
+	// 处理预设模板选择（同时填充名称和规则源）
+	const handleTemplatePresetSelect = (presetKey: string) => {
+		// 合并所有预设
+		const allPresets = [...Aethersailor_PRESETS, ...ACL4SSR_PRESETS]
+		const preset = allPresets.find(p => p.name === presetKey)
+		if (preset) {
+			setFormData({
+				...formData,
+				name: preset.name,
+				rule_source: preset.url,
+			})
+		}
+	}
+
+	// 获取可用的预设模板（过滤掉已添加的）
+	const getAvailablePresets = () => {
+		const existingUrls = new Set(templates.map(t => t.rule_source))
+		const existingNames = new Set(templates.map(t => t.name))
+
+		// 编辑模式下不需要过滤当前编辑的模板
+		const filterPreset = (preset: ACL4SSRPreset) => {
+			if (editingTemplate) {
+				// 编辑模式下，允许选择当前正在编辑的模板
+				if (preset.url === editingTemplate.rule_source || preset.name === editingTemplate.name) {
+					return true
+				}
+			}
+			return !existingUrls.has(preset.url) && !existingNames.has(preset.name)
+		}
+
+		return {
+			aethersailor: Aethersailor_PRESETS.filter(filterPreset),
+			acl4ssr: ACL4SSR_PRESETS.filter(filterPreset),
+		}
+	}
+
 	const columns: DataTableColumn<Template>[] = [
 		{
 			header: '名称',
@@ -402,14 +378,62 @@ function TemplatesPage() {
 					<div className="space-y-4 py-4">
 						<div className="space-y-2">
 							<Label htmlFor="name">模板名称</Label>
-							<Input
-								id="name"
-								value={formData.name}
-								onChange={(e) =>
-									setFormData({ ...formData, name: e.target.value })
-								}
-								placeholder="输入模板名称"
-							/>
+							<div className="flex gap-2">
+								<Input
+									id="name"
+									value={formData.name}
+									onChange={(e) =>
+										setFormData({ ...formData, name: e.target.value })
+									}
+									placeholder="输入模板名称"
+									className="flex-1"
+								/>
+								<Select onValueChange={handleTemplatePresetSelect}>
+									<SelectTrigger className="w-[200px]">
+										<SelectValue placeholder="选择预设模板" />
+									</SelectTrigger>
+									<SelectContent className="max-h-[300px]">
+										{(() => {
+											const available = getAvailablePresets()
+											const hasAethersailor = available.aethersailor.length > 0
+											const hasAcl4ssr = available.acl4ssr.length > 0
+
+											if (!hasAethersailor && !hasAcl4ssr) {
+												return (
+													<SelectItem value="_none" disabled>
+														所有预设已添加
+													</SelectItem>
+												)
+											}
+
+											return (
+												<>
+													{hasAethersailor && (
+														<SelectGroup>
+															<SelectLabel>Aethersailor 预设</SelectLabel>
+															{available.aethersailor.map((preset) => (
+																<SelectItem key={preset.name} value={preset.name}>
+																	{preset.label}
+																</SelectItem>
+															))}
+														</SelectGroup>
+													)}
+													{hasAcl4ssr && (
+														<SelectGroup>
+															<SelectLabel>ACL4SSR 预设</SelectLabel>
+															{available.acl4ssr.map((preset) => (
+																<SelectItem key={preset.name} value={preset.name}>
+																	{preset.label}
+																</SelectItem>
+															))}
+														</SelectGroup>
+													)}
+												</>
+											)
+										})()}
+									</SelectContent>
+								</Select>
+							</div>
 						</div>
 
 						<div className="space-y-2">
