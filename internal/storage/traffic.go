@@ -248,6 +248,7 @@ type UserSettings struct {
 	EnableShortLink      bool   // Enable short link feature for subscriptions
 	UseNewTemplateSystem bool   // Use new template system (database-based), default true
 	EnableProxyProvider  bool   // Enable proxy provider feature
+	NodeOrder            []int64 // Node display order (array of node IDs)
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -750,6 +751,11 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 
 	// Add enable_proxy_provider to user_settings table
 	if err := r.ensureUserSettingsColumn("enable_proxy_provider", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add node_order to user_settings table (JSON array of node IDs for display order)
+	if err := r.ensureUserSettingsColumn("node_order", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
 
@@ -2921,9 +2927,10 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
 	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt int
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &settings.CreatedAt, &settings.UpdatedAt)
+	var nodeOrderJSON string
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &nodeOrderJSON, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -2939,6 +2946,16 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	settings.EnableShortLink = enableShortLinkInt == 1
 	settings.UseNewTemplateSystem = useNewTemplateSystemInt == 1
 	settings.EnableProxyProvider = enableProxyProviderInt == 1
+
+	// Parse node_order JSON
+	if nodeOrderJSON != "" && nodeOrderJSON != "[]" {
+		if err := json.Unmarshal([]byte(nodeOrderJSON), &settings.NodeOrder); err != nil {
+			// If JSON parsing fails, use empty array
+			settings.NodeOrder = []int64{}
+		}
+	} else {
+		settings.NodeOrder = []int64{}
+	}
 
 	return settings, nil
 }
@@ -3009,9 +3026,18 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		cacheExpireMinutes = 0
 	}
 
+	// Serialize node_order to JSON
+	nodeOrderJSON := "[]"
+	if len(settings.NodeOrder) > 0 {
+		nodeOrderBytes, err := json.Marshal(settings.NodeOrder)
+		if err == nil {
+			nodeOrderJSON = string(nodeOrderBytes)
+		}
+	}
+
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, node_order, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
@@ -3024,10 +3050,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			enable_short_link = excluded.enable_short_link,
 			use_new_template_system = excluded.use_new_template_system,
 			enable_proxy_provider = excluded.enable_proxy_provider,
+			node_order = excluded.node_order,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, nodeOrderJSON); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 

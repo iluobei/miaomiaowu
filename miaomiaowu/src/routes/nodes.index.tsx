@@ -22,13 +22,31 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2, Flag } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2, Flag, GripVertical } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
 import URI_Producer from '@/lib/substore/producers/uri'
 import { countryCodeToFlag, hasEmojiPrefix, getGeoIPInfo } from '@/lib/country-flag'
 import { Twemoji } from '@/components/twemoji'
+import {
+  DndContext,
+  closestCenter,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -124,6 +142,114 @@ function reorderProxyConfig(config: ClashProxy): ClashProxy {
   return ordered as ClashProxy
 }
 
+// 拖拽把手组件
+function DragHandle({ id }: { id: string }) {
+  const { attributes, listeners } = useSortable({ id })
+
+  return (
+    <div
+      {...attributes}
+      {...listeners}
+      className='cursor-grab active:cursor-grabbing p-1 touch-none'
+    >
+      <GripVertical className='h-4 w-4 text-muted-foreground' />
+    </div>
+  )
+}
+
+// 可拖拽排序的表格行组件
+interface SortableTableRowProps {
+  id: string
+  isSaved: boolean
+  dbId?: number
+  batchDraggingIds: Set<number>
+  children: React.ReactNode
+}
+
+function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, children }: SortableTableRowProps) {
+  const {
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id,
+    disabled: !isSaved, // 只有已保存的节点可以拖拽
+    animateLayoutChanges: () => false,
+  })
+
+  // 检查是否是批量拖动中的节点（但不是被直接拖动的那个）
+  const isBatchDragging = dbId && batchDraggingIds.size > 0 && batchDraggingIds.has(dbId) && !isDragging
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+  }
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className={
+        isDragging
+          ? 'opacity-0'  // 被直接拖动的���点完全隐藏，由 DragOverlay 显示
+          : isBatchDragging
+            ? 'opacity-30 bg-primary/5'  // 其他选中节点也变淡
+            : ''
+      }
+    >
+      {children}
+    </TableRow>
+  )
+}
+
+// DragOverlay 内容组件
+function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; protocolColors: Record<string, string> }) {
+  if (nodes.length === 0) return null
+
+  if (nodes.length === 1) {
+    // 单节点：显示简单的节点卡片
+    const node = nodes[0]
+    return (
+      <div className='bg-background border rounded-md shadow-lg p-3 min-w-[200px] max-w-[300px]'>
+        <div className='flex items-center gap-2'>
+          <Badge variant='secondary' className={protocolColors[node.parsed?.type || ''] || ''}>
+            {node.parsed?.type?.toUpperCase() || 'UNKNOWN'}
+          </Badge>
+          <span className='font-medium truncate'>{node.name}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // 多节点：显示堆叠效果 + 数量标记
+  const firstNode = nodes[0]
+  return (
+    <div className='relative'>
+      {/* 底部堆叠效果 */}
+      {nodes.length > 2 && (
+        <div className='absolute top-2 left-2 bg-muted border rounded-md shadow p-3 min-w-[200px] max-w-[300px] h-[48px] opacity-60' />
+      )}
+      <div className='absolute top-1 left-1 bg-muted border rounded-md shadow p-3 min-w-[200px] max-w-[300px] h-[48px] opacity-80' />
+
+      {/* 主卡片 */}
+      <div className='relative bg-background border rounded-md shadow-lg p-3 min-w-[200px] max-w-[300px]'>
+        <div className='flex items-center gap-2'>
+          <Badge variant='secondary' className={protocolColors[firstNode.parsed?.type || ''] || ''}>
+            {firstNode.parsed?.type?.toUpperCase() || 'UNKNOWN'}
+          </Badge>
+          <span className='font-medium truncate'>{firstNode.name}</span>
+        </div>
+
+        {/* 数量标记 */}
+        <Badge className='absolute -top-2 -right-2 bg-primary text-primary-foreground'>
+          {nodes.length} 个节点
+        </Badge>
+      </div>
+    </div>
+  )
+}
+
 function NodesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
@@ -200,6 +326,12 @@ function NodesPage() {
     setSubscriptionUrl(e.target.value)
   }, [])
 
+  // 节点排序状态
+  const [nodeOrder, setNodeOrder] = useState<number[]>([])
+  // 批量拖动状态：当拖动选中的节点时，记录正在批量拖动的节点ID集合
+  const [batchDraggingIds, setBatchDraggingIds] = useState<Set<number>>(new Set())
+  // 当前正在拖动的节点ID（用于 DragOverlay）
+  const [activeId, setActiveId] = useState<string | null>(null)
   // 获取用户配置
   const { data: userConfig } = useQuery({
     queryKey: ['user-config'],
@@ -211,9 +343,43 @@ function NodesPage() {
         cache_expire_minutes: number
         sync_traffic: boolean
         enable_probe_binding: boolean
+        node_order: number[]
       }
     },
     enabled: Boolean(auth.accessToken),
+  })
+
+  // 同步 nodeOrder 状态
+  useEffect(() => {
+    if (userConfig?.node_order) {
+      setNodeOrder(userConfig.node_order)
+    }
+  }, [userConfig?.node_order])
+
+  // dnd-kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    })
+  )
+
+  // 更新节点排序
+  const updateNodeOrderMutation = useMutation({
+    mutationFn: async (newOrder: number[]) => {
+      await api.put('/api/user/config', {
+        ...userConfig,
+        node_order: newOrder
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-config'] })
+    },
+    onError: (error: any) => {
+      toast.error('保存排序失败: ' + (error.response?.data?.error || error.message))
+    }
   })
 
   // 获取探针服务器列表
@@ -927,22 +1093,26 @@ function NodesPage() {
       return
     }
 
-    // 按 clash_config 分组（比较完整配置，包括 name 字段）
+    // 按 clash_config + node_name 分组（只有连接配置和名称都相同才算重复）
     const configGroups = new Map<string, ParsedNode[]>()
 
     for (const node of savedNodes) {
       try {
-        // 解析配置并按 key 排序，确保相同配置生成相同的字符串
+        // 解析配置并按 key 排序，同时加上 node_name 作为唯一标识的一部分
         const config = JSON.parse(node.clash_config)
-        const configKey = JSON.stringify(config, Object.keys(config).sort())
+        // 使用数据库中的 node_name（用户可能修改过）而不是配置中的 name
+        const configKey = JSON.stringify({
+          ...config,
+          __node_name__: node.node_name // 使用特殊 key 避免与配置字段冲突
+        }, Object.keys({ ...config, __node_name__: node.node_name }).sort())
 
         if (!configGroups.has(configKey)) {
           configGroups.set(configKey, [])
         }
         configGroups.get(configKey)!.push(node)
       } catch {
-        // 无法解析的配置，使用原始字符串
-        const configKey = node.clash_config
+        // 无法解析的配置，使用原始字符串 + node_name
+        const configKey = node.clash_config + '|' + node.node_name
         if (!configGroups.has(configKey)) {
           configGroups.set(configKey, [])
         }
@@ -1343,8 +1513,110 @@ function NodesPage() {
       dbId: 0,
     }))
 
-    return [...temp, ...saved]
-  }, [savedNodes, tempNodes])
+    // 按 nodeOrder 排序已保存的节点
+    const orderMap = new Map<number, number>()
+    nodeOrder.forEach((id, index) => orderMap.set(id, index))
+
+    const sortedSaved = [...saved].sort((a, b) => {
+      const aOrder = orderMap.get(a.dbId) ?? Infinity
+      const bOrder = orderMap.get(b.dbId) ?? Infinity
+      return aOrder - bOrder
+    })
+
+    // 临时节点在前，已保存节点按排序顺序在后
+    return [...temp, ...sortedSaved]
+  }, [savedNodes, tempNodes, nodeOrder])
+
+  // 拖拽开始处理：检测是否批量拖动
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const { active } = event
+    setActiveId(active.id as string)
+
+    const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
+    const activeNode = savedDisplayNodes.find(n => n.id === active.id)
+
+    // 如果拖动的节点在选中集合中，且选中了多个节点，则是批量拖动
+    if (activeNode?.dbId && selectedNodeIds.has(activeNode.dbId) && selectedNodeIds.size > 1) {
+      setBatchDraggingIds(new Set(selectedNodeIds))
+    } else {
+      setBatchDraggingIds(new Set())
+    }
+  }, [displayNodes, selectedNodeIds])
+
+  // 拖拽结束处理（支持批量拖动）
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+
+    // 清除拖动状态（无论结果如何都要清除）
+    setActiveId(null)
+    setBatchDraggingIds(new Set())
+
+    if (!over || active.id === over.id) return
+
+    // 获取当前显示的已保存节点（按当前顺序）
+    const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
+    const activeNode = savedDisplayNodes.find(n => n.id === active.id)
+    if (!activeNode) return
+
+    const overIndex = savedDisplayNodes.findIndex(n => n.id === over.id)
+    if (overIndex === -1) return
+
+    // 判断是否批量拖动：拖拽的节点在选中集合中，且选中了多个节点
+    const isDraggingSelected = activeNode.dbId && selectedNodeIds.has(activeNode.dbId)
+
+    if (isDraggingSelected && selectedNodeIds.size > 1) {
+      // 批量拖动逻辑
+      const targetNode = savedDisplayNodes[overIndex]
+
+      // 如果目标也是选中的节点，忽略操作
+      if (targetNode.dbId && selectedNodeIds.has(targetNode.dbId)) return
+
+      // 获取选中节点的ID（保持当前显示顺序）
+      const selectedIds = savedDisplayNodes
+        .filter(n => n.dbId && selectedNodeIds.has(n.dbId))
+        .map(n => n.dbId!)
+
+      // 获取未选中的节点
+      const unselectedNodes = savedDisplayNodes.filter(n => !n.dbId || !selectedNodeIds.has(n.dbId))
+
+      // 计算在目标位置之前还是之后插入
+      const activeIndex = savedDisplayNodes.findIndex(n => n.id === active.id)
+      const insertAfter = activeIndex < overIndex
+
+      // 重新排列：将选中的节点作为整体插入到目标位置
+      const newOrder: number[] = []
+      for (const node of unselectedNodes) {
+        if (node.dbId === targetNode.dbId && !insertAfter) {
+          // 在目标之前插入
+          newOrder.push(...selectedIds)
+        }
+        newOrder.push(node.dbId!)
+        if (node.dbId === targetNode.dbId && insertAfter) {
+          // 在目标之后插入
+          newOrder.push(...selectedIds)
+        }
+      }
+
+      setNodeOrder(newOrder)
+      updateNodeOrderMutation.mutate(newOrder)
+    } else {
+      // 单节点拖动（保持原有逻辑）
+      const activeIndex = savedDisplayNodes.findIndex(n => n.id === active.id)
+      if (activeIndex === -1) return
+
+      const currentIds = savedDisplayNodes.map(n => n.dbId!)
+      const newOrderIds = arrayMove(currentIds, activeIndex, overIndex)
+
+      setNodeOrder(newOrderIds)
+      updateNodeOrderMutation.mutate(newOrderIds)
+    }
+  }, [displayNodes, selectedNodeIds, updateNodeOrderMutation])
+
+  // 拖拽取消处理
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null)
+    setBatchDraggingIds(new Set())
+  }, [])
 
   const filteredNodes = useMemo(() => {
     let nodes = displayNodes
@@ -1361,6 +1633,22 @@ function NodesPage() {
 
     return nodes
   }, [displayNodes, selectedProtocol, tagFilter])
+
+  // 获取要在 DragOverlay 中显示的节点
+  const dragOverlayNodes = useMemo(() => {
+    if (!activeId) return []
+
+    const activeNode = filteredNodes.find(n => n.id === activeId)
+    if (!activeNode) return []
+
+    // 如果是批量拖动，返回所有选中的节点
+    if (activeNode.dbId && selectedNodeIds.has(activeNode.dbId) && selectedNodeIds.size > 1) {
+      return filteredNodes.filter(n => n.dbId && selectedNodeIds.has(n.dbId))
+    }
+
+    // 单节点拖动
+    return [activeNode]
+  }, [activeId, filteredNodes, selectedNodeIds])
 
   const protocolCounts = useMemo(() => {
     const counts: Record<string, number> = { all: displayNodes.length }
@@ -2374,86 +2662,96 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
 
                 {/* 桌面端表格视图 (>=1024px) */}
                 <div className='hidden lg:block rounded-md border overflow-auto'>
-                  <Table className='w-full'>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead style={{ width: '50px' }}>
-                          <Checkbox
-                            checked={
-                              filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
-                              filteredNodes.filter(n => n.isSaved && n.dbId).every(n => selectedNodeIds.has(n.dbId!))
-                            }
-                            onCheckedChange={(checked) => {
-                              const savedNodes = filteredNodes.filter(n => n.isSaved && n.dbId)
-                              if (checked) {
-                                setSelectedNodeIds(new Set(savedNodes.map(n => n.dbId!)))
-                              } else {
-                                setSelectedNodeIds(new Set())
-                              }
-                            }}
-                          />
-                        </TableHead>
-                        <TableHead style={{ width: '90px' }}>协议</TableHead>
-                        <TableHead>节点名称</TableHead>
-                        <TableHead style={{ width: '120px' }}>标签</TableHead>
-                        <TableHead>服务器地址</TableHead>
-                        <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
-                        <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredNodes.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className='text-center text-muted-foreground py-8'>
-                            没有找到匹配的节点
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredNodes.map(node => (
-                          <TableRow
-                            key={node.id}
-                            className={node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-muted/50' : 'cursor-pointer hover:bg-muted/30'}
-                            onClick={(e) => {
-                              // 排除功能按钮、输入框、checkbox等交互元素
-                              const target = e.target as HTMLElement
-                              if (
-                                target.closest('button') ||
-                                target.closest('input') ||
-                                target.closest('[role="checkbox"]') ||
-                                target.closest('[role="menuitem"]') ||
-                                target.closest('[data-radix-collection-item]')
-                              ) {
-                                return
-                              }
-                              // 只有已保存的节点才能选中
-                              if (node.isSaved && node.dbId) {
-                                const newSet = new Set(selectedNodeIds)
-                                if (newSet.has(node.dbId)) {
-                                  newSet.delete(node.dbId)
-                                } else {
-                                  newSet.add(node.dbId)
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={filteredNodes.map(n => n.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <Table className='w-full'>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead style={{ width: '36px' }}></TableHead>
+                            <TableHead style={{ width: '50px' }}>
+                              <Checkbox
+                                checked={
+                                  filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
+                                  filteredNodes.filter(n => n.isSaved && n.dbId).every(n => selectedNodeIds.has(n.dbId!))
                                 }
-                                setSelectedNodeIds(newSet)
-                              }
-                            }}
-                          >
-                            <TableCell>
-                              {node.isSaved && node.dbId && (
-                                <Checkbox
-                                  checked={selectedNodeIds.has(node.dbId)}
-                                  onCheckedChange={(checked) => {
-                                    const newSet = new Set(selectedNodeIds)
-                                    if (checked) {
-                                      newSet.add(node.dbId!)
-                                    } else {
-                                      newSet.delete(node.dbId!)
+                                onCheckedChange={(checked) => {
+                                  const savedNodes = filteredNodes.filter(n => n.isSaved && n.dbId)
+                                  if (checked) {
+                                    setSelectedNodeIds(new Set(savedNodes.map(n => n.dbId!)))
+                                  } else {
+                                    setSelectedNodeIds(new Set())
+                                  }
+                                }}
+                              />
+                            </TableHead>
+                            <TableHead style={{ width: '90px' }}>协议</TableHead>
+                            <TableHead>节点名称</TableHead>
+                            <TableHead style={{ width: '120px' }}>标签</TableHead>
+                            <TableHead>服务器地址</TableHead>
+                            <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
+                            <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredNodes.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className='text-center text-muted-foreground py-8'>
+                                没有找到匹配的节点
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            filteredNodes.map(node => (
+                              <SortableTableRow
+                                key={node.id}
+                                id={node.id}
+                                isSaved={node.isSaved}
+                                dbId={node.dbId}
+                                batchDraggingIds={batchDraggingIds}
+                              >
+                                <TableCell className='w-9 px-2'>
+                                  {node.isSaved && (
+                                    <DragHandle id={node.id} />
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  className='cursor-pointer'
+                                  onClick={(e) => {
+                                    if (node.isSaved && node.dbId) {
+                                      const newSet = new Set(selectedNodeIds)
+                                      if (newSet.has(node.dbId)) {
+                                        newSet.delete(node.dbId)
+                                      } else {
+                                        newSet.add(node.dbId)
+                                      }
+                                      setSelectedNodeIds(newSet)
                                     }
-                                    setSelectedNodeIds(newSet)
                                   }}
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell>
+                                >
+                                  {node.isSaved && node.dbId && (
+                                    <Checkbox
+                                      checked={selectedNodeIds.has(node.dbId)}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedNodeIds)
+                                        if (checked) {
+                                          newSet.add(node.dbId!)
+                                        } else {
+                                          newSet.delete(node.dbId!)
+                                        }
+                                        setSelectedNodeIds(newSet)
+                                      }}
+                                    />
+                                  )}
+                                </TableCell>
+                                <TableCell>
                               {node.parsed ? (
                                 <Badge
                                   variant='outline'
@@ -2880,12 +3178,20 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
-                            </TableCell>
-                          </TableRow>
-                        ))
+                                </TableCell>
+                              </SortableTableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </SortableContext>
+
+                    <DragOverlay dropAnimation={null}>
+                      {activeId && (
+                        <DragOverlayContent nodes={dragOverlayNodes} protocolColors={PROTOCOL_COLORS} />
                       )}
-                    </TableBody>
-                  </Table>
+                    </DragOverlay>
+                  </DndContext>
                 </div>
               </CardContent>
             </Card>
