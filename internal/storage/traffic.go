@@ -3241,6 +3241,12 @@ func (r *TrafficRepository) DeleteExternalSubscription(ctx context.Context, id i
 		return errors.New("username is required")
 	}
 
+	// 先删除关联的代理集合配置
+	const deleteProvidersStmt = `DELETE FROM proxy_provider_configs WHERE external_subscription_id = ?`
+	if _, err := r.db.ExecContext(ctx, deleteProvidersStmt, id); err != nil {
+		return fmt.Errorf("delete related proxy provider configs: %w", err)
+	}
+
 	const stmt = `DELETE FROM external_subscriptions WHERE id = ? AND username = ?`
 	result, err := r.db.ExecContext(ctx, stmt, id, username)
 	if err != nil {

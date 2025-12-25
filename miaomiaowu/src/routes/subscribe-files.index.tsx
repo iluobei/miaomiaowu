@@ -2896,7 +2896,7 @@ function SubscribeFilesPage() {
                       id='pp-authorization'
                       value={proxyProviderForm.header_authorization}
                       onChange={(e) => setProxyProviderForm(prev => ({ ...prev, header_authorization: e.target.value }))}
-                      placeholder='token xxx'
+                      placeholder='鉴权token，如有则必填'
                     />
                   </div>
                 </div>
