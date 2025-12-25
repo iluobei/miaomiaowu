@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronUp, Link2, Flag, GripVertical } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, Link2, Flag, GripVertical } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
@@ -150,6 +151,7 @@ function DragHandle({ id }: { id: string }) {
     <div
       {...attributes}
       {...listeners}
+      data-drag-handle
       className='cursor-grab active:cursor-grabbing p-1 touch-none'
     >
       <GripVertical className='h-4 w-4 text-muted-foreground' />
@@ -163,10 +165,12 @@ interface SortableTableRowProps {
   isSaved: boolean
   dbId?: number
   batchDraggingIds: Set<number>
+  isSelected?: boolean
+  onClick?: (e: React.MouseEvent) => void
   children: React.ReactNode
 }
 
-function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, children }: SortableTableRowProps) {
+function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableTableRowProps) {
   const {
     setNodeRef,
     transform,
@@ -190,13 +194,16 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, children }: Sor
     <TableRow
       ref={setNodeRef}
       style={style}
-      className={
+      onClick={onClick}
+      className={cn(
+        'cursor-pointer group/row',
         isDragging
-          ? 'opacity-0'  // 被直接拖动的���点完全隐藏，由 DragOverlay 显示
+          ? 'opacity-0'  // 被直接拖动的节点完全隐藏，由 DragOverlay 显示
           : isBatchDragging
-            ? 'opacity-30 bg-primary/5'  // 其他选中节点也变淡
-            : ''
-      }
+            ? 'opacity-30 bg-primary/10'  // 其他选中节点也变淡
+            : '',
+        isSelected && !isDragging && !isBatchDragging && 'bg-primary/15 ring-2 ring-inset ring-primary/50 hover:bg-primary/20'
+      )}
     >
       {children}
     </TableRow>
@@ -1708,10 +1715,15 @@ function NodesPage() {
           <Collapsible open={isInputCardExpanded} onOpenChange={setIsInputCardExpanded}>
             <Card>
               <CollapsibleTrigger asChild>
-                <CardHeader className='cursor-pointer'>
+                <CardHeader className='cursor-pointer hover:bg-muted/50 transition-colors rounded-t-lg'>
                   <div className='flex items-center justify-between'>
                     <CardTitle>导入节点</CardTitle>
-                    {isInputCardExpanded ? <ChevronUp className='h-5 w-5' /> : <ChevronDown className='h-5 w-5' />}
+                    <div className='p-1.5 transition-all duration-200'>
+                      <ChevronDown className={cn(
+                        'h-5 w-5 transition-transform duration-200',
+                        isInputCardExpanded ? 'rotate-180' : 'animate-bounce'
+                      )} />
+                    </div>
                   </div>
                 </CardHeader>
               </CollapsibleTrigger>
@@ -2677,22 +2689,6 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         <TableHeader>
                           <TableRow>
                             <TableHead style={{ width: '36px' }}></TableHead>
-                            <TableHead style={{ width: '50px' }}>
-                              <Checkbox
-                                checked={
-                                  filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
-                                  filteredNodes.filter(n => n.isSaved && n.dbId).every(n => selectedNodeIds.has(n.dbId!))
-                                }
-                                onCheckedChange={(checked) => {
-                                  const savedNodes = filteredNodes.filter(n => n.isSaved && n.dbId)
-                                  if (checked) {
-                                    setSelectedNodeIds(new Set(savedNodes.map(n => n.dbId!)))
-                                  } else {
-                                    setSelectedNodeIds(new Set())
-                                  }
-                                }}
-                              />
-                            </TableHead>
                             <TableHead style={{ width: '90px' }}>协议</TableHead>
                             <TableHead>节点名称</TableHead>
                             <TableHead style={{ width: '120px' }}>标签</TableHead>
@@ -2704,7 +2700,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         <TableBody>
                           {filteredNodes.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={8} className='text-center text-muted-foreground py-8'>
+                              <TableCell colSpan={7} className='text-center text-muted-foreground py-8'>
                                 没有找到匹配的节点
                               </TableCell>
                             </TableRow>
@@ -2716,39 +2712,27 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 isSaved={node.isSaved}
                                 dbId={node.dbId}
                                 batchDraggingIds={batchDraggingIds}
+                                isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
+                                onClick={(e) => {
+                                  // 如果点击的是按钮、输入框等交互元素，不触发选中
+                                  const target = e.target as HTMLElement
+                                  if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
+                                    return
+                                  }
+                                  if (node.isSaved && node.dbId) {
+                                    const newSet = new Set(selectedNodeIds)
+                                    if (newSet.has(node.dbId)) {
+                                      newSet.delete(node.dbId)
+                                    } else {
+                                      newSet.add(node.dbId)
+                                    }
+                                    setSelectedNodeIds(newSet)
+                                  }
+                                }}
                               >
                                 <TableCell className='w-9 px-2'>
                                   {node.isSaved && (
                                     <DragHandle id={node.id} />
-                                  )}
-                                </TableCell>
-                                <TableCell
-                                  className='cursor-pointer'
-                                  onClick={(e) => {
-                                    if (node.isSaved && node.dbId) {
-                                      const newSet = new Set(selectedNodeIds)
-                                      if (newSet.has(node.dbId)) {
-                                        newSet.delete(node.dbId)
-                                      } else {
-                                        newSet.add(node.dbId)
-                                      }
-                                      setSelectedNodeIds(newSet)
-                                    }
-                                  }}
-                                >
-                                  {node.isSaved && node.dbId && (
-                                    <Checkbox
-                                      checked={selectedNodeIds.has(node.dbId)}
-                                      onCheckedChange={(checked) => {
-                                        const newSet = new Set(selectedNodeIds)
-                                        if (checked) {
-                                          newSet.add(node.dbId!)
-                                        } else {
-                                          newSet.delete(node.dbId!)
-                                        }
-                                        setSelectedNodeIds(newSet)
-                                      }}
-                                    />
                                   )}
                                 </TableCell>
                                 <TableCell>
@@ -2807,14 +2791,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 </div>
                               ) : (
                                 <div className='flex items-center gap-2 min-w-0'>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className='truncate flex-1 min-w-0 cursor-help'><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className='max-w-xs'>
-                                      <Twemoji>{node.name || '未知'}</Twemoji>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  <span className='truncate flex-1 min-w-0' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
                                   {node.isSaved && (
                                     <Check className='size-4 text-green-600 shrink-0' />
                                   )}
@@ -2865,19 +2842,13 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             </TableCell>
                             <TableCell>
                               <div className='flex flex-wrap gap-1'>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Badge
-                                      variant='secondary'
-                                      className='text-xs max-w-[120px] truncate cursor-help'
-                                    >
-                                      {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
-                                    </Badge>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
-                                  </TooltipContent>
-                                </Tooltip>
+                                <Badge
+                                  variant='secondary'
+                                  className='text-xs max-w-[120px] truncate'
+                                  title={node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                                >
+                                  {node.dbNode?.tag || node.tag || (currentTag === 'manual' ? manualTag.trim() || '手动输入' : currentTag === 'subscription' ? subscriptionTag.trim() || '订阅导入' : '未知')}
+                                </Badge>
                                 {node.isSaved && node.dbNode?.probe_server && (
                                   <Badge variant='secondary' className='text-xs flex items-center gap-1'>
                                     <Activity className='size-3' />
@@ -2891,14 +2862,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 {node.parsed ? (
                                   <div className='flex items-center gap-2 min-w-0'>
                                     <div className='min-w-0 flex-1'>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div className='font-mono truncate cursor-help'>{node.parsed.server}:{node.parsed.port}</div>
-                                        </TooltipTrigger>
-                                        <TooltipContent className='max-w-md font-mono'>
-                                          {node.parsed.server}:{node.parsed.port}
-                                        </TooltipContent>
-                                      </Tooltip>
+                                      <div className='font-mono truncate' title={`${node.parsed.server}:${node.parsed.port}`}>{node.parsed.server}:{node.parsed.port}</div>
                                       {node.parsed.network && node.parsed.network !== 'tcp' && (
                                         <div className='text-xs mt-1'>
                                           <Badge variant='outline' className='text-xs'>
