@@ -2414,7 +2414,7 @@ function SubscribeFilesPage() {
                       }}
                     >
                       <Settings className='h-4 w-4 mr-2' />
-                      创建代理集合Pro
+                      创建代理集合(初级)
                     </Button>
                     <Button
                       size='sm'
@@ -2446,7 +2446,7 @@ function SubscribeFilesPage() {
                       }}
                     >
                       <Settings className='h-4 w-4 mr-2' />
-                      创建代理集合
+                      创建代理集合(高级)
                     </Button>
                   </div>
                 </div>
@@ -3831,7 +3831,7 @@ function SubscribeFilesPage() {
       <Dialog open={proxyProviderProDialogOpen} onOpenChange={setProxyProviderProDialogOpen}>
         <DialogContent className='max-w-md'>
           <DialogHeader>
-            <DialogTitle>创建代理集合Pro</DialogTitle>
+            <DialogTitle>创建代理集合(初级)</DialogTitle>
             <DialogDescription>批量创建代理集合，支持按地域或协议分裂</DialogDescription>
           </DialogHeader>
 
