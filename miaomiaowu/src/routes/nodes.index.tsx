@@ -292,6 +292,8 @@ function NodesPage() {
   const [batchRenameText, setBatchRenameText] = useState<string>('')
   const [findText, setFindText] = useState<string>('')
   const [replaceText, setReplaceText] = useState<string>('')
+  const [prefixText, setPrefixText] = useState<string>('')
+  const [suffixText, setSuffixText] = useState<string>('')
 
   // Clash 配置编辑状态
   const [clashDialogOpen, setClashDialogOpen] = useState(false)
@@ -888,6 +890,8 @@ function NodesPage() {
       setBatchRenameText('')
       setFindText('')
       setReplaceText('')
+      setPrefixText('')
+      setSuffixText('')
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '批量修改名称失败')
@@ -3478,6 +3482,53 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
               </Button>
             </div>
 
+            {/* 前缀后缀工具 */}
+            <div className='grid grid-cols-3 gap-2 grid-cols-[1fr_1fr_auto] items-end'>
+              <div className='space-y-2'>
+                <Label htmlFor='prefix-text' className='text-sm font-medium'>
+                  前缀
+                </Label>
+                <Input
+                  id='prefix-text'
+                  placeholder='添加到名称前面'
+                  value={prefixText}
+                  onChange={(e) => setPrefixText(e.target.value)}
+                  className='text-sm'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='suffix-text' className='text-sm font-medium'>
+                  后缀
+                </Label>
+                <Input
+                  id='suffix-text'
+                  placeholder='添加到名称后面'
+                  value={suffixText}
+                  onChange={(e) => setSuffixText(e.target.value)}
+                  className='text-sm'
+                />
+              </div>
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => {
+                  if (!prefixText && !suffixText) {
+                    toast.error('请输入前缀或后缀')
+                    return
+                  }
+                  const updated = batchRenameText.split('\n').map(line =>
+                    line ? `${prefixText}${line}${suffixText}` : line
+                  ).join('\n')
+                  setBatchRenameText(updated)
+                  setPrefixText('')
+                  setSuffixText('')
+                  toast.success('应用完成')
+                }}
+              >
+                应用
+              </Button>
+            </div>
+
             {/* 名称编辑区 */}
             <div className='flex-1 space-y-2 min-h-0 flex flex-col'>
               <Label htmlFor='batch-rename-text' className='text-sm font-medium'>
@@ -3504,6 +3555,8 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   setBatchRenameText('')
                   setFindText('')
                   setReplaceText('')
+                  setPrefixText('')
+                  setSuffixText('')
                 }}
                 disabled={batchRenameMutation.isPending}
               >
