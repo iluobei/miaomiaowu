@@ -31,6 +31,7 @@ import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { profileQueryFn } from '@/lib/profile'
 import { useAuthStore } from '@/stores/auth-store'
+import { Pencil } from 'lucide-react'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/users')({
@@ -49,6 +50,7 @@ type UserRow = {
   nickname: string
   role: string
   is_active: boolean
+  remark: string
 }
 
 type ResetState = {
@@ -61,6 +63,7 @@ type CreateState = {
   email: string
   nickname: string
   password: string
+  remark: string
   subscriptionIds: number[]
 }
 
@@ -97,9 +100,11 @@ function UsersPage() {
     email: '',
     nickname: '',
     password: generatePassword(),
+    remark: '',
     subscriptionIds: [],
   })
   const [subscriptionManageState, setSubscriptionManageState] = useState<SubscriptionManageState | null>(null)
+  const [remarkEditState, setRemarkEditState] = useState<{ username: string; remark: string } | null>(null)
 
   const { data: profile, isLoading: profileLoading, isError: profileError } = useQuery({
     queryKey: ['profile'],
@@ -196,6 +201,7 @@ function UsersPage() {
         email: payload.email,
         nickname: payload.nickname,
         password: payload.password,
+        remark: payload.remark,
       })
       const userData = response.data as { username: string; email: string; nickname: string; role: string; password: string }
 
@@ -212,7 +218,7 @@ function UsersPage() {
       toast.success('用户已创建，初始密码已复制')
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setCreateOpen(false)
-      setCreateState({ username: '', email: '', nickname: '', password: generatePassword(), subscriptionIds: [] })
+      setCreateState({ username: '', email: '', nickname: '', password: generatePassword(), remark: '', subscriptionIds: [] })
 
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(data.password).catch(() => null)
@@ -233,6 +239,18 @@ function UsersPage() {
       toast.success('订阅已更新')
       queryClient.invalidateQueries({ queryKey: ['user-subscriptions', variables.username] })
       setSubscriptionManageState(null)
+    },
+    onError: handleServerError,
+  })
+
+  const remarkMutation = useMutation({
+    mutationFn: async (payload: { username: string; remark: string }) => {
+      await api.post('/api/admin/users/remark', payload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success('备注已更新')
+      setRemarkEditState(null)
     },
     onError: handleServerError,
   })
@@ -360,6 +378,23 @@ function UsersPage() {
                   width: '200px'
                 },
                 {
+                  header: '备注',
+                  cell: (user) => (
+                    <div className='flex items-center gap-2'>
+                      <span className='truncate max-w-[150px]' title={user.remark}>{user.remark || '—'}</span>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        className='h-6 w-6 shrink-0'
+                        onClick={() => setRemarkEditState({ username: user.username, remark: user.remark || '' })}
+                      >
+                        <Pencil className='h-3 w-3' />
+                      </Button>
+                    </div>
+                  ),
+                  width: '200px'
+                },
+                {
                   header: '角色',
                   cell: (user) => {
                     const isAdminRow = user.role === 'admin'
@@ -463,6 +498,22 @@ function UsersPage() {
                   {
                     label: '邮箱',
                     value: (user) => <span className='break-all'>{user.email || '—'}</span>
+                  },
+                  {
+                    label: '备注',
+                    value: (user) => (
+                      <div className='flex items-center gap-2'>
+                        <span className='truncate'>{user.remark || '—'}</span>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className='h-6 w-6 shrink-0'
+                          onClick={() => setRemarkEditState({ username: user.username, remark: user.remark || '' })}
+                        >
+                          <Pencil className='h-3 w-3' />
+                        </Button>
+                      </div>
+                    )
                   },
                   {
                     label: '状态',
@@ -596,6 +647,18 @@ function UsersPage() {
                 }
               />
               <p className='text-xs text-muted-foreground'>默认生成随机密码，可在创建前自行调整。</p>
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='create-remark'>备注（可选）</Label>
+              <Input
+                id='create-remark'
+                value={createState.remark}
+                placeholder='输入备注信息'
+                autoComplete='off'
+                onChange={(event) =>
+                  setCreateState((prev) => ({ ...prev, remark: event.target.value }))
+                }
+              />
             </div>
             <div className='space-y-3'>
               <Label>分配订阅（可选）</Label>
@@ -835,6 +898,47 @@ function UsersPage() {
               onClick={() => deleteUsername && deleteMutation.mutate(deleteUsername)}
             >
               {deleteMutation.isPending ? '删除中…' : '确认删除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(remarkEditState)} onOpenChange={(open) => !open && setRemarkEditState(null)}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>编辑备注</DialogTitle>
+          </DialogHeader>
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label>用户名</Label>
+              <Input value={remarkEditState?.username ?? ''} readOnly disabled />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='edit-remark'>备注</Label>
+              <Input
+                id='edit-remark'
+                value={remarkEditState?.remark ?? ''}
+                placeholder='输入备注信息'
+                onChange={(event) =>
+                  setRemarkEditState((prev) =>
+                    prev ? { ...prev, remark: event.target.value } : prev
+                  )
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter className='gap-2'>
+            <DialogClose asChild>
+              <Button type='button' variant='outline' disabled={remarkMutation.isPending}>
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              type='button'
+              disabled={remarkMutation.isPending}
+              onClick={() => remarkEditState && remarkMutation.mutate(remarkEditState)}
+            >
+              {remarkMutation.isPending ? '保存中…' : '确认保存'}
             </Button>
           </DialogFooter>
         </DialogContent>

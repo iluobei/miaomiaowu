@@ -113,7 +113,7 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 		}
 
 		// Create the admin user
-		if err := repo.CreateUser(r.Context(), username, email, nickname, string(hash), storage.RoleAdmin); err != nil {
+		if err := repo.CreateUser(r.Context(), username, email, nickname, string(hash), storage.RoleAdmin, ""); err != nil {
 			if errors.Is(err, storage.ErrUserExists) {
 				writeError(w, http.StatusConflict, errors.New("用户已存在"))
 				return

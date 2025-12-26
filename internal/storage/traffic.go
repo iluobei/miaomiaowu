@@ -485,6 +485,10 @@ CREATE TABLE IF NOT EXISTS users (
 		return err
 	}
 
+	if err := r.ensureUserColumn("remark", "TEXT"); err != nil {
+		return err
+	}
+
 	const historySchema = `
 CREATE TABLE IF NOT EXISTS rule_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2237,6 +2241,7 @@ type User struct {
 	AvatarURL    string
 	Role         string
 	IsActive     bool
+	Remark       string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -2271,7 +2276,7 @@ func (r *TrafficRepository) EnsureUser(ctx context.Context, username, passwordHa
 }
 
 // CreateUser inserts a brand new user with the provided credentials. Returns ErrUserExists if username already present.
-func (r *TrafficRepository) CreateUser(ctx context.Context, username, email, nickname, passwordHash, role string) error {
+func (r *TrafficRepository) CreateUser(ctx context.Context, username, email, nickname, passwordHash, role, remark string) error {
 	if r == nil || r.db == nil {
 		return errors.New("traffic repository not initialized")
 	}
@@ -2280,6 +2285,7 @@ func (r *TrafficRepository) CreateUser(ctx context.Context, username, email, nic
 	email = strings.TrimSpace(email)
 	nickname = strings.TrimSpace(nickname)
 	role = strings.TrimSpace(role)
+	remark = strings.TrimSpace(remark)
 
 	if username == "" {
 		return errors.New("username is required")
@@ -2298,7 +2304,7 @@ func (r *TrafficRepository) CreateUser(ctx context.Context, username, email, nic
 		role = RoleUser
 	}
 
-	_, err := r.db.ExecContext(ctx, `INSERT INTO users (username, password_hash, email, nickname, role, is_active) VALUES (?, ?, ?, ?, ?, 1)`, username, passwordHash, email, nickname, role)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO users (username, password_hash, email, nickname, role, is_active, remark) VALUES (?, ?, ?, ?, ?, 1, ?)`, username, passwordHash, email, nickname, role, remark)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return ErrUserExists
@@ -2350,7 +2356,7 @@ func (r *TrafficRepository) ListUsers(ctx context.Context, limit int) ([]User, e
 		limit = 10
 	}
 
-	rows, err := r.db.QueryContext(ctx, `SELECT username, password_hash, COALESCE(email, ''), COALESCE(nickname, ''), COALESCE(avatar_url, ''), COALESCE(role, ''), is_active, created_at, updated_at FROM users ORDER BY created_at ASC LIMIT ?`, limit)
+	rows, err := r.db.QueryContext(ctx, `SELECT username, password_hash, COALESCE(email, ''), COALESCE(nickname, ''), COALESCE(avatar_url, ''), COALESCE(role, ''), is_active, COALESCE(remark, ''), created_at, updated_at FROM users ORDER BY created_at ASC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -2360,7 +2366,7 @@ func (r *TrafficRepository) ListUsers(ctx context.Context, limit int) ([]User, e
 	for rows.Next() {
 		var user User
 		var active int
-		if err := rows.Scan(&user.Username, &user.PasswordHash, &user.Email, &user.Nickname, &user.AvatarURL, &user.Role, &active, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.Username, &user.PasswordHash, &user.Email, &user.Nickname, &user.AvatarURL, &user.Role, &active, &user.Remark, &user.CreatedAt, &user.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		if user.Nickname == "" {
@@ -2378,6 +2384,25 @@ func (r *TrafficRepository) ListUsers(ctx context.Context, limit int) ([]User, e
 	}
 
 	return users, nil
+}
+
+// UpdateUserRemark updates the remark field for the specified user.
+func (r *TrafficRepository) UpdateUserRemark(ctx context.Context, username, remark string) error {
+	if r == nil || r.db == nil {
+		return errors.New("traffic repository not initialized")
+	}
+
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return errors.New("username is required")
+	}
+
+	const stmt = `UPDATE users SET remark = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`
+	_, err := r.db.ExecContext(ctx, stmt, remark, username)
+	if err != nil {
+		return fmt.Errorf("update user remark: %w", err)
+	}
+	return nil
 }
 
 // UpdateUserPassword updates the stored password hash for the specified user.

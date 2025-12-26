@@ -19,6 +19,7 @@ type userEntry struct {
 	Avatar   string `json:"avatar_url"`
 	Role     string `json:"role"`
 	IsActive bool   `json:"is_active"`
+	Remark   string `json:"remark"`
 }
 
 type userStatusRequest struct {
@@ -41,6 +42,7 @@ type userCreateRequest struct {
 	Email    string `json:"email"`
 	Nickname string `json:"nickname"`
 	Password string `json:"password"`
+	Remark   string `json:"remark"`
 }
 
 type userCreateResponse struct {
@@ -72,6 +74,7 @@ func NewUserListHandler(repo *storage.TrafficRepository) http.Handler {
 				Avatar:   user.AvatarURL,
 				Role:     user.Role,
 				IsActive: user.IsActive,
+				Remark:   user.Remark,
 			})
 		}
 
@@ -223,6 +226,7 @@ func NewUserCreateHandler(repo *storage.TrafficRepository) http.Handler {
 		email := strings.TrimSpace(payload.Email)
 		nickname := strings.TrimSpace(payload.Nickname)
 		password := strings.TrimSpace(payload.Password)
+		remark := strings.TrimSpace(payload.Remark)
 
 		if username == "" {
 			writeError(w, http.StatusBadRequest, errors.New("username is required"))
@@ -250,7 +254,7 @@ func NewUserCreateHandler(repo *storage.TrafficRepository) http.Handler {
 		// New users are created as regular users, not admins
 		role := storage.RoleUser
 
-		if err := repo.CreateUser(r.Context(), username, email, nickname, string(hash), role); err != nil {
+		if err := repo.CreateUser(r.Context(), username, email, nickname, string(hash), role, remark); err != nil {
 			if errors.Is(err, storage.ErrUserExists) {
 				writeError(w, http.StatusConflict, errors.New("用户已存在"))
 				return
@@ -340,4 +344,42 @@ func generateRandomPassword(length int) (string, error) {
 		bytes[i] = alphabet[int(b)%len(alphabet)]
 	}
 	return string(bytes), nil
+}
+
+type userRemarkRequest struct {
+	Username string `json:"username"`
+	Remark   string `json:"remark"`
+}
+
+func NewUserRemarkHandler(repo *storage.TrafficRepository) http.Handler {
+	if repo == nil {
+		panic("user remark handler requires repository")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("only POST is supported"))
+			return
+		}
+
+		var payload userRemarkRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		username := strings.TrimSpace(payload.Username)
+		if username == "" {
+			writeError(w, http.StatusBadRequest, errors.New("username is required"))
+			return
+		}
+
+		if err := repo.UpdateUserRemark(r.Context(), username, payload.Remark); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+	})
 }
