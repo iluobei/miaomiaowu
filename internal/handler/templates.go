@@ -47,7 +47,6 @@ type convertRulesResponse struct {
 	Content string `json:"content"`
 }
 
-
 // NewTemplatesHandler handles template list and create operations
 func NewTemplatesHandler(repo *storage.TrafficRepository) http.Handler {
 	if repo == nil {
@@ -160,6 +159,15 @@ func NewTemplateConvertHandler() http.Handler {
 		// Parse ACL configuration
 		rulesets, proxyGroups := substore.ParseACLConfig(aclContent)
 
+		// 处理req.ProxyNames里的特殊字符
+		// 对包含特殊字符的节点名称加上引号，避免 YAML 解析错误
+		for i, name := range req.ProxyNames {
+			needsQuote := strings.ContainsAny(name, ":#[],") || strings.HasPrefix(name, "@")
+			if needsQuote {
+				req.ProxyNames[i] = `"` + name + `"`
+			}
+		}
+
 		// Generate proxy groups and rules based on category
 		var finalContent string
 		if req.Category == "surge" {
@@ -184,7 +192,6 @@ func NewTemplateConvertHandler() http.Handler {
 		_ = json.NewEncoder(w).Encode(convertRulesResponse{Content: finalContent})
 	})
 }
-
 
 func handleListTemplates(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository) {
 	templates, err := repo.ListTemplates(r.Context())
@@ -388,4 +395,3 @@ func NewTemplateFetchSourceHandler() http.Handler {
 		_ = json.NewEncoder(w).Encode(fetchSourceResponse{Content: content})
 	})
 }
-
