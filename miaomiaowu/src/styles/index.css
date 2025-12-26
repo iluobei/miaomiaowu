@@ -31,11 +31,10 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
-  html {
-    @apply overflow-x-hidden;
-  }
   body {
-    @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full;
+    /* 注意: overflow-x-hidden 必须在 body 上而不是 html 上，否则会影响 dnd-kit DragOverlay 定位 */
+    /* 参考: https://github.com/clauderic/dnd-kit/issues/378 */
+    @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full overflow-x-hidden;
     font-family: var(--font-sans);
     background-image:
       radial-gradient(1100px circle at 5% -10%, rgba(217, 119, 87, 0.2), transparent 60%),

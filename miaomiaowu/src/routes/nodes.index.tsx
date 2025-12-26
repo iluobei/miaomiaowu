@@ -31,6 +31,7 @@ import ExchangeIcon from '@/assets/icons/exchange.svg'
 import URI_Producer from '@/lib/substore/producers/uri'
 import { countryCodeToFlag, hasEmojiPrefix, getGeoIPInfo } from '@/lib/country-flag'
 import { Twemoji } from '@/components/twemoji'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   DndContext,
   closestCenter,
@@ -48,7 +49,6 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -186,9 +186,11 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onC
   // 检查是否是批量拖动中的节点（但不是被直接拖动的那个）
   const isBatchDragging = dbId && batchDraggingIds.size > 0 && batchDraggingIds.has(dbId) && !isDragging
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
   }
 
   return (
@@ -261,6 +263,11 @@ function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; prot
 function NodesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
+
+  // 视口宽度判断 - 用于条件渲染 SortableContext，避免重复注册导致拖动偏移
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const isTablet = useMediaQuery('(min-width: 768px)')
+
   const [input, setInput] = useState('')
   const [subscriptionUrl, setSubscriptionUrl] = useState('')
   const [userAgent, setUserAgent] = useState<string>('clash.meta')
@@ -372,7 +379,7 @@ function NodesPage() {
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
+      activationConstraint: { delay: 250, tolerance: 5 },
     })
   )
 
@@ -1537,6 +1544,10 @@ function NodesPage() {
 
   // 拖拽开始处理：检测是否批量拖动
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    // 锁定 body 滚动
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+
     const { active } = event
     setActiveId(active.id as string)
 
@@ -1553,6 +1564,10 @@ function NodesPage() {
 
   // 拖拽结束处理（支持批量拖动）
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    // 恢复 body 滚动
+    document.body.style.overflow = ''
+    document.body.style.touchAction = ''
+
     const { active, over } = event
 
     // 清除拖动状态（无论结果如何都要清除）
@@ -2378,31 +2393,29 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   )}
                 </div>
 
-                {/* 平板端表格视图 (768-1024px) - 和桌面一致，但服务器地址显示在节点名称下方 */}
-                <div className='hidden md:block lg:hidden rounded-md border overflow-auto'>
-                  <Table className='w-full'>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead style={{ width: '40px' }}>
-                          <Checkbox
-                            checked={
-                              filteredNodes.filter(n => n.isSaved && n.dbId).length > 0 &&
-                              filteredNodes.filter(n => n.isSaved && n.dbId).every(n => selectedNodeIds.has(n.dbId!))
-                            }
-                            onCheckedChange={(checked) => {
-                              const savedNodes = filteredNodes.filter(n => n.isSaved && n.dbId)
-                              if (checked) {
-                                setSelectedNodeIds(new Set(savedNodes.map(n => n.dbId!)))
-                              } else {
-                                setSelectedNodeIds(new Set())
-                              }
-                            }}
-                          />
-                        </TableHead>
-                        <TableHead style={{ width: '60px' }}>协议</TableHead>
-                        <TableHead>节点名称</TableHead>
-                        <TableHead style={{ width: '100px' }}>标签</TableHead>
-                        <TableHead style={{ width: '70px' }} className='text-center'>配置</TableHead>
+                {/* 平板端和桌面端共享 DndContext */}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  {/* 平板端表格视图 (768-1024px) - 和桌面一致，但服务器地址显示在节点名称下方 */}
+                  {isTablet && !isDesktop && (
+                  <div className='rounded-md border'>
+                    <SortableContext
+                      items={filteredNodes.map(n => n.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                    <Table className='w-full'>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead style={{ width: '36px' }}></TableHead>
+                          <TableHead style={{ width: '60px' }}>协议</TableHead>
+                          <TableHead>节点名称</TableHead>
+                          <TableHead style={{ width: '100px' }}>标签</TableHead>
+                          <TableHead style={{ width: '70px' }} className='text-center'>配置</TableHead>
                         <TableHead style={{ width: '70px' }} className='text-center'>操作</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2415,18 +2428,16 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         </TableRow>
                       ) : (
                         filteredNodes.map(node => (
-                          <TableRow
+                          <SortableTableRow
                             key={node.id}
-                            className={node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-muted/50' : 'cursor-pointer hover:bg-muted/30'}
+                            id={node.id}
+                            isSaved={node.isSaved}
+                            dbId={node.dbId}
+                            batchDraggingIds={batchDraggingIds}
+                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
                             onClick={(e) => {
                               const target = e.target as HTMLElement
-                              if (
-                                target.closest('button') ||
-                                target.closest('input') ||
-                                target.closest('[role="checkbox"]') ||
-                                target.closest('[role="menuitem"]') ||
-                                target.closest('[data-radix-collection-item]')
-                              ) {
+                              if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
                                 return
                               }
                               if (node.isSaved && node.dbId) {
@@ -2440,20 +2451,9 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                               }
                             }}
                           >
-                            <TableCell>
-                              {node.isSaved && node.dbId && (
-                                <Checkbox
-                                  checked={selectedNodeIds.has(node.dbId)}
-                                  onCheckedChange={(checked) => {
-                                    const newSet = new Set(selectedNodeIds)
-                                    if (checked) {
-                                      newSet.add(node.dbId!)
-                                    } else {
-                                      newSet.delete(node.dbId!)
-                                    }
-                                    setSelectedNodeIds(newSet)
-                                  }}
-                                />
+                            <TableCell className='w-9 px-2'>
+                              {node.isSaved && (
+                                <DragHandle id={node.id} />
                               )}
                             </TableCell>
                             <TableCell>
@@ -2666,22 +2666,18 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 </AlertDialogContent>
                               </AlertDialog>
                             </TableCell>
-                          </TableRow>
+                          </SortableTableRow>
                         ))
                       )}
                     </TableBody>
                   </Table>
+                  </SortableContext>
                 </div>
+                  )}
 
-                {/* 桌面端表格视图 (>=1024px) */}
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={handleDragCancel}
-                >
-                  <div className='hidden lg:block rounded-md border overflow-auto'>
+                  {/* 桌面端表格视图 (>=1024px) */}
+                  {isDesktop && (
+                  <div className='rounded-md border'>
                     <SortableContext
                       items={filteredNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
@@ -3151,6 +3147,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                       </Table>
                     </SortableContext>
                   </div>
+                  )}
 
                   {createPortal(
                     <DragOverlay dropAnimation={null}>
