@@ -18,7 +18,7 @@ fi
 echo "更新版本号: $VERSION"
 
 # 更新 internal/version/version.go
-sed -i "s/const version = \".*\"/const version = \"$VERSION\"/" "${PROJECT_ROOT}/internal/version/version.go"
+sed -i "s/const Version = \".*\"/const Version = \"$VERSION\"/" "${PROJECT_ROOT}/internal/version/version.go"
 echo "✓ 更新成功 internal/version/version.go"
 
 # 更新 install.sh

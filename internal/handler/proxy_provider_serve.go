@@ -120,8 +120,8 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 		token := r.URL.Query().Get("token")
 		if token == "" {
 			token = r.Header.Get("Authorization")
-			if strings.HasPrefix(token, "Bearer ") {
-				token = strings.TrimPrefix(token, "Bearer ")
+			if after, ok := strings.CutPrefix(token, "Bearer "); ok {
+				token = after
 			}
 		}
 
