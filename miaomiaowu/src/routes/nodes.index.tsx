@@ -145,7 +145,7 @@ function reorderProxyConfig(config: ClashProxy): ClashProxy {
 }
 
 // 拖拽把手组件
-function DragHandle({ id }: { id: string }) {
+function DragHandle({ id, size = 'default' }: { id: string; size?: 'default' | 'large' }) {
   const { attributes, listeners } = useSortable({ id })
 
   return (
@@ -153,9 +153,17 @@ function DragHandle({ id }: { id: string }) {
       {...attributes}
       {...listeners}
       data-drag-handle
-      className='cursor-grab active:cursor-grabbing p-1 touch-none'
+      className={cn(
+        'cursor-grab active:cursor-grabbing touch-none rounded-md',
+        size === 'large'
+          ? 'p-2 hover:bg-accent/80'
+          : 'p-1'
+      )}
     >
-      <GripVertical className='h-4 w-4 text-muted-foreground' />
+      <GripVertical className={cn(
+        'text-muted-foreground',
+        size === 'large' ? 'h-5 w-5' : 'h-4 w-4'
+      )} />
     </div>
   )
 }
@@ -210,6 +218,58 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onC
     >
       {children}
     </TableRow>
+  )
+}
+
+// 可拖拽排序的移动端卡片组件
+interface SortableCardProps {
+  id: string
+  isSaved: boolean
+  dbId?: number
+  batchDraggingIds: Set<number>
+  isSelected?: boolean
+  onClick?: (e: React.MouseEvent) => void
+  children: React.ReactNode
+}
+
+function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableCardProps) {
+  const {
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id,
+    disabled: !isSaved,
+    animateLayoutChanges: () => false,
+  })
+
+  const isBatchDragging = dbId && batchDraggingIds.size > 0 && batchDraggingIds.has(dbId) && !isDragging
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      onClick={onClick}
+      className={cn(
+        'overflow-hidden cursor-pointer',
+        isDragging
+          ? 'opacity-0'
+          : isBatchDragging
+            ? 'opacity-30 bg-primary/10'
+            : '',
+        isSelected && !isDragging && !isBatchDragging && 'bg-accent'
+      )}
+    >
+      {children}
+    </Card>
   )
 }
 
@@ -2114,50 +2174,69 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                 </div>
 
                 {/* 移动端卡片视图 (<768px) */}
-                <div className='md:hidden space-y-3'>
-                  {filteredNodes.length === 0 ? (
-                    <Card>
-                      <CardContent className='text-center text-muted-foreground py-8'>
-                        没有找到匹配的节点
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    filteredNodes.map(node => (
-                      <Card
-                        key={node.id}
-                        className={`overflow-hidden cursor-pointer ${node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) ? 'bg-accent' : ''}`}
-                        onClick={() => {
-                          if (node.isSaved && node.dbId) {
-                            const newSet = new Set(selectedNodeIds)
-                            if (selectedNodeIds.has(node.dbId)) {
-                              newSet.delete(node.dbId)
-                            } else {
-                              newSet.add(node.dbId)
-                            }
-                            setSelectedNodeIds(newSet)
-                          }
-                        }}
-                      >
-                        <CardContent className='p-3 space-y-2'>
-                          {/* 头部：协议、节点名称、已保存标签 */}
-                          <div className='flex items-start justify-between gap-2'>
-                            <div className='flex-1 min-w-0'>
-                              <div className='flex items-center gap-2 mb-1'>
-                                {node.isSaved && node.dbId && (
-                                  <Checkbox
-                                    className='hidden sm:flex'
-                                    checked={selectedNodeIds.has(node.dbId)}
-                                    onCheckedChange={(checked) => {
-                                      const newSet = new Set(selectedNodeIds)
-                                      if (checked) {
-                                        newSet.add(node.dbId!)
-                                      } else {
-                                        newSet.delete(node.dbId!)
-                                      }
-                                      setSelectedNodeIds(newSet)
-                                    }}
-                                  />
-                                )}
+                {!isTablet && (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  <SortableContext
+                    items={filteredNodes.map(n => n.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className='space-y-3'>
+                      {filteredNodes.length === 0 ? (
+                        <Card>
+                          <CardContent className='text-center text-muted-foreground py-8'>
+                            没有找到匹配的节点
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        filteredNodes.map(node => (
+                          <SortableCard
+                            key={node.id}
+                            id={node.id}
+                            isSaved={node.isSaved}
+                            dbId={node.dbId}
+                            batchDraggingIds={batchDraggingIds}
+                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
+                            onClick={() => {
+                              if (node.isSaved && node.dbId) {
+                                const newSet = new Set(selectedNodeIds)
+                                if (selectedNodeIds.has(node.dbId)) {
+                                  newSet.delete(node.dbId)
+                                } else {
+                                  newSet.add(node.dbId)
+                                }
+                                setSelectedNodeIds(newSet)
+                              }
+                            }}
+                          >
+                            <CardContent className='p-3 space-y-2'>
+                              {/* 头部：协议、节点名称、已保存标签 */}
+                              <div className='flex items-start justify-between gap-2'>
+                                <div className='flex-1 min-w-0'>
+                                  <div className='flex items-center gap-2 mb-1'>
+                                    {node.isSaved && (
+                                      <DragHandle id={node.id} size='large' />
+                                    )}
+                                    {node.isSaved && node.dbId && (
+                                      <Checkbox
+                                        className='hidden sm:flex'
+                                        checked={selectedNodeIds.has(node.dbId)}
+                                        onCheckedChange={(checked) => {
+                                          const newSet = new Set(selectedNodeIds)
+                                          if (checked) {
+                                            newSet.add(node.dbId!)
+                                          } else {
+                                            newSet.delete(node.dbId!)
+                                          }
+                                          setSelectedNodeIds(newSet)
+                                        }}
+                                      />
+                                    )}
                                 {node.parsed ? (
                                   <Badge
                                     variant='outline'
@@ -2388,10 +2467,21 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             </AlertDialog>
                           </div>
                         </CardContent>
-                      </Card>
+                      </SortableCard>
                     ))
                   )}
-                </div>
+                    </div>
+                  </SortableContext>
+                  {createPortal(
+                    <DragOverlay dropAnimation={null}>
+                      {activeId && (
+                        <DragOverlayContent nodes={dragOverlayNodes} protocolColors={PROTOCOL_COLORS} />
+                      )}
+                    </DragOverlay>,
+                    document.body
+                  )}
+                </DndContext>
+                )}
 
                 {/* 平板端和桌面端共享 DndContext */}
                 <DndContext
