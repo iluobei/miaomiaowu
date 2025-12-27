@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
+	"miaomiaowu/internal/util"
 
 	"gopkg.in/yaml.v3"
 )
@@ -871,8 +873,12 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 
 		log.Printf("[代理集合同步] 代理集合 %s 获取到 %d 个节点", config.Name, len(proxiesRaw))
 
-		// 为节点添加前缀
-		prefix := fmt.Sprintf("[%s] ", config.Name)
+		// 为节点添加前缀（只使用名称前缀，即第一个 - 之前的部分）
+		namePrefix := config.Name
+		if idx := strings.Index(config.Name, "-"); idx > 0 {
+			namePrefix = config.Name[:idx]
+		}
+		prefix := fmt.Sprintf("〖%s〗", namePrefix)
 		nodeNames := make([]string, 0, len(proxiesRaw))
 		for _, proxy := range proxiesRaw {
 			if proxyMap, ok := proxy.(map[string]any); ok {
@@ -897,6 +903,7 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 }
 
 // updateYAMLFileWithProxyProviderNodes 更新单个 YAML 文件，将代理集合节点添加到 proxies 和 proxy-groups
+// 使用 yaml.Node 保持字段顺序，使用 RemoveUnicodeEscapeQuotes 处理 emoji 编码
 func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, prefix string, proxies []any, nodeNames []string) error {
 	filePath := fmt.Sprintf("%s/%s", subscribeDir, filename)
 
@@ -906,43 +913,91 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		return fmt.Errorf("read file: %w", err)
 	}
 
-	var yamlContent map[string]any
-	if err := yaml.Unmarshal(content, &yamlContent); err != nil {
+	// 使用 yaml.Node 解析以保持字段顺序
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(content, &rootNode); err != nil {
 		return fmt.Errorf("parse yaml: %w", err)
+	}
+
+	// 获取文档节点
+	if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
+		return nil
+	}
+	docContent := rootNode.Content[0]
+	if docContent.Kind != yaml.MappingNode {
+		return nil
 	}
 
 	modified := false
 
-	// 检查 proxy-groups 中是否使用了此代理集合
-	proxyGroups, ok := yamlContent["proxy-groups"].([]any)
-	if !ok {
+	// 查找 proxy-groups 节点
+	var proxyGroupsNode *yaml.Node
+	var proxiesNode *yaml.Node
+	var proxyProvidersNode *yaml.Node
+	var proxyProvidersKeyIndex int = -1
+
+	for i := 0; i < len(docContent.Content)-1; i += 2 {
+		keyNode := docContent.Content[i]
+		valueNode := docContent.Content[i+1]
+		if keyNode.Kind == yaml.ScalarNode {
+			switch keyNode.Value {
+			case "proxy-groups":
+				proxyGroupsNode = valueNode
+			case "proxies":
+				proxiesNode = valueNode
+			case "proxy-providers":
+				proxyProvidersNode = valueNode
+				proxyProvidersKeyIndex = i
+			}
+		}
+	}
+
+	if proxyGroupsNode == nil || proxyGroupsNode.Kind != yaml.SequenceNode {
 		return nil // 没有 proxy-groups，跳过
 	}
 
-	for _, group := range proxyGroups {
-		groupMap, ok := group.(map[string]any)
-		if !ok {
+	// 遍历 proxy-groups，检查是否使用了此代理集合
+	for _, groupNode := range proxyGroupsNode.Content {
+		if groupNode.Kind != yaml.MappingNode {
 			continue
 		}
 
-		useList, ok := groupMap["use"].([]any)
-		if !ok {
+		// 查找 use 和 proxies 字段
+		var useNode *yaml.Node
+		var useKeyIndex int = -1
+		var groupProxiesNode *yaml.Node
+		var groupName string
+
+		for i := 0; i < len(groupNode.Content)-1; i += 2 {
+			keyNode := groupNode.Content[i]
+			valueNode := groupNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode {
+				switch keyNode.Value {
+				case "use":
+					useNode = valueNode
+					useKeyIndex = i
+				case "proxies":
+					groupProxiesNode = valueNode
+				case "name":
+					if valueNode.Kind == yaml.ScalarNode {
+						groupName = valueNode.Value
+					}
+				}
+			}
+		}
+
+		if useNode == nil || useNode.Kind != yaml.SequenceNode {
 			continue
 		}
 
 		// 检查是否包含此代理集合
-		newUseList := make([]any, 0)
 		foundProvider := false
-		for _, use := range useList {
-			useStr, ok := use.(string)
-			if !ok {
-				newUseList = append(newUseList, use)
-				continue
-			}
-			if useStr == providerName {
+		newUseContent := make([]*yaml.Node, 0)
+		for _, useItem := range useNode.Content {
+			if useItem.Kind == yaml.ScalarNode && useItem.Value == providerName {
 				foundProvider = true
 			} else {
-				newUseList = append(newUseList, use)
+				newUseContent = append(newUseContent, useItem)
 			}
 		}
 
@@ -951,38 +1006,38 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		}
 
 		modified = true
-		groupName := ""
-		if name, ok := groupMap["name"].(string); ok {
-			groupName = name
-		}
 		log.Printf("[代理集合同步] 在文件 %s 的代理组 %s 中找到代理集合 %s 的引用", filename, groupName, providerName)
 
-		// 获取当前代理组的 proxies
-		existingProxies, _ := groupMap["proxies"].([]any)
+		// 确保 proxies 节点存在
+		if groupProxiesNode == nil {
+			groupProxiesNode = &yaml.Node{Kind: yaml.SequenceNode, Content: make([]*yaml.Node, 0)}
+			groupNode.Content = append(groupNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "proxies"},
+				groupProxiesNode,
+			)
+		}
 
 		// 移除此代理集合的旧节点（以 prefix 开头的）
-		newProxies := make([]any, 0)
-		for _, p := range existingProxies {
-			if pStr, ok := p.(string); ok {
-				if !strings.HasPrefix(pStr, prefix) {
-					newProxies = append(newProxies, p)
-				}
-			} else {
-				newProxies = append(newProxies, p)
+		newProxiesContent := make([]*yaml.Node, 0)
+		for _, p := range groupProxiesNode.Content {
+			if p.Kind == yaml.ScalarNode && strings.HasPrefix(p.Value, prefix) {
+				continue
 			}
+			newProxiesContent = append(newProxiesContent, p)
 		}
 
 		// 添加新节点名称到代理组
 		for _, nodeName := range nodeNames {
-			newProxies = append(newProxies, nodeName)
+			newProxiesContent = append(newProxiesContent, &yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
 		}
-		groupMap["proxies"] = newProxies
+		groupProxiesNode.Content = newProxiesContent
 
 		// 更新 use 字段（移除此代理集合）
-		if len(newUseList) == 0 {
-			delete(groupMap, "use")
+		if len(newUseContent) == 0 && useKeyIndex >= 0 {
+			// 删除 use 字段
+			groupNode.Content = append(groupNode.Content[:useKeyIndex], groupNode.Content[useKeyIndex+2:]...)
 		} else {
-			groupMap["use"] = newUseList
+			useNode.Content = newUseContent
 		}
 
 		log.Printf("[代理集合同步] 代理组 %s 更新完成: 添加了 %d 个节点", groupName, len(nodeNames))
@@ -992,45 +1047,71 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		return nil // 没有修改，不需要保存
 	}
 
-	// 将节点添加到 proxies 列表
-	existingProxies, _ := yamlContent["proxies"].([]any)
-	if existingProxies == nil {
-		existingProxies = make([]any, 0)
+	// 确保 proxies 节点存在
+	if proxiesNode == nil {
+		proxiesNode = &yaml.Node{Kind: yaml.SequenceNode, Content: make([]*yaml.Node, 0)}
+		// 在文档开头添加 proxies
+		docContent.Content = append([]*yaml.Node{
+			{Kind: yaml.ScalarNode, Value: "proxies"},
+			proxiesNode,
+		}, docContent.Content...)
 	}
 
-	// 先移除旧的代理集合节点
-	filteredProxies := make([]any, 0)
-	for _, p := range existingProxies {
-		if proxyMap, ok := p.(map[string]any); ok {
-			if name, ok := proxyMap["name"].(string); ok {
-				if !strings.HasPrefix(name, prefix) {
-					filteredProxies = append(filteredProxies, p)
-				}
+	// 移除旧的代理集合节点（以 prefix 开头的）
+	newProxiesContent := make([]*yaml.Node, 0)
+	for _, p := range proxiesNode.Content {
+		if p.Kind == yaml.MappingNode {
+			name := util.GetNodeFieldValue(p, "name")
+			if strings.HasPrefix(name, prefix) {
+				continue
 			}
 		}
+		newProxiesContent = append(newProxiesContent, p)
 	}
 
-	// 添加新节点
+	// 添加新节点（使用 util.ReorderProxyFieldsToNode 保持字段顺序）
 	for _, proxy := range proxies {
-		filteredProxies = append(filteredProxies, proxy)
+		if proxyMap, ok := proxy.(map[string]any); ok {
+			proxyNode := util.ReorderProxyFieldsToNode(proxyMap)
+			newProxiesContent = append(newProxiesContent, proxyNode)
+		}
 	}
-	yamlContent["proxies"] = filteredProxies
+	proxiesNode.Content = newProxiesContent
 
 	// 清理 proxy-providers（如果不再被使用）
-	if proxyProviders, ok := yamlContent["proxy-providers"].(map[string]any); ok {
-		delete(proxyProviders, providerName)
-		if len(proxyProviders) == 0 {
-			delete(yamlContent, "proxy-providers")
+	if proxyProvidersNode != nil && proxyProvidersNode.Kind == yaml.MappingNode && proxyProvidersKeyIndex >= 0 {
+		// 查找并删除对应的 provider
+		newProvidersContent := make([]*yaml.Node, 0)
+		for i := 0; i < len(proxyProvidersNode.Content)-1; i += 2 {
+			keyNode := proxyProvidersNode.Content[i]
+			valueNode := proxyProvidersNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == providerName {
+				continue // 跳过此 provider
+			}
+			newProvidersContent = append(newProvidersContent, keyNode, valueNode)
+		}
+
+		if len(newProvidersContent) == 0 {
+			// 删除整个 proxy-providers
+			docContent.Content = append(docContent.Content[:proxyProvidersKeyIndex], docContent.Content[proxyProvidersKeyIndex+2:]...)
+		} else {
+			proxyProvidersNode.Content = newProvidersContent
 		}
 	}
 
-	// 保存更新后的 YAML
-	newContent, err := yaml.Marshal(yamlContent)
-	if err != nil {
-		return fmt.Errorf("marshal yaml: %w", err)
+	// 编码 YAML，使用 2 空格缩进
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&rootNode); err != nil {
+		return fmt.Errorf("encode yaml: %w", err)
 	}
+	encoder.Close()
 
-	if err := os.WriteFile(filePath, newContent, 0644); err != nil {
+	// 处理 unicode 转义和数字引号
+	result := RemoveUnicodeEscapeQuotes(buf.String())
+
+	if err := os.WriteFile(filePath, []byte(result), 0644); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 

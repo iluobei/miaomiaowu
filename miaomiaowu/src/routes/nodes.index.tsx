@@ -1408,12 +1408,9 @@ function NodesPage() {
 
       // 保存外部订阅链接
       try {
-        // 从 URL 中提取名称（使用域名或者最后一部分）
-        const urlObj = new URL(variables.url)
-        const name = urlObj.hostname || '外部订阅'
-
+        // 使用 defaultTag（优先从 Content-Disposition 提取，其次使用域名）
         await api.post('/api/user/external-subscriptions', {
-          name: name,
+          name: defaultTag,
           url: variables.url,
           user_agent: variables.userAgent, // 保存 User-Agent
         })

@@ -576,7 +576,12 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		log.Printf("[Subscription] Setting subscription-userinfo header: %s", headerValue)
 	}
 	w.Header().Set("profile-update-interval", "24")
-	w.Header().Set("content-disposition", "attachment;filename*=UTF-8''"+attachmentName)
+	// 只有非浏览器访问时才添加 content-disposition 头（避免浏览器直接下载）
+	userAgent := r.Header.Get("User-Agent")
+	isBrowser := strings.Contains(userAgent, "Mozilla") || strings.Contains(userAgent, "Chrome") || strings.Contains(userAgent, "Safari") || strings.Contains(userAgent, "Edge")
+	if !isBrowser {
+		w.Header().Set("content-disposition", "attachment;filename*=UTF-8''"+attachmentName)
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
