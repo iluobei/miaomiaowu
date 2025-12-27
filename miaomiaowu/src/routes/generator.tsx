@@ -63,6 +63,21 @@ import { extractRegionFromNodeName, findRegionGroupName } from '@/lib/country-fl
 import { ACL4SSR_PRESETS, Aethersailor_PRESETS, ALL_TEMPLATE_PRESETS, type ACL4SSRPreset } from '@/lib/template-presets'
 import yaml from 'js-yaml'
 
+// 代理集合配置类型
+interface ProxyProviderConfig {
+  id: number
+  name: string
+  type: string
+  interval: number
+  proxy: string
+  health_check_enabled: boolean
+  health_check_url: string
+  health_check_interval: number
+  health_check_timeout: number
+  health_check_lazy: boolean
+  process_mode: string
+}
+
 // YAML dump 配置：使用双引号风格
 const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
   lineWidth: -1,
@@ -318,11 +333,22 @@ function SubscriptionGeneratorPage() {
     queryKey: ['proxy-provider-configs'],
     queryFn: async () => {
       const response = await api.get('/api/user/proxy-provider-configs')
-      return response.data as Array<{ id: number; name: string }>
+      return response.data as ProxyProviderConfig[]
     },
     enabled: Boolean(auth.accessToken) && enableProxyProvider,
   })
   const proxyProviderConfigs = proxyProviderConfigsData ?? []
+
+  // 获取用户订阅 token（用于代理集合 URL）
+  const { data: userTokenData } = useQuery({
+    queryKey: ['user-token'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/token')
+      return response.data as { token: string }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+  const userToken = userTokenData?.token ?? ''
 
   const savedNodes = nodesData?.nodes ?? []
   const enabledNodes = savedNodes.filter(n => n.enabled)
@@ -738,6 +764,7 @@ function SubscriptionGeneratorPage() {
     name: string
     type: string
     proxies: string[]
+    use?: string[]  // 节点集合引用
     url?: string
     interval?: number
     lazy?: boolean
@@ -1040,11 +1067,53 @@ function SubscriptionGeneratorPage() {
       // 解析当前配置
       const parsedConfig = yaml.load(clashConfig) as any
 
-      // 更新代理组，过滤掉 undefined 值
-      parsedConfig['proxy-groups'] = proxyGroups.map(group => ({
-        ...group,
-        proxies: group.proxies.filter((p): p is string => p !== undefined)
-      }))
+      // 更新代理组，过滤掉 undefined 值，保留 use 字段
+      parsedConfig['proxy-groups'] = proxyGroups.map(group => {
+        const groupConfig: any = {
+          ...group,
+          proxies: group.proxies.filter((p): p is string => p !== undefined)
+        }
+        // 保留 use 字段（节点集合引用）
+        if (group.use && group.use.length > 0) {
+          groupConfig.use = group.use
+        }
+        return groupConfig
+      })
+
+      // 收集所有被使用的 provider 名称
+      const usedProviders = new Set<string>()
+      proxyGroups.forEach(group => {
+        if (group.use) {
+          group.use.forEach(provider => usedProviders.add(provider))
+        }
+      })
+
+      // 如果有使用 provider，添加 proxy-providers 配置
+      if (usedProviders.size > 0 && proxyProviderConfigs.length > 0) {
+        const providers: Record<string, any> = {}
+        proxyProviderConfigs.forEach(config => {
+          if (usedProviders.has(config.name)) {
+            const baseUrl = window.location.origin
+            const providerConfig: Record<string, any> = {
+              type: config.type || 'http',
+              path: `./proxy_providers/${config.name}.yaml`,
+              url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
+              interval: config.interval || 3600,
+            }
+            if (config.health_check_enabled) {
+              providerConfig['health-check'] = {
+                enable: true,
+                url: config.health_check_url || 'http://www.gstatic.com/generate_204',
+                interval: config.health_check_interval || 300,
+              }
+            }
+            providers[config.name] = providerConfig
+          }
+        })
+        if (Object.keys(providers).length > 0) {
+          parsedConfig['proxy-providers'] = providers
+        }
+      }
 
       // 收集所有代理组中使用的节点名称
       const usedNodeNames = new Set<string>()

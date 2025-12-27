@@ -272,7 +272,7 @@ function SubscribeFilesPage() {
   // 编辑节点Dialog状态
   const [editNodesDialogOpen, setEditNodesDialogOpen] = useState(false)
   const [editingNodesFile, setEditingNodesFile] = useState<SubscribeFile | null>(null)
-  const [proxyGroups, setProxyGroups] = useState<Array<{ name: string; type: string; proxies: string[] }>>([])
+  const [proxyGroups, setProxyGroups] = useState<Array<{ name: string; type: string; proxies: string[]; use?: string[] }>>([])
   const [showAllNodes, setShowAllNodes] = useState(true)
 
   // 编辑器状态
@@ -1474,13 +1474,54 @@ function SubscribeFilesPage() {
         })
       }
 
-      // 更新代理组
+      // 更新代理组，保留 use 字段
       if (parsed && parsed['proxy-groups']) {
-        // 保留代理组的所有原始属性，只更新 proxies
-        parsed['proxy-groups'] = proxyGroups.map(group => ({
-          ...group, // 保留所有原始属性（如 url, interval, strategy 等）
-          proxies: group.proxies, // 更新 proxies
-        }))
+        parsed['proxy-groups'] = proxyGroups.map(group => {
+          const groupConfig: any = {
+            ...group, // 保留所有原始属性（如 url, interval, strategy 等）
+            proxies: group.proxies, // 更新 proxies
+          }
+          // 保留 use 字段（节点集合引用）
+          if (group.use && group.use.length > 0) {
+            groupConfig.use = group.use
+          }
+          return groupConfig
+        })
+      }
+
+      // 收集所有被使用的 provider 名称
+      const usedProviders = new Set<string>()
+      proxyGroups.forEach(group => {
+        if (group.use) {
+          group.use.forEach(provider => usedProviders.add(provider))
+        }
+      })
+
+      // 如果有使用 provider，添加 proxy-providers 配置
+      if (usedProviders.size > 0 && proxyProviderConfigs.length > 0) {
+        const providers: Record<string, any> = {}
+        proxyProviderConfigs.forEach(config => {
+          if (usedProviders.has(config.name)) {
+            const baseUrl = window.location.origin
+            const providerConfig: Record<string, any> = {
+              type: config.type || 'http',
+              path: `./proxy_providers/${config.name}.yaml`,
+              url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
+              interval: config.interval || 3600,
+            }
+            if (config.health_check_enabled) {
+              providerConfig['health-check'] = {
+                enable: true,
+                url: config.health_check_url || 'http://www.gstatic.com/generate_204',
+                interval: config.health_check_interval || 300,
+              }
+            }
+            providers[config.name] = providerConfig
+          }
+        })
+        if (Object.keys(providers).length > 0) {
+          parsed['proxy-providers'] = providers
+        }
       }
 
       // 转换回YAML

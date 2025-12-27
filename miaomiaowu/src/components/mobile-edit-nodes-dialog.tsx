@@ -69,7 +69,7 @@ interface MobileEditNodesDialogProps {
   onRemoveGroup: (groupName: string) => void
   onRenameGroup: (oldName: string, newName: string) => void
   showSpecialNodesAtBottom?: boolean  // 是否在底部显示特殊节点
-  proxyProviderConfigs?: Array<{ id: number; name: string }>  // 节点集合配置列表
+  proxyProviderConfigs?: Array<{ id: number; name: string }>  // 代理集合配置列表
 }
 
 // 可排序节点组件
@@ -277,7 +277,7 @@ export function MobileEditNodesDialog({
     return group?.proxies.includes(nodeName) || false
   }
 
-  // 检查节点集合是否在当前编辑的组中
+  // 检查代理集合是否在当前编辑的组中
   const isProviderInCurrentGroup = (providerName: string) => {
     if (!currentEditingGroup) return false
     const group = proxyGroups.find(g => g.name === currentEditingGroup)
@@ -306,7 +306,7 @@ export function MobileEditNodesDialog({
     onProxyGroupsChange(newGroups)
   }
 
-  // 切换节点集合选中状态
+  // 切换代理集合选中状态
   const toggleProviderInGroup = (providerName: string) => {
     if (!currentEditingGroup) return
 
@@ -319,13 +319,13 @@ export function MobileEditNodesDialog({
     const providerIndex = useArray.indexOf(providerName)
 
     if (providerIndex > -1) {
-      // 移除节点集合
+      // 移除代理集合
       group.use = useArray.filter((_, idx) => idx !== providerIndex)
       if (group.use.length === 0) {
         delete group.use
       }
     } else {
-      // 添加节点集合
+      // 添加代理集合
       group.use = [...useArray, providerName]
     }
 
@@ -584,7 +584,7 @@ export function MobileEditNodesDialog({
                                 ))}
                               </SortableContext>
                             </DndContext>
-                            {/* 节点集合（use）显示 */}
+                            {/* 代理集合（use）显示 */}
                             {(group.use || []).map((providerName, idx) => (
                               <div
                                 key={`use-${idx}`}
@@ -724,11 +724,11 @@ export function MobileEditNodesDialog({
                       )
                     })}
 
-                    {/* 节点集合区块 */}
+                    {/* 代理集合区块 */}
                     {proxyProviderConfigs.length > 0 && (
                       <>
                         <div className='pt-3 pb-1 border-t mt-3'>
-                          <span className='text-xs text-purple-600 dark:text-purple-400 font-medium'>📦 节点集合</span>
+                          <span className='text-xs text-purple-600 dark:text-purple-400 font-medium'>📦 代理集合</span>
                         </div>
                         {proxyProviderConfigs.map((config) => {
                           const isSelected = isProviderInCurrentGroup(config.name)

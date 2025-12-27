@@ -131,7 +131,7 @@ export function EditNodesDialog({
 
   // 节点筛选状态
   const [nodeNameFilter, setNodeNameFilter] = useState('')
-  const [nodeTagFilter, setNodeTagFilter] = useState<string>('')
+  const [nodeTagFilter, setNodeTagFilter] = useState<string>('all')
 
   // 统一的拖拽状态
   const [activeDragItem, setActiveDragItem] = useState<ActiveDragItem | null>(null)
