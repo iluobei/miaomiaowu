@@ -625,6 +625,7 @@ func getKeys(m map[string]bool) []string {
 
 // getExternalSubscriptionsFromFile extracts external subscription URLs from YAML file content
 // by analyzing proxies and querying the database for their raw_url (external subscription links)
+// Also checks proxy-providers for proxy provider configs that reference external subscriptions
 func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username string, repo *storage.TrafficRepository) (map[string]bool, error) {
 	usedURLs := make(map[string]bool)
 
@@ -663,6 +664,55 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 				if proxyNames[node.NodeName] && node.RawURL != "" {
 					usedURLs[node.RawURL] = true
 					log.Printf("[Subscription] Found external subscription URL from node '%s': %s", node.NodeName, node.RawURL)
+				}
+			}
+		}
+	}
+
+	// Also check proxy-groups for 'use' field referencing proxy provider configs
+	// This handles the case where proxy-providers + use is used instead of direct proxies
+	if proxyGroups, ok := yamlContent["proxy-groups"].([]any); ok {
+		providerNames := make(map[string]bool)
+		for _, group := range proxyGroups {
+			if groupMap, ok := group.(map[string]any); ok {
+				if useList, ok := groupMap["use"].([]any); ok {
+					for _, use := range useList {
+						if useName, ok := use.(string); ok && useName != "" {
+							providerNames[useName] = true
+						}
+					}
+				}
+			}
+		}
+
+		if len(providerNames) > 0 {
+			log.Printf("[Subscription] Found %d proxy provider references in proxy-groups", len(providerNames))
+
+			// Get all proxy provider configs for this user
+			configs, err := repo.ListProxyProviderConfigs(ctx, username)
+			if err != nil {
+				log.Printf("[Subscription] Failed to list proxy provider configs: %v", err)
+			} else {
+				// Get external subscriptions to map config -> URL
+				externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
+				if err != nil {
+					log.Printf("[Subscription] Failed to list external subscriptions: %v", err)
+				} else {
+					// Build external subscription ID -> URL map
+					subIDToURL := make(map[int64]string)
+					for _, sub := range externalSubs {
+						subIDToURL[sub.ID] = sub.URL
+					}
+
+					// Find configs that match the provider names and get their external subscription URLs
+					for _, config := range configs {
+						if providerNames[config.Name] {
+							if url, ok := subIDToURL[config.ExternalSubscriptionID]; ok {
+								usedURLs[url] = true
+								log.Printf("[Subscription] Found external subscription URL from proxy provider config '%s': %s", config.Name, url)
+							}
+						}
+					}
 				}
 			}
 		}

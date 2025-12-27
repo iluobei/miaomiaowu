@@ -161,7 +161,7 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 		}
 
 		// Fetch external subscription content
-		yamlBytes, err := fetchAndFilterProxiesYAML(&sub, config)
+		yamlBytes, err := FetchAndFilterProxiesYAML(&sub, config)
 		if err != nil {
 			log.Printf("[ProxyProviderServe] Failed to fetch proxies for config %d: %v", configID, err)
 			writeError(w, http.StatusInternalServerError, err)
@@ -229,9 +229,9 @@ func fetchSubscriptionContent(sub *storage.ExternalSubscription) ([]byte, error)
 	return body, nil
 }
 
-// fetchAndFilterProxiesYAML fetches proxies from external subscription and applies filters
+// FetchAndFilterProxiesYAML fetches proxies from external subscription and applies filters
 // Returns YAML bytes preserving original field order with 2-space indentation
-func fetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) ([]byte, error) {
+func FetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) ([]byte, error) {
 	// Fetch subscription content (with caching)
 	body, err := fetchSubscriptionContent(sub)
 	if err != nil {

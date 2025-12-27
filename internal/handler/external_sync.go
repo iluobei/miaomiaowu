@@ -522,6 +522,12 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	log.Printf("[外部订阅同步] 订阅 %s 同步完成: 总计 %d/%d 个节点 (更新: %d, 新增: %d, 跳过: %d)",
 		sub.Name, syncedCount, len(nodesToUpdate), updatedCount, createdCount, skippedCount)
 
+	// 同步代理集合节点到 YAML（仅处理 mmw 模式）
+	if err := syncProxyProviderNodesToYAML(ctx, repo, subscribeDir, username, sub); err != nil {
+		log.Printf("[外部订阅同步] 同步代理集合节点到YAML失败: %v", err)
+		// 不影响主流程，仅记录日志
+	}
+
 	return syncedCount, sub, nil
 }
 
@@ -802,4 +808,232 @@ func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *h
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "外部订阅同步成功",
 	})
+}
+
+// syncProxyProviderNodesToYAML 将代理集合的节点直接同步到订阅 YAML 文件
+// 仅处理 process_mode='mmw' 的代理集合配置
+// 这样用户获取订阅时不需要再请求妙妙屋接口，节点直接在 proxies 中
+func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepository, subscribeDir, username string, sub storage.ExternalSubscription) error {
+	if repo == nil || subscribeDir == "" {
+		return nil
+	}
+
+	// 获取此外部订阅对应的代理集合配置
+	configs, err := repo.ListProxyProviderConfigsBySubscription(ctx, sub.ID)
+	if err != nil {
+		return fmt.Errorf("list proxy provider configs: %w", err)
+	}
+
+	// 筛选 process_mode='mmw' 的配置
+	var mmwConfigs []storage.ProxyProviderConfig
+	for _, cfg := range configs {
+		if cfg.ProcessMode == "mmw" {
+			mmwConfigs = append(mmwConfigs, cfg)
+		}
+	}
+
+	if len(mmwConfigs) == 0 {
+		log.Printf("[代理集合同步] 外部订阅 %s 没有妙妙屋处理模式的代理集合配置", sub.Name)
+		return nil
+	}
+
+	log.Printf("[代理集合同步] 外部订阅 %s 有 %d 个妙妙屋处理模式的代理集合配置", sub.Name, len(mmwConfigs))
+
+	// 获取所有订阅文件
+	files, err := repo.ListSubscribeFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("list subscribe files: %w", err)
+	}
+
+	// 处理每个代理集合配置
+	for _, config := range mmwConfigs {
+		log.Printf("[代理集合同步] 处理代理集合: %s", config.Name)
+
+		// 获取并过滤节点
+		yamlBytes, err := FetchAndFilterProxiesYAML(&sub, &config)
+		if err != nil {
+			log.Printf("[代理集合同步] 获取代理集合 %s 的节点失败: %v", config.Name, err)
+			continue
+		}
+
+		// 解析 YAML 获取节点列表
+		var proxiesYAML map[string]any
+		if err := yaml.Unmarshal(yamlBytes, &proxiesYAML); err != nil {
+			log.Printf("[代理集合同步] 解析代理集合 %s 的节点失败: %v", config.Name, err)
+			continue
+		}
+
+		proxiesRaw, ok := proxiesYAML["proxies"].([]any)
+		if !ok || len(proxiesRaw) == 0 {
+			log.Printf("[代理集合同步] 代理集合 %s 没有节点", config.Name)
+			continue
+		}
+
+		log.Printf("[代理集合同步] 代理集合 %s 获取到 %d 个节点", config.Name, len(proxiesRaw))
+
+		// 为节点添加前缀
+		prefix := fmt.Sprintf("[%s] ", config.Name)
+		nodeNames := make([]string, 0, len(proxiesRaw))
+		for _, proxy := range proxiesRaw {
+			if proxyMap, ok := proxy.(map[string]any); ok {
+				if originalName, ok := proxyMap["name"].(string); ok {
+					newName := prefix + originalName
+					proxyMap["name"] = newName
+					nodeNames = append(nodeNames, newName)
+				}
+			}
+		}
+
+		// 更新每个订阅文件
+		for _, file := range files {
+			if err := updateYAMLFileWithProxyProviderNodes(subscribeDir, file.Filename, config.Name, prefix, proxiesRaw, nodeNames); err != nil {
+				log.Printf("[代理集合同步] 更新文件 %s 失败: %v", file.Filename, err)
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
+// updateYAMLFileWithProxyProviderNodes 更新单个 YAML 文件，将代理集合节点添加到 proxies 和 proxy-groups
+func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, prefix string, proxies []any, nodeNames []string) error {
+	filePath := fmt.Sprintf("%s/%s", subscribeDir, filename)
+
+	// 读取 YAML 文件
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+
+	var yamlContent map[string]any
+	if err := yaml.Unmarshal(content, &yamlContent); err != nil {
+		return fmt.Errorf("parse yaml: %w", err)
+	}
+
+	modified := false
+
+	// 检查 proxy-groups 中是否使用了此代理集合
+	proxyGroups, ok := yamlContent["proxy-groups"].([]any)
+	if !ok {
+		return nil // 没有 proxy-groups，跳过
+	}
+
+	for _, group := range proxyGroups {
+		groupMap, ok := group.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		useList, ok := groupMap["use"].([]any)
+		if !ok {
+			continue
+		}
+
+		// 检查是否包含此代理集合
+		newUseList := make([]any, 0)
+		foundProvider := false
+		for _, use := range useList {
+			useStr, ok := use.(string)
+			if !ok {
+				newUseList = append(newUseList, use)
+				continue
+			}
+			if useStr == providerName {
+				foundProvider = true
+			} else {
+				newUseList = append(newUseList, use)
+			}
+		}
+
+		if !foundProvider {
+			continue
+		}
+
+		modified = true
+		groupName := ""
+		if name, ok := groupMap["name"].(string); ok {
+			groupName = name
+		}
+		log.Printf("[代理集合同步] 在文件 %s 的代理组 %s 中找到代理集合 %s 的引用", filename, groupName, providerName)
+
+		// 获取当前代理组的 proxies
+		existingProxies, _ := groupMap["proxies"].([]any)
+
+		// 移除此代理集合的旧节点（以 prefix 开头的）
+		newProxies := make([]any, 0)
+		for _, p := range existingProxies {
+			if pStr, ok := p.(string); ok {
+				if !strings.HasPrefix(pStr, prefix) {
+					newProxies = append(newProxies, p)
+				}
+			} else {
+				newProxies = append(newProxies, p)
+			}
+		}
+
+		// 添加新节点名称到代理组
+		for _, nodeName := range nodeNames {
+			newProxies = append(newProxies, nodeName)
+		}
+		groupMap["proxies"] = newProxies
+
+		// 更新 use 字段（移除此代理集合）
+		if len(newUseList) == 0 {
+			delete(groupMap, "use")
+		} else {
+			groupMap["use"] = newUseList
+		}
+
+		log.Printf("[代理集合同步] 代理组 %s 更新完成: 添加了 %d 个节点", groupName, len(nodeNames))
+	}
+
+	if !modified {
+		return nil // 没有修改，不需要保存
+	}
+
+	// 将节点添加到 proxies 列表
+	existingProxies, _ := yamlContent["proxies"].([]any)
+	if existingProxies == nil {
+		existingProxies = make([]any, 0)
+	}
+
+	// 先移除旧的代理集合节点
+	filteredProxies := make([]any, 0)
+	for _, p := range existingProxies {
+		if proxyMap, ok := p.(map[string]any); ok {
+			if name, ok := proxyMap["name"].(string); ok {
+				if !strings.HasPrefix(name, prefix) {
+					filteredProxies = append(filteredProxies, p)
+				}
+			}
+		}
+	}
+
+	// 添加新节点
+	for _, proxy := range proxies {
+		filteredProxies = append(filteredProxies, proxy)
+	}
+	yamlContent["proxies"] = filteredProxies
+
+	// 清理 proxy-providers（如果不再被使用）
+	if proxyProviders, ok := yamlContent["proxy-providers"].(map[string]any); ok {
+		delete(proxyProviders, providerName)
+		if len(proxyProviders) == 0 {
+			delete(yamlContent, "proxy-providers")
+		}
+	}
+
+	// 保存更新后的 YAML
+	newContent, err := yaml.Marshal(yamlContent)
+	if err != nil {
+		return fmt.Errorf("marshal yaml: %w", err)
+	}
+
+	if err := os.WriteFile(filePath, newContent, 0644); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+
+	log.Printf("[代理集合同步] 文件 %s 更新完成", filename)
+	return nil
 }
