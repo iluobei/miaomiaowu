@@ -273,7 +273,7 @@ function SubscriptionGeneratorPage() {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [proxyGroups, setProxyGroups] = useState<ProxyGroup[]>([])
   const [allProxies, setAllProxies] = useState<string[]>([])
-  const [showAllNodes, setShowAllNodes] = useState(true)
+  const [showAllNodes, setShowAllNodes] = useState(false) // 默认隐藏已添加节点
 
   // 缺失节点替换对话框状态
   const [missingNodesDialogOpen, setMissingNodesDialogOpen] = useState(false)
@@ -739,8 +739,25 @@ function SubscriptionGeneratorPage() {
   // 获取所有标签类型
   const tags = Array.from(new Set(enabledNodes.map(n => n.tag))).sort()
 
-  // 节点列表显示全部（协议和标签都改为多选，不再用于筛选显示）
-  const filteredNodes = enabledNodes
+  // 节点列表根据选中的协议和标签筛选
+  const filteredNodes = useMemo(() => {
+    if (selectedProtocols.size === 0 && selectedTags.size === 0) {
+      // 没有筛选条件，显示全部
+      return enabledNodes
+    }
+
+    return enabledNodes.filter(node => {
+      // 协议筛选
+      if (selectedProtocols.size > 0) {
+        return selectedProtocols.has(node.protocol.toLowerCase())
+      }
+      // 标签筛选
+      if (selectedTags.size > 0) {
+        return selectedTags.has(node.tag)
+      }
+      return true
+    })
+  }, [enabledNodes, selectedProtocols, selectedTags])
 
   const handleToggleNode = (nodeId: number) => {
     const newSet = new Set(selectedNodeIds)
