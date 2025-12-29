@@ -22,10 +22,10 @@
 - [DStatus](https://github.com/DokiDoki1103/dstatus) 监控
 - [Komari](https://github.com/missuo/komari) 面板
 
-### 体验[Demo](https://mmwdemo.2ha.me)  
+### 体验[Demo](https://demo.miaomiaowu.net)  
 账户/密码: test / test123
 
-### [使用帮助](https://mmwdemo.2ha.me/docs)
+### [使用帮助](https://docs.miaomiaowu.net)
 
 ## 安装部署
 

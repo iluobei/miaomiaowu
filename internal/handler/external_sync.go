@@ -957,6 +957,9 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 	}
 
 	// 遍历 proxy-groups，检查是否使用了此代理集合
+	// 记录是否需要创建新代理组
+	needCreateNewGroup := false
+
 	for _, groupNode := range proxyGroupsNode.Content {
 		if groupNode.Kind != yaml.MappingNode {
 			continue
@@ -1006,6 +1009,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		}
 
 		modified = true
+		needCreateNewGroup = true
 		log.Printf("[代理集合同步] 在文件 %s 的代理组 %s 中找到代理集合 %s 的引用", filename, groupName, providerName)
 
 		// 确保 proxies 节点存在
@@ -1017,19 +1021,24 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 			)
 		}
 
-		// 移除此代理集合的旧节点（以 prefix 开头的）
+		// 移除此代理集合的旧节点（以 prefix 开头的）和旧的代理组名称
 		newProxiesContent := make([]*yaml.Node, 0)
 		for _, p := range groupProxiesNode.Content {
-			if p.Kind == yaml.ScalarNode && strings.HasPrefix(p.Value, prefix) {
-				continue
+			if p.Kind == yaml.ScalarNode {
+				// 移除以 prefix 开头的节点名称
+				if strings.HasPrefix(p.Value, prefix) {
+					continue
+				}
+				// 移除同名的旧代理组（如果存在）
+				if p.Value == providerName {
+					continue
+				}
 			}
 			newProxiesContent = append(newProxiesContent, p)
 		}
 
-		// 添加新节点名称到代理组
-		for _, nodeName := range nodeNames {
-			newProxiesContent = append(newProxiesContent, &yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
-		}
+		// 只添加新代理组名称到原代理组（而不是所有节点名称）
+		newProxiesContent = append(newProxiesContent, &yaml.Node{Kind: yaml.ScalarNode, Value: providerName})
 		groupProxiesNode.Content = newProxiesContent
 
 		// 更新 use 字段（移除此代理集合）
@@ -1040,7 +1049,87 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 			useNode.Content = newUseContent
 		}
 
-		log.Printf("[代理集合同步] 代理组 %s 更新完成: 添加了 %d 个节点", groupName, len(nodeNames))
+		log.Printf("[代理集合同步] 代理组 %s 更新完成: 添加了代理组 %s 的引用", groupName, providerName)
+	}
+
+	// 创建或更新以代理集合名称命名的新代理组
+	if needCreateNewGroup {
+		// 检查是否已存在同名代理组
+		existingGroupNode := (*yaml.Node)(nil)
+		for _, groupNode := range proxyGroupsNode.Content {
+			if groupNode.Kind == yaml.MappingNode {
+				name := util.GetNodeFieldValue(groupNode, "name")
+				if name == providerName {
+					existingGroupNode = groupNode
+					break
+				}
+			}
+		}
+
+		if existingGroupNode != nil {
+			// 更新已存在的代理组的 proxies
+			var existingProxiesNode *yaml.Node
+			for i := 0; i < len(existingGroupNode.Content)-1; i += 2 {
+				keyNode := existingGroupNode.Content[i]
+				valueNode := existingGroupNode.Content[i+1]
+				if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "proxies" {
+					existingProxiesNode = valueNode
+					break
+				}
+			}
+
+			if existingProxiesNode == nil {
+				existingProxiesNode = &yaml.Node{Kind: yaml.SequenceNode, Content: make([]*yaml.Node, 0)}
+				existingGroupNode.Content = append(existingGroupNode.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Value: "proxies"},
+					existingProxiesNode,
+				)
+			}
+
+			// 移除旧节点（以 prefix 开头的），添加新节点
+			newContent := make([]*yaml.Node, 0)
+			for _, p := range existingProxiesNode.Content {
+				if p.Kind == yaml.ScalarNode && strings.HasPrefix(p.Value, prefix) {
+					continue
+				}
+				newContent = append(newContent, p)
+			}
+			for _, nodeName := range nodeNames {
+				newContent = append(newContent, &yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
+			}
+			existingProxiesNode.Content = newContent
+			log.Printf("[代理集合同步] 更新已存在的代理组 %s: 添加了 %d 个节点", providerName, len(nodeNames))
+		} else {
+			// 创建新代理组（类型为 url-test）
+			newGroupNode := &yaml.Node{Kind: yaml.MappingNode}
+			newGroupNode.Content = append(newGroupNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "name"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: providerName},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "type"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "url-test"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "url"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "http://www.gstatic.com/generate_204"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "interval"},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "300"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "tolerance"},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "50"},
+			)
+
+			// 添加 proxies 字段，包含所有节点名称
+			newGroupProxies := &yaml.Node{Kind: yaml.SequenceNode}
+			for _, nodeName := range nodeNames {
+				newGroupProxies.Content = append(newGroupProxies.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
+			}
+			newGroupNode.Content = append(newGroupNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "proxies"},
+				newGroupProxies,
+			)
+
+			// 添加新代理组到 proxy-groups
+			proxyGroupsNode.Content = append(proxyGroupsNode.Content, newGroupNode)
+			log.Printf("[代理集合同步] 创建新代理组 %s: 包含 %d 个节点", providerName, len(nodeNames))
+		}
 	}
 
 	if !modified {

@@ -85,9 +85,9 @@ export function UserMenu() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild className='cursor-pointer justify-center'>
-            <Link to='/docs' className='flex items-center gap-2'>
+            <a href='https://docs.miaomiaowu.net' target='_blank' rel='noopener noreferrer' className='flex items-center gap-2'>
               <BookOpen className='size-4' /> 使用帮助
-            </Link>
+            </a>
           </DropdownMenuItem>
           {profile?.is_admin && (
             <DropdownMenuItem onClick={() => setBackupDialogOpen(true)} className='cursor-pointer justify-center'>
