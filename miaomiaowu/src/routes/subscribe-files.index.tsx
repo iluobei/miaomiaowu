@@ -348,6 +348,7 @@ function SubscribeFilesPage() {
   const [proCreatingRegion, setProCreatingRegion] = useState(false)
   const [proCreatingProtocol, setProCreatingProtocol] = useState(false)
   const [proCreationResults, setProCreationResults] = useState<Array<{name: string, success: boolean, error?: string}>>([])
+  const [enableGeoIPMatching, setEnableGeoIPMatching] = useState(true) // 根据IP位置分组开关
 
   // 代理集合批量操作状态
   const [selectedProxyProviderIds, setSelectedProxyProviderIds] = useState<Set<number>>(new Set())
@@ -797,7 +798,7 @@ function SubscribeFilesPage() {
           filter: region.filter || '',
           exclude_filter: region.excludeFilter || '',
           exclude_type: '',
-          geo_ip_filter: region.countryCode || '', // GeoIP 过滤（仅 MMW 模式生效）
+          geo_ip_filter: enableGeoIPMatching ? (region.countryCode || '') : '', // GeoIP 过滤（仅开启时生效）
           override: '',
           process_mode: 'mmw', // 使用 MMW 模式以支持 GeoIP 匹配
         })
@@ -3913,6 +3914,20 @@ function SubscribeFilesPage() {
               <p className='text-xs text-muted-foreground'>
                 生成的代理集合名称格式: 前缀-地域/协议
               </p>
+            </div>
+
+            {/* 根据IP位置分组开关 */}
+            <div className='flex items-center justify-between'>
+              <div className='space-y-0.5'>
+                <Label>根据IP位置分组</Label>
+                <p className='text-xs text-muted-foreground'>
+                  开启后，节点名称匹配不到时会根据服务器IP位置匹配
+                </p>
+              </div>
+              <Switch
+                checked={enableGeoIPMatching}
+                onCheckedChange={setEnableGeoIPMatching}
+              />
             </div>
 
             {/* 分裂按钮 */}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { GripVertical, X, Plus, Check, Search, Settings2 } from 'lucide-react'
+import { GripVertical, X, Plus, Check, Search, Settings2, Eye, EyeOff } from 'lucide-react'
 import { Twemoji } from '@/components/twemoji'
 import {
   DndContext,
@@ -138,6 +138,7 @@ export function EditNodesDialog({
 
   // 保存滚动位置
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const availableNodesScrollRef = React.useRef<HTMLDivElement>(null)
 
   // 提取唯一标签列表
   const uniqueTags = useMemo(() => {
@@ -227,11 +228,23 @@ export function EditNodesDialog({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
 
+    // 保存可用节点列表的滚动位置
+    const availableNodesScrollTop = availableNodesScrollRef.current?.scrollTop ?? 0
+
     // 恢复 body 滚动
     document.body.style.overflow = ''
     document.body.style.touchAction = ''
 
     setActiveDragItem(null)
+
+    // 恢复可用节点列表的滚动位置
+    const restoreAvailableNodesScroll = () => {
+      requestAnimationFrame(() => {
+        if (availableNodesScrollRef.current) {
+          availableNodesScrollRef.current.scrollTop = availableNodesScrollTop
+        }
+      })
+    }
 
     if (!over) return
 
@@ -531,6 +544,9 @@ export function EditNodesDialog({
         break
       }
     }
+
+    // 恢复可用节点列表的滚动位置
+    restoreAvailableNodesScroll()
   }
 
   // 保存滚动位置的包装函数
@@ -1293,15 +1309,21 @@ export function EditNodesDialog({
                   </div>
                 </div>
 
-                {/* 显示/隐藏已添加节点按钮 */}
+                {/* 隐藏/显示已添加节点按钮 */}
                 {showAllNodes !== undefined && onShowAllNodesChange && (
                   <div className='flex-shrink-0 mb-4'>
                     <Button
                       variant='outline'
-                      className='w-full'
+                      className='w-full relative'
                       onClick={() => onShowAllNodesChange(!showAllNodes)}
                     >
-                      {showAllNodes ? '隐藏已添加节点' : '显示已添加节点'}
+                      {showAllNodes ? <Eye className='h-4 w-4 mr-2' /> : <EyeOff className='h-4 w-4 mr-2' />}
+                      {showAllNodes ? '显示已添加节点' : '隐藏已添加节点'}
+                      {!showAllNodes && (
+                        <span className='absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full flex items-center justify-center'>
+                          <Check className='h-3 w-3 text-white' />
+                        </span>
+                      )}
                     </Button>
                   </div>
                 )}
@@ -1362,7 +1384,7 @@ export function EditNodesDialog({
                       totalNodes={availableNodes.length}
                     />
                   </CardHeader>
-                  <CardContent className='flex-1 overflow-y-auto space-y-1 min-h-0'>
+                  <CardContent ref={availableNodesScrollRef} className='flex-1 overflow-y-auto space-y-1 min-h-0'>
                     {/* 普通节点 - 仅在非特殊筛选时显示 */}
                     {nodeTagFilter !== '__special__' && nodeTagFilter !== '__provider__' && (
                       filteredAvailableNodes.map((proxy, idx) => (
