@@ -475,28 +475,113 @@ function parseShadowsocks(url: string): ProxyNode | null {
 
 /**
  * 解析 SOCKS 协议
- * 格式: socks://base64(user:password)@server:port#name
+ * 支持两种格式:
+ * 1. socks://base64(user:password)@server:port?#name (x-ray 内核格式)
+ * 2. socks5://user:password@server:port#name (通用格式，自动转换)
  */
 function parseSocks(url: string): ProxyNode | null {
   try {
-    const content = url.substring('socks://'.length)
-    let name = 'SOCKS Node'
-    let mainPart = content
+    let content: string
+    let isPlainAuth = false  // 标记是否是明文认证格式 (socks5://)
 
-    if (content.includes('#')) {
-      const parts = content.split('#')
-      mainPart = parts[0]
-      name = decodeURIComponent(parts[1])
+    // 检测是 socks:// 还是 socks5:// 格式
+    if (url.startsWith('socks5://')) {
+      content = url.substring('socks5://'.length)
+      isPlainAuth = true
+    } else {
+      content = url.substring('socks://'.length)
     }
 
-    const [encodedAuth, serverPart] = mainPart.split('@')
-    const decoded = base64Decode(encodedAuth)
-    const colonIndex = decoded.indexOf(':')
-    const username = decoded.substring(0, colonIndex)
-    const password = decoded.substring(colonIndex + 1)
+    let mainPart = content
+    let name = ''
 
-    const [server, portStr] = serverPart.split(':')
-    const port = parseInt(portStr) || 0
+    // 提取节点名称 (# 后面的部分)
+    if (content.includes('#')) {
+      const hashIndex = content.lastIndexOf('#')
+      mainPart = content.substring(0, hashIndex)
+      name = decodeURIComponent(content.substring(hashIndex + 1))
+    }
+
+    // 移除可能存在的查询参数 (? 后面的部分，在 # 之前)
+    if (mainPart.includes('?')) {
+      mainPart = mainPart.split('?')[0]
+    }
+
+    // 解析 auth@server:port
+    const atIndex = mainPart.lastIndexOf('@')
+    if (atIndex === -1) {
+      // 没有认证信息的情况
+      const [server, portStr] = mainPart.split(':')
+      const port = parseInt(portStr) || 0
+
+      // 如果没有名称，自动生成
+      if (!name) {
+        name = `${server}:${port}`
+      }
+
+      return {
+        name,
+        type: 'socks5',
+        server,
+        port,
+        udp: true
+      }
+    }
+
+    const authPart = mainPart.substring(0, atIndex)
+    const serverPart = mainPart.substring(atIndex + 1)
+
+    let username = ''
+    let password = ''
+
+    if (isPlainAuth) {
+      // socks5:// 格式: user:password 是明文
+      const colonIndex = authPart.indexOf(':')
+      if (colonIndex !== -1) {
+        username = decodeURIComponent(authPart.substring(0, colonIndex))
+        password = decodeURIComponent(authPart.substring(colonIndex + 1))
+      } else {
+        username = decodeURIComponent(authPart)
+      }
+    } else {
+      // socks:// 格式: user:password 是 base64 编码的
+      const decoded = base64Decode(authPart)
+      const colonIndex = decoded.indexOf(':')
+      if (colonIndex !== -1) {
+        username = decoded.substring(0, colonIndex)
+        password = decoded.substring(colonIndex + 1)
+      } else {
+        username = decoded
+      }
+    }
+
+    // 解析 server:port (支持 IPv6)
+    let server = ''
+    let port = 0
+
+    if (serverPart.startsWith('[')) {
+      // IPv6 地址格式: [ipv6]:port
+      const closeBracketIndex = serverPart.indexOf(']')
+      if (closeBracketIndex !== -1) {
+        server = serverPart.substring(1, closeBracketIndex)
+        const portPart = serverPart.substring(closeBracketIndex + 1)
+        port = parseInt(portPart.replace(':', '')) || 0
+      }
+    } else {
+      // IPv4 或域名
+      const lastColonIndex = serverPart.lastIndexOf(':')
+      if (lastColonIndex !== -1) {
+        server = serverPart.substring(0, lastColonIndex)
+        port = parseInt(serverPart.substring(lastColonIndex + 1)) || 0
+      } else {
+        server = serverPart
+      }
+    }
+
+    // 如果没有名称，自动生成
+    if (!name) {
+      name = `${server}:${port}`
+    }
 
     return {
       name,
@@ -991,7 +1076,7 @@ export function parseProxyUrl(url: string): ProxyNode | null {
     return parseShadowsocksR(url)
   } else if (url.startsWith('ss://')) {
     return parseShadowsocks(url)
-  } else if (url.startsWith('socks://')) {
+  } else if (url.startsWith('socks://') || url.startsWith('socks5://')) {
     return parseSocks(url)
   // } else if (url.startsWith('snell://')) {
   //   return parseSnell(url)
