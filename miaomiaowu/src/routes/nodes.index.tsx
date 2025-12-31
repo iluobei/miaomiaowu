@@ -198,7 +198,6 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onC
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
-    touchAction: 'none',
   }
 
   return (
@@ -250,7 +249,6 @@ function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
-    touchAction: 'none',
   }
 
   return (
