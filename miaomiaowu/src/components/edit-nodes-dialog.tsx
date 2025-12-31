@@ -79,7 +79,7 @@ interface EditNodesDialogProps {
   cancelButtonText?: string
   saveButtonText?: string
   showSpecialNodesAtBottom?: boolean  // 是否在底部显示特殊节点
-  proxyProviderConfigs?: Array<{ id: number; name: string }>  // 代理集合配置列表
+  proxyProviderConfigs?: Array<{ id: number; name: string; process_mode?: string }>  // 代理集合配置列表
   // 保留旧的 props 以保持向后兼容，但不再使用
   draggedNode?: any
   onDragStart?: any
@@ -159,6 +159,15 @@ export function EditNodesDialog({
     })
     return map
   }, [allNodes])
+
+  // MMW 模式代理集合名称集合（用于识别 proxies 中的代理集合引用）
+  const mmwProviderNames = useMemo(() => {
+    return new Set(
+      proxyProviderConfigs
+        .filter(c => c.process_mode === 'mmw')
+        .map(c => c.name)
+    )
+  }, [proxyProviderConfigs])
 
   // 筛选可用节点
   const filteredAvailableNodes = useMemo(() => {
@@ -1048,6 +1057,9 @@ export function EditNodesDialog({
   }
 
   const SortableProxy = ({ proxy, groupName, index }: SortableProxyProps) => {
+    // 检查是否是 MMW 代理集合的引用（MMW 模式下代理集合名称作为代理组名出现在 proxies 中）
+    const isMmwProvider = mmwProviderNames.has(proxy)
+
     const {
       attributes,
       listeners,
@@ -1063,9 +1075,10 @@ export function EditNodesDialog({
         easing: 'ease-out',
       },
       data: {
-        type: 'group-node',
+        type: isMmwProvider ? 'use-item' : 'group-node',
         groupName,
         nodeName: proxy,
+        providerName: isMmwProvider ? proxy : undefined,
         index
       } as DragItemData,
     })
@@ -1078,6 +1091,43 @@ export function EditNodesDialog({
       transition: transition || 'transform 150ms ease-out',
       opacity: isDragging ? 0.5 : 1,
       touchAction: 'none',
+    }
+
+    // MMW 代理集合使用紫色样式
+    if (isMmwProvider) {
+      return (
+        <div className='relative'>
+          {showDropIndicator && (
+            <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+          )}
+          <div
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
+              showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
+            } ${isDragging ? 'shadow-lg' : ''}`}
+            data-use-item
+          >
+            <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+            <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {proxy}</span>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='h-6 w-6 p-0 flex-shrink-0'
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                wrappedRemoveNodeFromGroup(groupName, index)
+              }}
+            >
+              <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
+            </Button>
+          </div>
+        </div>
+      )
     }
 
     return (

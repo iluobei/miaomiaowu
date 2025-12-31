@@ -1403,12 +1403,26 @@ function SubscribeFilesPage() {
     try {
       const parsed = parseYAML(currentContent) as any
 
-      // 先收集所有被使用的 MMW 代理集合，提前获取它们的节点名称
+      // 获取所有 MMW 模式代理集合的名称（用于后续检查）
+      const allMmwProviderNames = proxyProviderConfigs
+        .filter(c => c.process_mode === 'mmw')
+        .map(c => c.name)
+
+      // 先收集所有被使用的代理集合，提前获取它们的节点名称
       // 这样在过滤 proxies 时可以保留这些节点
       const usedProviderNames = new Set<string>()
       proxyGroups.forEach(group => {
+        // 从 use 属性收集（客户端模式）
         if (group.use) {
           group.use.forEach(provider => usedProviderNames.add(provider))
+        }
+        // 从 proxies 属性收集 MMW 代理集合的引用（MMW 模式下代理集合名称作为代理组名称出现在 proxies 中）
+        if (group.proxies) {
+          group.proxies.forEach(proxy => {
+            if (allMmwProviderNames.includes(proxy)) {
+              usedProviderNames.add(proxy)
+            }
+          })
         }
       })
 
@@ -1550,12 +1564,8 @@ function SubscribeFilesPage() {
         c => usedProviderNames.has(c.name) && c.process_mode !== 'mmw'
       )
 
-      // 获取所有 MMW 模式代理集合的名称（无论是否被使用）
-      const allMmwProviderNames = proxyProviderConfigs
-        .filter(c => c.process_mode === 'mmw')
-        .map(c => c.name)
-
       // 找出不再被使用的 MMW 代理集合（需要清理其自动创建的代理组和节点）
+      // allMmwProviderNames 已在函数开头定义
       const unusedMmwProviders = allMmwProviderNames.filter(name => !usedProviderNames.has(name))
 
       // 清理不再使用的 MMW 代理集合的自动创建代理组和节点
