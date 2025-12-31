@@ -670,6 +670,10 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 	// Initialize custom rule application records to prevent duplicates on first modification
 	h.initializeCustomRuleApplications(r.Context(), created.ID)
 
+	// 同步 MMW 模式代理集合的节点到配置文件
+	// 使用 goroutine 异步执行，不阻塞响应
+	go h.syncMMWProxyProvidersToFile(subscribesDir, filename)
+
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"file": convertSubscribeFile(created),
 	})
@@ -889,4 +893,186 @@ func (h *subscribeFilesHandler) initializeCustomRuleApplications(ctx context.Con
 	}
 
 	log.Printf("[Subscribe] Recorded %d custom rule application states for file ID %d", len(rules), fileID)
+}
+
+// syncMMWProxyProvidersToFile 同步 MMW 模式代理集合的节点到指定文件
+// 保存配置文件后调用，将 proxy-groups 中 use 引用的 MMW 模式代理集合节点直接写入配置
+func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filename string) {
+	filePath := filepath.Join(subscribeDir, filename)
+
+	// 1. 读取刚保存的 YAML 文件
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Printf("[MMW同步] 读取文件失败: %v", err)
+		return
+	}
+
+	// 2. 解析 YAML
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(content, &rootNode); err != nil {
+		log.Printf("[MMW同步] 解析YAML失败: %v", err)
+		return
+	}
+
+	// 3. 查找 proxy-groups，收集 use 引用的代理集合名称
+	providerNames := collectUsedProviderNames(&rootNode)
+	if len(providerNames) == 0 {
+		log.Printf("[MMW同步] 文件 %s 没有使用代理集合", filename)
+		return
+	}
+
+	log.Printf("[MMW同步] 文件 %s 使用了 %d 个代理集合: %v", filename, len(providerNames), providerNames)
+
+	ctx := context.Background()
+	syncedCount := 0
+
+	// 4. 根据名称查找代理集合配置，筛选 MMW 模式
+	for _, providerName := range providerNames {
+		config, err := h.repo.GetProxyProviderConfigByName(ctx, providerName)
+		if err != nil {
+			log.Printf("[MMW同步] 查询代理集合 %s 配置失败: %v", providerName, err)
+			continue
+		}
+		if config == nil {
+			log.Printf("[MMW同步] 代理集合 %s 配置不存在", providerName)
+			continue
+		}
+		if config.ProcessMode != "mmw" {
+			log.Printf("[MMW同步] 代理集合 %s 不是妙妙屋模式 (mode=%s)，跳过", providerName, config.ProcessMode)
+			continue
+		}
+
+		log.Printf("[MMW同步] 处理妙妙屋模式代理集合: %s", providerName)
+
+		// 5. 从缓存获取节点数据
+		cache := GetProxyProviderCache()
+		entry, ok := cache.Get(config.ID)
+		if !ok || cache.IsExpired(entry) {
+			// 缓存不存在或过期，尝试刷新
+			sub, err := h.repo.GetExternalSubscription(ctx, config.ExternalSubscriptionID, config.Username)
+			if err != nil || sub.ID == 0 {
+				log.Printf("[MMW同步] 获取代理集合 %s 的外部订阅失败: %v", providerName, err)
+				continue
+			}
+			entry, err = RefreshProxyProviderCache(&sub, config)
+			if err != nil {
+				log.Printf("[MMW同步] 刷新代理集合 %s 缓存失败: %v", providerName, err)
+				continue
+			}
+		}
+
+		if len(entry.Nodes) == 0 {
+			log.Printf("[MMW同步] 代理集合 %s 没有节点", providerName)
+			continue
+		}
+
+		log.Printf("[MMW同步] 代理集合 %s 获取到 %d 个节点", providerName, len(entry.Nodes))
+
+		// 6. 为节点添加前缀
+		namePrefix := config.Name
+		if idx := strings.Index(config.Name, "-"); idx > 0 {
+			namePrefix = config.Name[:idx]
+		}
+		prefix := fmt.Sprintf("〖%s〗", namePrefix)
+
+		// 复制节点并添加前缀
+		proxiesRaw := make([]any, len(entry.Nodes))
+		nodeNames := make([]string, 0, len(entry.Nodes))
+		for i, node := range entry.Nodes {
+			nodeCopy := copyMap(node.(map[string]any))
+			if name, ok := nodeCopy["name"].(string); ok {
+				newName := prefix + name
+				nodeCopy["name"] = newName
+				nodeNames = append(nodeNames, newName)
+			}
+			proxiesRaw[i] = nodeCopy
+		}
+
+		// 7. 调用已有的同步函数写入节点
+		if err := updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, config.Name, prefix, proxiesRaw, nodeNames); err != nil {
+			log.Printf("[MMW同步] 更新文件 %s 失败: %v", filename, err)
+			continue
+		}
+
+		syncedCount++
+		log.Printf("[MMW同步] 代理集合 %s 同步完成: %d 个节点", providerName, len(nodeNames))
+	}
+
+	if syncedCount > 0 {
+		log.Printf("[MMW同步] 文件 %s 同步完成: 处理了 %d 个妙妙屋模式代理集合", filename, syncedCount)
+	}
+}
+
+// collectUsedProviderNames 从 YAML 中收集所有 proxy-groups 的 use 引用
+func collectUsedProviderNames(rootNode *yaml.Node) []string {
+	providerNames := make([]string, 0)
+	seen := make(map[string]bool)
+
+	if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
+		return providerNames
+	}
+
+	docContent := rootNode.Content[0]
+	if docContent.Kind != yaml.MappingNode {
+		return providerNames
+	}
+
+	// 查找 proxy-groups 节点
+	var proxyGroupsNode *yaml.Node
+	for i := 0; i < len(docContent.Content)-1; i += 2 {
+		keyNode := docContent.Content[i]
+		valueNode := docContent.Content[i+1]
+		if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "proxy-groups" {
+			proxyGroupsNode = valueNode
+			break
+		}
+	}
+
+	if proxyGroupsNode == nil || proxyGroupsNode.Kind != yaml.SequenceNode {
+		return providerNames
+	}
+
+	// 遍历 proxy-groups，收集 use 字段的值
+	for _, groupNode := range proxyGroupsNode.Content {
+		if groupNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		for i := 0; i < len(groupNode.Content)-1; i += 2 {
+			keyNode := groupNode.Content[i]
+			valueNode := groupNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "use" {
+				if valueNode.Kind == yaml.SequenceNode {
+					for _, useItem := range valueNode.Content {
+						if useItem.Kind == yaml.ScalarNode && useItem.Value != "" {
+							if !seen[useItem.Value] {
+								seen[useItem.Value] = true
+								providerNames = append(providerNames, useItem.Value)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return providerNames
+}
+
+// copyMap 深拷贝 map
+func copyMap(m map[string]any) map[string]any {
+	result := make(map[string]any)
+	for k, v := range m {
+		switch vv := v.(type) {
+		case map[string]any:
+			result[k] = copyMap(vv)
+		case []any:
+			newSlice := make([]any, len(vv))
+			copy(newSlice, vv)
+			result[k] = newSlice
+		default:
+			result[k] = v
+		}
+	}
+	return result
 }

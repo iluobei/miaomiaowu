@@ -381,3 +381,213 @@ func toProxyProviderConfigResponse(config storage.ProxyProviderConfig) proxyProv
 		UpdatedAt:                 config.UpdatedAt.Format(time.RFC3339),
 	}
 }
+
+// NewProxyProviderCacheRefreshHandler 创建代理集合缓存刷新处理器
+func NewProxyProviderCacheRefreshHandler(repo *storage.TrafficRepository) http.Handler {
+	if repo == nil {
+		panic("proxy provider cache refresh handler requires repository")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username := auth.UsernameFromContext(r.Context())
+		if strings.TrimSpace(username) == "" {
+			writeError(w, http.StatusUnauthorized, errors.New("unauthorized"))
+			return
+		}
+
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+
+		// 从 URL 中获取配置 ID
+		idStr := r.URL.Query().Get("id")
+		if idStr == "" {
+			writeError(w, http.StatusBadRequest, errors.New("id is required"))
+			return
+		}
+
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid id"))
+			return
+		}
+
+		// 获取配置
+		config, err := repo.GetProxyProviderConfig(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if config == nil || config.Username != username {
+			writeError(w, http.StatusNotFound, errors.New("proxy provider config not found"))
+			return
+		}
+
+		// 只有 MMW 模式才需要缓存
+		if config.ProcessMode != "mmw" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{
+				"message":    "客户端处理模式无需缓存",
+				"cached":     false,
+				"node_count": 0,
+			})
+			return
+		}
+
+		// 获取外部订阅信息
+		sub, err := repo.GetExternalSubscription(r.Context(), config.ExternalSubscriptionID, username)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if sub.ID == 0 {
+			writeError(w, http.StatusNotFound, errors.New("external subscription not found"))
+			return
+		}
+
+		// 刷新缓存
+		entry, err := RefreshProxyProviderCache(&sub, config)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"message":    "缓存刷新成功",
+			"cached":     true,
+			"node_count": entry.NodeCount,
+			"fetched_at": entry.FetchedAt.Format(time.RFC3339),
+		})
+	})
+}
+
+// NewProxyProviderNodesHandler 获取代理集合的节点列表（用于前端应用分组时获取 MMW 节点）
+func NewProxyProviderNodesHandler(repo *storage.TrafficRepository) http.Handler {
+	if repo == nil {
+		panic("proxy provider nodes handler requires repository")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username := auth.UsernameFromContext(r.Context())
+		if strings.TrimSpace(username) == "" {
+			writeError(w, http.StatusUnauthorized, errors.New("unauthorized"))
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+
+		// 从 URL 中获取配置 ID
+		idStr := r.URL.Query().Get("id")
+		if idStr == "" {
+			writeError(w, http.StatusBadRequest, errors.New("id is required"))
+			return
+		}
+
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid id"))
+			return
+		}
+
+		// 获取配置
+		config, err := repo.GetProxyProviderConfig(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if config == nil || config.Username != username {
+			writeError(w, http.StatusNotFound, errors.New("proxy provider config not found"))
+			return
+		}
+
+		// 非 MMW 模式返回空节点列表
+		if config.ProcessMode != "mmw" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{
+				"nodes":  []any{},
+				"prefix": "",
+			})
+			return
+		}
+
+		// 从缓存获取节点
+		cache := GetProxyProviderCache()
+		entry, ok := cache.Get(id)
+		if !ok || cache.IsExpired(entry) {
+			// 缓存不存在或过期，尝试刷新
+			sub, err := repo.GetExternalSubscription(r.Context(), config.ExternalSubscriptionID, username)
+			if err != nil || sub.ID == 0 {
+				writeError(w, http.StatusInternalServerError, errors.New("获取外部订阅失败"))
+				return
+			}
+			entry, err = RefreshProxyProviderCache(&sub, config)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		// 计算前缀
+		namePrefix := config.Name
+		if idx := strings.Index(config.Name, "-"); idx > 0 {
+			namePrefix = config.Name[:idx]
+		}
+		prefix := "〖" + namePrefix + "〗"
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"nodes":  entry.Nodes,
+			"prefix": prefix,
+		})
+	})
+}
+
+// NewProxyProviderCacheStatusHandler 获取代理集合缓存状态
+func NewProxyProviderCacheStatusHandler(repo *storage.TrafficRepository) http.Handler {
+	if repo == nil {
+		panic("proxy provider cache status handler requires repository")
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username := auth.UsernameFromContext(r.Context())
+		if strings.TrimSpace(username) == "" {
+			writeError(w, http.StatusUnauthorized, errors.New("unauthorized"))
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+
+		// 获取用户的所有代理集合配置
+		configs, err := repo.ListProxyProviderConfigs(r.Context(), username)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		cache := GetProxyProviderCache()
+		result := make(map[string]any)
+
+		for _, config := range configs {
+			if config.ProcessMode == "mmw" {
+				status := cache.GetCacheStatus(config.ID)
+				result[strconv.FormatInt(config.ID, 10)] = status
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(result)
+	})
+}

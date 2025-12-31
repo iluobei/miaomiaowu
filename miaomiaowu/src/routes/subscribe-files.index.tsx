@@ -396,7 +396,7 @@ function SubscribeFilesPage() {
   })
   const userToken = userTokenData?.token ?? ''
 
-  // 获取用户设置（用于判断是否显示节点集合）
+  // 获取用户设置（用于判断是否显示代理集合）
   const { data: userConfigData } = useQuery({
     queryKey: ['user-config'],
     queryFn: async () => {
@@ -603,6 +603,14 @@ function SubscribeFilesPage() {
       process_mode: string
     }) => {
       const response = await api.post('/api/user/proxy-provider-configs', data)
+      // 如果是 MMW 模式，触发缓存刷新
+      if (data.process_mode === 'mmw' && response.data?.id) {
+        try {
+          await api.post(`/api/user/proxy-provider-cache/refresh?id=${response.data.id}`)
+        } catch (e) {
+          console.warn('缓存刷新失败:', e)
+        }
+      }
       return response.data
     },
     onSuccess: () => {
@@ -659,6 +667,14 @@ function SubscribeFilesPage() {
       process_mode: string
     }) => {
       const response = await api.put(`/api/user/proxy-provider-configs?id=${data.id}`, data)
+      // 如果是 MMW 模式，触发缓存刷新
+      if (data.process_mode === 'mmw') {
+        try {
+          await api.post(`/api/user/proxy-provider-cache/refresh?id=${data.id}`)
+        } catch (e) {
+          console.warn('缓存刷新失败:', e)
+        }
+      }
       return response.data
     },
     onSuccess: () => {
@@ -1387,6 +1403,38 @@ function SubscribeFilesPage() {
     try {
       const parsed = parseYAML(currentContent) as any
 
+      // 先收集所有被使用的 MMW 代理集合，提前获取它们的节点名称
+      // 这样在过滤 proxies 时可以保留这些节点
+      const usedProviderNames = new Set<string>()
+      proxyGroups.forEach(group => {
+        if (group.use) {
+          group.use.forEach(provider => usedProviderNames.add(provider))
+        }
+      })
+
+      // 筛选 MMW 模式的代理集合
+      const mmwProviderConfigs = proxyProviderConfigs.filter(
+        c => usedProviderNames.has(c.name) && c.process_mode === 'mmw'
+      )
+
+      // 获取 MMW 节点数据（提前获取，用于保留已有节点）
+      const mmwNodesMap: Record<string, { nodes: any[], prefix: string }> = {}
+      const mmwNodeNames = new Set<string>() // 所有 MMW 节点名称
+      for (const config of mmwProviderConfigs) {
+        try {
+          const resp = await api.get(`/api/user/proxy-provider-nodes?id=${config.id}`)
+          if (resp.data && resp.data.nodes) {
+            mmwNodesMap[config.name] = resp.data
+            // 收集所有 MMW 节点名称（带前缀）
+            resp.data.nodes.forEach((node: any) => {
+              mmwNodeNames.add(resp.data.prefix + node.name)
+            })
+          }
+        } catch (err) {
+          console.error(`获取代理集合 ${config.name} 节点失败:`, err)
+        }
+      }
+
       // 收集所有代理组中使用的节点名称
       const usedNodeNames = new Set<string>()
       proxyGroups.forEach(group => {
@@ -1427,9 +1475,16 @@ function SubscribeFilesPage() {
           const updatedProxies = [...nodeConfigs]
 
           // 添加现有但未使用的节点（也重新排序）
+          // 重要：保留 MMW 节点，不要过滤掉它们
           existingProxies.forEach((proxy: any) => {
             if (!usedNodeNames.has(proxy.name) && !updatedProxies.some(p => p.name === proxy.name)) {
-              updatedProxies.push(reorderProxyProperties(proxy))
+              // 如果是 MMW 节点，保留它
+              if (mmwNodeNames.has(proxy.name)) {
+                updatedProxies.push(reorderProxyProperties(proxy))
+              } else {
+                // 非 MMW 节点，也保留（可能是手动添加的节点）
+                updatedProxies.push(reorderProxyProperties(proxy))
+              }
             }
           })
 
@@ -1482,7 +1537,7 @@ function SubscribeFilesPage() {
             ...group, // 保留所有原始属性（如 url, interval, strategy 等）
             proxies: group.proxies, // 更新 proxies
           }
-          // 保留 use 字段（节点集合引用）
+          // 保留 use 字段（代理集合引用）
           if (group.use && group.use.length > 0) {
             groupConfig.use = group.use
           }
@@ -1490,35 +1545,167 @@ function SubscribeFilesPage() {
         })
       }
 
-      // 收集所有被使用的 provider 名称
-      const usedProviders = new Set<string>()
-      proxyGroups.forEach(group => {
-        if (group.use) {
-          group.use.forEach(provider => usedProviders.add(provider))
-        }
-      })
+      // 筛选非 MMW 模式的代理集合（MMW 相关数据已在函数开头获取）
+      const nonMmwProviders = proxyProviderConfigs.filter(
+        c => usedProviderNames.has(c.name) && c.process_mode !== 'mmw'
+      )
 
-      // 如果有使用 provider，添加 proxy-providers 配置
-      if (usedProviders.size > 0 && proxyProviderConfigs.length > 0) {
-        const providers: Record<string, any> = {}
-        proxyProviderConfigs.forEach(config => {
-          if (usedProviders.has(config.name)) {
-            const baseUrl = window.location.origin
-            const providerConfig: Record<string, any> = {
-              type: config.type || 'http',
-              path: `./proxy_providers/${config.name}.yaml`,
-              url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
-              interval: config.interval || 3600,
+      // 获取所有 MMW 模式代理集合的名称（无论是否被使用）
+      const allMmwProviderNames = proxyProviderConfigs
+        .filter(c => c.process_mode === 'mmw')
+        .map(c => c.name)
+
+      // 找出不再被使用的 MMW 代理集合（需要清理其自动创建的代理组和节点）
+      const unusedMmwProviders = allMmwProviderNames.filter(name => !usedProviderNames.has(name))
+
+      // 清理不再使用的 MMW 代理集合的自动创建代理组和节点
+      if (unusedMmwProviders.length > 0 && parsed['proxy-groups']) {
+        // 删除自动创建的代理组（名称与代理集合相同的代理组）
+        parsed['proxy-groups'] = parsed['proxy-groups'].filter((group: any) => {
+          if (unusedMmwProviders.includes(group.name)) {
+            console.log(`[MMW清理] 删除不再使用的代理组: ${group.name}`)
+            return false
+          }
+          return true
+        })
+
+        // 删除这些代理集合的节点（根据前缀匹配）
+        if (parsed.proxies && Array.isArray(parsed.proxies)) {
+          // 构建需要清理的节点前缀列表
+          const prefixesToRemove: string[] = []
+          for (const providerName of unusedMmwProviders) {
+            // 根据代理集合名称计算前缀
+            let namePrefix = providerName
+            if (providerName.includes('-')) {
+              namePrefix = providerName.substring(0, providerName.indexOf('-'))
             }
-            if (config.health_check_enabled) {
-              providerConfig['health-check'] = {
-                enable: true,
-                url: config.health_check_url || 'http://www.gstatic.com/generate_204',
-                interval: config.health_check_interval || 300,
+            const prefix = `〖${namePrefix}〗`
+            prefixesToRemove.push(prefix)
+          }
+
+          // 过滤掉匹配这些前缀的节点
+          const beforeCount = parsed.proxies.length
+          parsed.proxies = parsed.proxies.filter((proxy: any) => {
+            const proxyName = proxy.name || ''
+            for (const prefix of prefixesToRemove) {
+              if (proxyName.startsWith(prefix)) {
+                console.log(`[MMW清理] 删除节点: ${proxyName}`)
+                return false
               }
             }
-            providers[config.name] = providerConfig
+            return true
+          })
+          const removedCount = beforeCount - parsed.proxies.length
+          if (removedCount > 0) {
+            console.log(`[MMW清理] 共删除 ${removedCount} 个节点`)
           }
+        }
+      }
+
+      // 处理 MMW 模式的代理集合（与获取订阅逻辑一致）
+      if (Object.keys(mmwNodesMap).length > 0) {
+        // 1. 更新使用 MMW 代理集合的代理组
+        parsed['proxy-groups'] = parsed['proxy-groups'].map((group: any) => {
+          const groupConfig: any = { ...group }
+
+          if (group.use && group.use.length > 0) {
+            const newUse: string[] = []
+            const mmwGroupNames: string[] = []
+
+            group.use.forEach((providerName: string) => {
+              if (mmwNodesMap[providerName]) {
+                // MMW 模式：添加代理组名称（而非节点名称）
+                mmwGroupNames.push(providerName)
+              } else {
+                // 非 MMW 模式：保留 use 引用
+                newUse.push(providerName)
+              }
+            })
+
+            // 添加 MMW 代理组名称到 proxies
+            if (mmwGroupNames.length > 0) {
+              groupConfig.proxies = [...(groupConfig.proxies || []), ...mmwGroupNames]
+            }
+
+            // 只保留非 MMW 的 use 引用
+            if (newUse.length > 0) {
+              groupConfig.use = newUse
+            } else {
+              delete groupConfig.use
+            }
+          }
+
+          return groupConfig
+        })
+
+        // 2. 为每个 MMW 代理集合创建或更新对应的代理组
+        const mmwGroupsToAdd: any[] = []
+        for (const [providerName, data] of Object.entries(mmwNodesMap)) {
+          const nodeNames = data.nodes.map((node: any) => data.prefix + node.name)
+
+          // 检查是否已存在同名代理组
+          const existingGroupIndex = parsed['proxy-groups']?.findIndex(
+            (g: any) => g.name === providerName
+          )
+
+          if (existingGroupIndex >= 0) {
+            // 更新已存在的代理组的 proxies
+            parsed['proxy-groups'][existingGroupIndex].proxies = nodeNames
+          } else {
+            // 创建新代理组（类型为 url-test）
+            mmwGroupsToAdd.push({
+              name: providerName,
+              type: 'url-test',
+              url: 'http://www.gstatic.com/generate_204',
+              interval: 300,
+              tolerance: 50,
+              proxies: nodeNames
+            })
+          }
+        }
+
+        // 3. 将新创建的 MMW 代理组追加到 proxy-groups 末尾
+        if (mmwGroupsToAdd.length > 0) {
+          parsed['proxy-groups'] = [
+            ...parsed['proxy-groups'],
+            ...mmwGroupsToAdd
+          ]
+        }
+
+        // 4. 添加 MMW 节点到 proxies
+        for (const [, data] of Object.entries(mmwNodesMap)) {
+          data.nodes.forEach((node: any) => {
+            const prefixedNode = reorderProxyProperties({ ...node, name: data.prefix + node.name })
+            // 检查是否已存在同名节点
+            const existingIndex = parsed.proxies?.findIndex((p: any) => p.name === prefixedNode.name)
+            if (existingIndex >= 0) {
+              parsed.proxies[existingIndex] = prefixedNode
+            } else {
+              parsed.proxies.push(prefixedNode)
+            }
+          })
+        }
+      }
+
+      // 只为非 MMW 代理集合生成 proxy-providers 配置
+      if (nonMmwProviders.length > 0) {
+        const providers: Record<string, any> = {}
+        nonMmwProviders.forEach(config => {
+          const baseUrl = window.location.origin
+          const providerConfig: Record<string, any> = {
+            type: config.type || 'http',
+            path: `./proxy_providers/${config.name}.yaml`,
+            url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
+            interval: config.interval || 3600,
+          }
+          if (config.health_check_enabled) {
+            providerConfig['health-check'] = {
+              enable: true,
+              url: config.health_check_url || 'http://www.gstatic.com/generate_204',
+              interval: config.health_check_interval || 300,
+            }
+          }
+          providers[config.name] = providerConfig
         })
         if (Object.keys(providers).length > 0) {
           parsed['proxy-providers'] = providers

@@ -160,8 +160,18 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 			return
 		}
 
-		// Fetch external subscription content
-		yamlBytes, err := FetchAndFilterProxiesYAML(&sub, config)
+		// 检查缓存
+		cache := GetProxyProviderCache()
+		if entry, ok := cache.Get(configID); ok && !cache.IsExpired(entry) {
+			log.Printf("[ProxyProviderServe] 使用缓存 ID=%d, 节点数=%d", configID, entry.NodeCount)
+			w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(entry.YAMLData)
+			return
+		}
+
+		// 缓存未命中或过期，拉取新数据
+		entry, err := RefreshProxyProviderCache(&sub, config)
 		if err != nil {
 			log.Printf("[ProxyProviderServe] Failed to fetch proxies for config %d: %v", configID, err)
 			writeError(w, http.StatusInternalServerError, err)
@@ -171,7 +181,7 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 		// Output directly without download
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(yamlBytes)
+		_, _ = w.Write(entry.YAMLData)
 	})
 }
 
@@ -459,4 +469,54 @@ func applyOverridesToNode(proxiesNode *yaml.Node, overrideJSON string) {
 			util.SetNodeField(proxyNode, key, value)
 		}
 	}
+}
+
+// RefreshProxyProviderCache 刷新代理集合缓存
+func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) (*CacheEntry, error) {
+	// 拉取并过滤节点
+	yamlBytes, err := FetchAndFilterProxiesYAML(sub, config)
+	if err != nil {
+		return nil, fmt.Errorf("fetch and filter proxies: %w", err)
+	}
+
+	// 解析 YAML 获取节点列表
+	var result map[string]any
+	if err := yaml.Unmarshal(yamlBytes, &result); err != nil {
+		return nil, fmt.Errorf("parse yaml result: %w", err)
+	}
+
+	proxiesRaw, ok := result["proxies"].([]any)
+	if !ok {
+		proxiesRaw = []any{}
+	}
+
+	// 提取节点名称（使用订阅名称作为前缀标识）
+	prefix := sub.Name
+	nodeNames := make([]string, 0, len(proxiesRaw))
+	for _, p := range proxiesRaw {
+		if m, ok := p.(map[string]any); ok {
+			if name, ok := m["name"].(string); ok {
+				nodeNames = append(nodeNames, name)
+			}
+		}
+	}
+
+	// 创建缓存条目
+	entry := &CacheEntry{
+		ConfigID:  config.ID,
+		YAMLData:  yamlBytes,
+		Nodes:     proxiesRaw,
+		NodeNames: nodeNames,
+		Prefix:    prefix,
+		FetchedAt: time.Now(),
+		Interval:  config.Interval,
+		NodeCount: len(proxiesRaw),
+	}
+
+	// 存入缓存
+	cache := GetProxyProviderCache()
+	cache.Set(config.ID, entry)
+
+	log.Printf("[RefreshProxyProviderCache] 刷新缓存成功 ID=%d, 节点数=%d", config.ID, len(proxiesRaw))
+	return entry, nil
 }

@@ -781,7 +781,7 @@ function SubscriptionGeneratorPage() {
     name: string
     type: string
     proxies: string[]
-    use?: string[]  // 节点集合引用
+    use?: string[]  // 代理集合引用
     url?: string
     interval?: number
     lazy?: boolean
@@ -1079,23 +1079,10 @@ function SubscriptionGeneratorPage() {
     }
   }
 
-  const handleApplyGrouping = () => {
+  const handleApplyGrouping = async () => {
     try {
       // 解析当前配置
       const parsedConfig = yaml.load(clashConfig) as any
-
-      // 更新代理组，过滤掉 undefined 值，保留 use 字段
-      parsedConfig['proxy-groups'] = proxyGroups.map(group => {
-        const groupConfig: any = {
-          ...group,
-          proxies: group.proxies.filter((p): p is string => p !== undefined)
-        }
-        // 保留 use 字段（节点集合引用）
-        if (group.use && group.use.length > 0) {
-          groupConfig.use = group.use
-        }
-        return groupConfig
-      })
 
       // 收集所有被使用的 provider 名称
       const usedProviders = new Set<string>()
@@ -1105,43 +1092,169 @@ function SubscriptionGeneratorPage() {
         }
       })
 
-      // 如果有使用 provider，添加 proxy-providers 配置
-      if (usedProviders.size > 0 && proxyProviderConfigs.length > 0) {
-        const providers: Record<string, any> = {}
-        proxyProviderConfigs.forEach(config => {
-          if (usedProviders.has(config.name)) {
-            const baseUrl = window.location.origin
-            const providerConfig: Record<string, any> = {
-              type: config.type || 'http',
-              path: `./proxy_providers/${config.name}.yaml`,
-              url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
-              interval: config.interval || 3600,
-            }
-            if (config.health_check_enabled) {
-              providerConfig['health-check'] = {
-                enable: true,
-                url: config.health_check_url || 'http://www.gstatic.com/generate_204',
-                interval: config.health_check_interval || 300,
-              }
-            }
-            providers[config.name] = providerConfig
+      // 筛选 MMW 模式和非 MMW 模式的代理集合
+      const mmwProviders = proxyProviderConfigs.filter(
+        c => usedProviders.has(c.name) && c.process_mode === 'mmw'
+      )
+      const nonMmwProviders = proxyProviderConfigs.filter(
+        c => usedProviders.has(c.name) && c.process_mode !== 'mmw'
+      )
+
+      // 获取所有 MMW 模式代理集合的名称（无论是否被使用）
+      const allMmwProviderNames = proxyProviderConfigs
+        .filter(c => c.process_mode === 'mmw')
+        .map(c => c.name)
+
+      // 找出不再被使用的 MMW 代理集合（需要清理其自动创建的代理组和节点）
+      const unusedMmwProviders = allMmwProviderNames.filter(name => !usedProviders.has(name))
+
+      // 获取 MMW 节点数据
+      const mmwNodesMap: Record<string, { nodes: any[], prefix: string }> = {}
+      for (const config of mmwProviders) {
+        try {
+          const resp = await api.get(`/api/user/proxy-provider-nodes?id=${config.id}`)
+          if (resp.data && resp.data.nodes) {
+            mmwNodesMap[config.name] = resp.data
           }
+        } catch (err) {
+          console.error(`获取代理集合 ${config.name} 节点失败:`, err)
+        }
+      }
+
+      // 1. 更新使用代理集合的代理组
+      // 对于 MMW 模式：添加代理组名称到 proxies（而不是节点名称），移除 use 引用
+      // 对于非 MMW 模式：保留 use 字段
+      parsedConfig['proxy-groups'] = proxyGroups.map(group => {
+        const groupConfig: any = {
+          ...group,
+          proxies: group.proxies.filter((p): p is string => p !== undefined)
+        }
+
+        if (group.use && group.use.length > 0) {
+          const newUse: string[] = []
+          const mmwGroupNames: string[] = []
+
+          group.use.forEach(providerName => {
+            if (mmwNodesMap[providerName]) {
+              // MMW 模式：添加代理组名称（而非节点名称）
+              mmwGroupNames.push(providerName)
+            } else {
+              // 非 MMW 模式：保留 use 引用
+              newUse.push(providerName)
+            }
+          })
+
+          // 添加 MMW 代理组名称到 proxies
+          if (mmwGroupNames.length > 0) {
+            groupConfig.proxies = [...groupConfig.proxies, ...mmwGroupNames]
+          }
+
+          // 只保留非 MMW 的 use 引用
+          if (newUse.length > 0) {
+            groupConfig.use = newUse
+          } else {
+            delete groupConfig.use
+          }
+        }
+
+        return groupConfig
+      })
+
+      // 2. 为每个 MMW 代理集合创建或更新对应的代理组（与获取订阅逻辑一致）
+      const mmwGroupsToAdd: any[] = []
+      for (const [providerName, data] of Object.entries(mmwNodesMap)) {
+        const nodeNames = data.nodes.map((node: any) => data.prefix + node.name)
+
+        // 检查是否已存在同名代理组（可能是用户手动创建的）
+        const existingGroupIndex = parsedConfig['proxy-groups']?.findIndex(
+          (g: any) => g.name === providerName
+        )
+
+        if (existingGroupIndex >= 0) {
+          // 更新已存在的代理组的 proxies
+          parsedConfig['proxy-groups'][existingGroupIndex].proxies = nodeNames
+        } else {
+          // 创建新代理组（类型为 url-test）
+          mmwGroupsToAdd.push({
+            name: providerName,
+            type: 'url-test',
+            url: 'http://www.gstatic.com/generate_204',
+            interval: 300,
+            tolerance: 50,
+            proxies: nodeNames
+          })
+        }
+      }
+
+      // 3. 将新创建的 MMW 代理组追加到 proxy-groups 末尾
+      if (mmwGroupsToAdd.length > 0) {
+        parsedConfig['proxy-groups'] = [
+          ...parsedConfig['proxy-groups'],
+          ...mmwGroupsToAdd
+        ]
+      }
+
+      // 4. 清理不再使用的 MMW 代理集合的自动创建代理组
+      if (unusedMmwProviders.length > 0 && parsedConfig['proxy-groups']) {
+        // 删除自动创建的代理组（名称与代理集合相同的代理组）
+        parsedConfig['proxy-groups'] = parsedConfig['proxy-groups'].filter((group: any) => {
+          if (unusedMmwProviders.includes(group.name)) {
+            console.log(`[MMW清理] 删除不再使用的代理组: ${group.name}`)
+            return false
+          }
+          return true
+        })
+      }
+
+      // 添加 MMW 节点到 proxies
+      if (!parsedConfig.proxies) {
+        parsedConfig.proxies = []
+      }
+      for (const [, data] of Object.entries(mmwNodesMap)) {
+        data.nodes.forEach((node: any) => {
+          const prefixedNode = { ...node, name: data.prefix + node.name }
+          parsedConfig.proxies.push(reorderProxyFields(prefixedNode))
+        })
+      }
+
+      // 只为非 MMW 代理集合生成 proxy-providers 配置
+      if (nonMmwProviders.length > 0) {
+        const providers: Record<string, any> = {}
+        nonMmwProviders.forEach(config => {
+          const baseUrl = window.location.origin
+          const providerConfig: Record<string, any> = {
+            type: config.type || 'http',
+            path: `./proxy_providers/${config.name}.yaml`,
+            url: `${baseUrl}/api/proxy-provider/${config.id}?token=${userToken}`,
+            interval: config.interval || 3600,
+          }
+          if (config.health_check_enabled) {
+            providerConfig['health-check'] = {
+              enable: true,
+              url: config.health_check_url || 'http://www.gstatic.com/generate_204',
+              interval: config.health_check_interval || 300,
+            }
+          }
+          providers[config.name] = providerConfig
         })
         if (Object.keys(providers).length > 0) {
           parsedConfig['proxy-providers'] = providers
         }
       }
 
-      // 收集所有代理组中使用的节点名称
+      // 收集所有代理组中使用的节点名称（包括 MMW 节点）
       const usedNodeNames = new Set<string>()
-      proxyGroups.forEach(group => {
-        group.proxies.forEach(proxy => {
-          // 只添加实际节点（不是特殊节点，也不是其他代理组）
-          if (!['DIRECT', 'REJECT', 'PROXY', 'no-resolve', '♻️ 自动选择', '🚀 节点选择'].includes(proxy) &&
-              !proxyGroups.some(g => g.name === proxy)) {
-            usedNodeNames.add(proxy)
-          }
-        })
+      const groupNames = new Set(parsedConfig['proxy-groups'].map((g: any) => g.name))
+      parsedConfig['proxy-groups'].forEach((group: any) => {
+        if (group.proxies && Array.isArray(group.proxies)) {
+          group.proxies.forEach((proxy: string) => {
+            // 只添加实际节点（不是特殊节点，也不是其他代理组）
+            if (!['DIRECT', 'REJECT', 'PROXY', 'no-resolve', '♻️ 自动选择', '🚀 节点选择'].includes(proxy) &&
+                !groupNames.has(proxy)) {
+              usedNodeNames.add(proxy)
+            }
+          })
+        }
       })
 
       // 过滤 proxies，只保留被使用的节点

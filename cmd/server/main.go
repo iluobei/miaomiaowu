@@ -66,6 +66,9 @@ func main() {
 
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
 
+	// 启动时初始化代理集合缓存
+	go handler.InitProxyProviderCacheOnStartup(repo)
+
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
 	userRepo := auth.NewRepositoryAdapter(repo)
 
@@ -119,6 +122,9 @@ func main() {
 	mux.Handle("/api/user/token", auth.RequireToken(tokenStore, handler.NewUserTokenHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-configs", auth.RequireToken(tokenStore, handler.NewProxyProviderConfigsHandler(repo)))
+	mux.Handle("/api/user/proxy-provider-cache/refresh", auth.RequireToken(tokenStore, handler.NewProxyProviderCacheRefreshHandler(repo)))
+	mux.Handle("/api/user/proxy-provider-cache/status", auth.RequireToken(tokenStore, handler.NewProxyProviderCacheStatusHandler(repo)))
+	mux.Handle("/api/user/proxy-provider-nodes", auth.RequireToken(tokenStore, handler.NewProxyProviderNodesHandler(repo)))
 	mux.Handle("/api/proxy-provider/", handler.NewProxyProviderServeHandler(repo))
 	mux.Handle("/api/traffic/summary", auth.RequireToken(tokenStore, trafficHandler))
 	mux.Handle("/api/subscriptions", auth.RequireToken(tokenStore, handler.NewSubscriptionListHandler(repo)))

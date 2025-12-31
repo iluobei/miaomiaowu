@@ -399,18 +399,18 @@ function SystemSettingsPage() {
                 />
               </div>
 
-              {/* 节点集合 */}
+              {/* 代理集合 */}
               <div className='flex items-center justify-between py-3 border-t'>
                 <div className='flex items-center gap-2'>
                   <Label htmlFor='enable-proxy-provider' className='cursor-pointer'>
-                    启用节点集合
+                    启用代理集合
                   </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
                     </TooltipTrigger>
                     <TooltipContent side='right' className='max-w-xs'>
-                      <p>节点集合（Proxy Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置节点集合，并在编辑代理组时将节点集合拖入代理组。</p>
+                      <p>代理集合（Proxy Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置代理集合，并在编辑代理组时将代理集合拖入代理组。</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
