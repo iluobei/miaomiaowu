@@ -848,8 +848,24 @@ function NodesPage() {
       const response = await api.post('/api/admin/nodes/batch', { nodes: payload })
       return response.data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+    onSuccess: (data) => {
+      // 获取新创建的节点列表
+      const newNodes = data.nodes || []
+      const newNodeIds = newNodes.map((n: any) => n.id)
+
+      // 将新节点 ID 添加到 nodeOrder 开头，保持节点在列表前面的位置
+      if (newNodeIds.length > 0) {
+        const newOrder = [...newNodeIds, ...nodeOrder]
+        setNodeOrder(newOrder)
+        updateNodeOrderMutation.mutate(newOrder)
+      }
+
+      // 使用 setQueryData 直接更新缓存，避免闪烁
+      queryClient.setQueryData(['nodes'], (oldData: { nodes: ParsedNode[] } | undefined) => {
+        if (!oldData) return { nodes: newNodes }
+        return { nodes: [...newNodes, ...oldData.nodes] }
+      })
+
       toast.success('节点保存成功')
       setInput('')
       setTempNodes([])
