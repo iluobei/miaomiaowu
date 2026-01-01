@@ -2425,12 +2425,14 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 variant='outline'
                                 size='sm'
                                 className='flex-1'
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   if (node.isSaved && node.dbNode) {
                                     handleEditClashConfig(node.dbNode)
                                   } else if (!node.isSaved) {
                                     handleEditClashConfig(node)
                                   }
+                                  setClashDialogOpen(true)
                                 }}
                               >
                                 <Eye className='size-4 mr-1' />
@@ -3265,6 +3267,82 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
           )}
         </section>
       </main>
+
+      {/* Clash 配置对话框 - 独立于表格，供移动端和平板端使用 */}
+      <Dialog
+        open={clashDialogOpen && editingClashConfig !== null}
+        onOpenChange={(open) => {
+          setClashDialogOpen(open)
+          if (!open) {
+            setTimeout(() => {
+              setEditingClashConfig(null)
+              setClashConfigError('')
+              setJsonErrorLines([])
+            }, 150)
+          }
+        }}
+      >
+        <DialogContent className='max-w-4xl sm:max-w-4xl max-h-[80vh] flex flex-col'>
+          <DialogHeader>
+            <DialogTitle>
+              Clash 配置详情{editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
+            </DialogTitle>
+            <DialogDescription>
+              {editingClashConfig?.nodeId === -1 && '保存节点后可编辑配置'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className='mt-4 flex-1 flex flex-col gap-3 min-h-0'>
+            <div className='flex-1 flex border rounded overflow-hidden bg-muted'>
+              {/* 行号列 */}
+              <div className='flex flex-col bg-muted-foreground/10 text-muted-foreground text-xs font-mono select-none py-3 px-2 text-right'>
+                {editingClashConfig?.config.split('\n').map((_, i) => {
+                  const lineNum = i + 1
+                  const isErrorLine = jsonErrorLines.includes(lineNum)
+                  return (
+                    <div
+                      key={i}
+                      className={`leading-5 h-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
+                    >
+                      {lineNum}
+                    </div>
+                  )
+                })}
+              </div>
+              {/* 文本编辑区 */}
+              <Textarea
+                value={editingClashConfig?.config || ''}
+                onChange={(e) => handleClashConfigChange(e.target.value)}
+                className='font-mono text-xs flex-1 min-h-[400px] resize-none border-0 rounded-none focus-visible:ring-0 leading-5'
+                placeholder='输入 JSON 配置...'
+                readOnly={editingClashConfig?.nodeId === -1}
+              />
+            </div>
+            {clashConfigError && (
+              <div className='text-xs text-destructive bg-destructive/10 p-2 rounded'>
+                {clashConfigError}
+              </div>
+            )}
+            <div className='flex gap-2 justify-end'>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setClashDialogOpen(false)}
+              >
+                {editingClashConfig?.nodeId === -1 ? '关闭' : '取消'}
+              </Button>
+              {editingClashConfig?.nodeId !== -1 && (
+                <Button
+                  size='sm'
+                  onClick={handleSaveClashConfig}
+                  disabled={!!clashConfigError || updateClashConfigMutation.isPending}
+                >
+                  {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 探针绑定对话框 */}
       <Dialog open={probeBindingDialogOpen} onOpenChange={setProbeBindingDialogOpen}>
