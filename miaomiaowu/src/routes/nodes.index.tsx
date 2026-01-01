@@ -198,7 +198,6 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onC
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
-    touchAction: 'none',
   }
 
   return (
@@ -250,7 +249,6 @@ function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
-    touchAction: 'none',
   }
 
   return (
@@ -434,12 +432,13 @@ function NodesPage() {
   }, [userConfig?.node_order])
 
   // dnd-kit sensors
+  // 移动端需要更长的 delay 以允许正常滚动，只有长按才触发拖拽
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
+      activationConstraint: { delay: 500, tolerance: 8 },
     })
   )
 

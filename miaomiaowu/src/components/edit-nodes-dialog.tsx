@@ -30,7 +30,7 @@ interface ProxyGroup {
   name: string
   type: string
   proxies: string[]
-  use?: string[]  // 节点集合引用
+  use?: string[]  // 代理集合引用
   url?: string
   interval?: number
   strategy?: 'round-robin' | 'consistent-hashing' | 'sticky-sessions'
@@ -51,7 +51,7 @@ interface DragItemData {
   nodeNames?: string[]
   groupName?: string
   index?: number
-  providerName?: string  // 节点集合名称
+  providerName?: string  // 代理集合名称
 }
 
 interface ActiveDragItem {
@@ -79,7 +79,7 @@ interface EditNodesDialogProps {
   cancelButtonText?: string
   saveButtonText?: string
   showSpecialNodesAtBottom?: boolean  // 是否在底部显示特殊节点
-  proxyProviderConfigs?: Array<{ id: number; name: string }>  // 节点集合配置列表
+  proxyProviderConfigs?: Array<{ id: number; name: string; process_mode?: string }>  // 代理集合配置列表
   // 保留旧的 props 以保持向后兼容，但不再使用
   draggedNode?: any
   onDragStart?: any
@@ -159,6 +159,15 @@ export function EditNodesDialog({
     })
     return map
   }, [allNodes])
+
+  // MMW 模式代理集合名称集合（用于识别 proxies 中的代理集合引用）
+  const mmwProviderNames = useMemo(() => {
+    return new Set(
+      proxyProviderConfigs
+        .filter(c => c.process_mode === 'mmw')
+        .map(c => c.name)
+    )
+  }, [proxyProviderConfigs])
 
   // 筛选可用节点
   const filteredAvailableNodes = useMemo(() => {
@@ -258,9 +267,10 @@ export function EditNodesDialog({
       if (overId === 'remove-from-all-zone') return 'remove-from-all'
       if (overId === 'available-zone') return 'available'
       if (overId.startsWith('drop-')) return overId.replace('drop-', '')
+      // 优先从 overData 中获取 groupName（适用于 group-node、use-item 等）
       if (overData?.groupName) return overData.groupName
-      // 检查是否放在了某个代理组的节点上
-      if (overId.includes('-') && !overId.startsWith('available-node-') && !overId.startsWith('group-title-') && !overId.startsWith('use-')) {
+      // 检查是否放在了某个代理组的节点上（排除 available-node、group-title）
+      if (overId.includes('-') && !overId.startsWith('available-node-') && !overId.startsWith('group-title-')) {
         // 找到对应的代理组
         const groupName = proxyGroups.find(g => overId.startsWith(`${g.name}-`))?.name
         if (groupName) return groupName
@@ -281,6 +291,25 @@ export function EditNodesDialog({
       }
       // 否则插入到末尾
       return group.proxies.length
+    }
+
+    // 计算在目标代理组 use 数组中的插入位置
+    const getUseInsertIndex = (group: ProxyGroup): number => {
+      const currentUse = group.use || []
+      // 如果 overData 是 use-item 且在同一代理组
+      if (overData && 'type' in overData && overData.type === 'use-item' &&
+          'index' in overData && typeof overData.index === 'number' &&
+          overData.groupName === group.name) {
+        // use-item 的 index 已经是 use 数组内的索引
+        return Math.max(0, Math.min(overData.index, currentUse.length))
+      }
+      // 如果 overData 是 group-node，插入到 use 数组末尾（紧跟在普通节点后面）
+      if (overData && 'type' in overData && overData.type === 'group-node' &&
+          overData.groupName === group.name) {
+        return 0
+      }
+      // 否则插入到末尾
+      return currentUse.length
     }
 
     switch (activeData.type) {
@@ -512,7 +541,7 @@ export function EditNodesDialog({
       }
 
       case 'proxy-provider': {
-        // 节点集合拖到代理组
+        // 代理集合拖到代理组
         const providerName = activeData.providerName!
         const targetGroup = getTargetGroupName()
 
@@ -534,7 +563,70 @@ export function EditNodesDialog({
             if (group.name === targetGroup) {
               const currentUse = group.use || []
               if (!currentUse.includes(providerName)) {
-                return { ...group, use: [...currentUse, providerName] }
+                // 使用 getUseInsertIndex 计算插入位置
+                const insertIndex = getUseInsertIndex(group)
+                const newUse = [...currentUse]
+                newUse.splice(insertIndex, 0, providerName)
+                return { ...group, use: newUse }
+              }
+            }
+            return group
+          })
+          onProxyGroupsChange(updatedGroups)
+        }
+        break
+      }
+
+      case 'use-item': {
+        // use-item 拖放处理
+        const sourceGroup = activeData.groupName!
+        const sourceProviderName = activeData.providerName!
+        const targetGroup = getTargetGroupName()
+
+        if (!targetGroup) return
+
+        // 同一代理组内排序
+        if (targetGroup === sourceGroup && overData && 'type' in overData) {
+          const group = proxyGroups.find(g => g.name === sourceGroup)
+          if (!group?.use) break
+
+          const oldIndex = group.use.indexOf(sourceProviderName)
+          if (oldIndex === -1) break
+
+          let newIndex: number
+          if (overData.type === 'use-item' && 'providerName' in overData) {
+            newIndex = group.use.indexOf((overData as any).providerName)
+          } else if (overData.type === 'group-node' && 'index' in overData) {
+            // 放在某个节点上，移动到 use 数组开头
+            newIndex = 0
+          } else {
+            break
+          }
+
+          if (newIndex !== -1 && oldIndex !== newIndex) {
+            const updatedGroups = proxyGroups.map(g => {
+              if (g.name === sourceGroup && g.use) {
+                return { ...g, use: arrayMove(g.use, oldIndex, newIndex) }
+              }
+              return g
+            })
+            onProxyGroupsChange(updatedGroups)
+          }
+        }
+        // 跨代理组移动 use-item
+        else if (targetGroup !== sourceGroup && targetGroup !== 'available' && targetGroup !== 'remove-from-all') {
+          const updatedGroups = proxyGroups.map(group => {
+            if (group.name === sourceGroup && group.use) {
+              // 从源组移除
+              return { ...group, use: group.use.filter(u => u !== sourceProviderName) }
+            }
+            if (group.name === targetGroup) {
+              const currentUse = group.use || []
+              if (!currentUse.includes(sourceProviderName)) {
+                const insertIndex = getUseInsertIndex(group)
+                const newUse = [...currentUse]
+                newUse.splice(insertIndex, 0, sourceProviderName)
+                return { ...group, use: newUse }
               }
             }
             return group
@@ -798,7 +890,7 @@ export function EditNodesDialog({
     )
   }
 
-  // 可拖动的节点集合
+  // 可拖动的代理集合
   interface DraggableProxyProviderProps {
     name: string
   }
@@ -965,6 +1057,9 @@ export function EditNodesDialog({
   }
 
   const SortableProxy = ({ proxy, groupName, index }: SortableProxyProps) => {
+    // 检查是否是 MMW 代理集合的引用（MMW 模式下代理集合名称作为代理组名出现在 proxies 中）
+    const isMmwProvider = mmwProviderNames.has(proxy)
+
     const {
       attributes,
       listeners,
@@ -980,9 +1075,10 @@ export function EditNodesDialog({
         easing: 'ease-out',
       },
       data: {
-        type: 'group-node',
+        type: isMmwProvider ? 'use-item' : 'group-node',
         groupName,
         nodeName: proxy,
+        providerName: isMmwProvider ? proxy : undefined,
         index
       } as DragItemData,
     })
@@ -995,6 +1091,43 @@ export function EditNodesDialog({
       transition: transition || 'transform 150ms ease-out',
       opacity: isDragging ? 0.5 : 1,
       touchAction: 'none',
+    }
+
+    // MMW 代理集合使用紫色样式
+    if (isMmwProvider) {
+      return (
+        <div className='relative'>
+          {showDropIndicator && (
+            <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+          )}
+          <div
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
+              showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
+            } ${isDragging ? 'shadow-lg' : ''}`}
+            data-use-item
+          >
+            <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+            <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {proxy}</span>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='h-6 w-6 p-0 flex-shrink-0'
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                wrappedRemoveNodeFromGroup(groupName, index)
+              }}
+            >
+              <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
+            </Button>
+          </div>
+        </div>
+      )
     }
 
     return (
@@ -1033,38 +1166,62 @@ export function EditNodesDialog({
     )
   }
 
-  // 可放置的节点集合项（用于显示插入指示器）
-  interface DroppableUseItemProps {
+  // 可排序的代理集合项
+  interface SortableUseItemProps {
     providerName: string
     groupName: string
     index: number
     onRemove: () => void
   }
 
-  const DroppableUseItem = ({ providerName, groupName, index, onRemove }: DroppableUseItemProps) => {
-    const { setNodeRef, isOver } = useDroppable({
-      id: `use-${groupName}-${providerName}-${index}`,
+  const SortableUseItem = ({ providerName, groupName, index, onRemove }: SortableUseItemProps) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+      isOver
+    } = useSortable({
+      id: `use-${groupName}-${providerName}`,
+      transition: {
+        duration: 150,
+        easing: 'ease-out',
+      },
       data: {
         type: 'use-item',
         groupName,
         providerName,
-        index: (proxyGroups.find(g => g.name === groupName)?.proxies.length || 0) + index
-      }
+        index
+      } as DragItemData,
     })
 
     // 判断是否显示插入指示器
-    const showDropIndicator = activeDragItem && isOver
+    const showDropIndicator = activeDragItem && isOver && !isDragging
+
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition: transition || 'transform 150ms ease-out',
+      opacity: isDragging ? 0.5 : 1,
+      touchAction: 'none',
+    }
 
     return (
-      <div ref={setNodeRef} className='relative'>
+      <div className='relative'>
         {/* 顶部插入指示器 */}
         {showDropIndicator && (
           <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
         )}
         <div
-          className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 group/use-item ${
-            showDropIndicator ? 'border-blue-400' : ''
-          }`}
+          ref={setNodeRef}
+          style={style}
+          {...attributes}
+          {...listeners}
+          className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
+            showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
+          } ${isDragging ? 'shadow-lg' : ''}`}
+          data-use-item
         >
           <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
           <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {providerName}</span>
@@ -1195,9 +1352,15 @@ export function EditNodesDialog({
           </div>
         </CardHeader>
         <CardContent className='flex-1 space-y-1 min-h-[200px]' data-card-content>
+          {/* 合并 proxies 和 use 到同一个 SortableContext，解决单个 use-item 无法拖动的问题 */}
           <SortableContext
-            items={(group.proxies || []).filter(p => p).map(p => `${group.name}-${p}`)}
+            items={[
+              ...(group.proxies || []).filter(p => p).map(p => `${group.name}-${p}`),
+              ...(group.use || []).map(providerName => `use-${group.name}-${providerName}`)
+            ]}
+            strategy={rectSortingStrategy}
           >
+            {/* 普通节点 */}
             {(group.proxies || []).map((proxy, idx) => (
               proxy && (
                 <SortableProxy
@@ -1208,27 +1371,27 @@ export function EditNodesDialog({
                 />
               )
             ))}
-          </SortableContext>
 
-          {/* 节点集合（use）显示 - 与普通节点样式统一 */}
-          {(group.use || []).map((providerName, idx) => (
-            <DroppableUseItem
-              key={`use-${group.name}-${providerName}-${idx}`}
-              providerName={providerName}
-              groupName={group.name}
-              index={idx}
-              onRemove={() => {
-                const updatedGroups = proxyGroups.map(g => {
-                  if (g.name === group.name) {
-                    const newUse = (g.use || []).filter((_, i) => i !== idx)
-                    return { ...g, use: newUse.length > 0 ? newUse : undefined }
-                  }
-                  return g
-                })
-                onProxyGroupsChange(updatedGroups)
-              }}
-            />
-          ))}
+            {/* 代理集合（use）显示 */}
+            {(group.use || []).map((providerName, idx) => (
+              <SortableUseItem
+                key={`use-${group.name}-${providerName}`}
+                providerName={providerName}
+                groupName={group.name}
+                index={idx}
+                onRemove={() => {
+                  const updatedGroups = proxyGroups.map(g => {
+                    if (g.name === group.name) {
+                      const newUse = (g.use || []).filter((_, i) => i !== idx)
+                      return { ...g, use: newUse.length > 0 ? newUse : undefined }
+                    }
+                    return g
+                  })
+                  onProxyGroupsChange(updatedGroups)
+                }}
+              />
+            ))}
+          </SortableContext>
 
           {(group.proxies || []).filter(p => p).length === 0 && (group.use || []).length === 0 && (
             <div className={`text-sm text-center py-8 transition-colors ${
@@ -1369,7 +1532,7 @@ export function EditNodesDialog({
                           <SelectItem value='__special__'>特殊节点</SelectItem>
                         )}
                         {proxyProviderConfigs.length > 0 && (
-                          <SelectItem value='__provider__'>节点集合</SelectItem>
+                          <SelectItem value='__provider__'>代理集合</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
@@ -1396,12 +1559,12 @@ export function EditNodesDialog({
                       ))
                     )}
 
-                    {/* 节点集合区块 */}
+                    {/* 代理集合区块 */}
                     {proxyProviderConfigs.length > 0 && (nodeTagFilter === 'all' || nodeTagFilter === '__provider__') && (
                       <>
                         {nodeTagFilter === 'all' && (
                           <div className='pt-3 pb-1 border-t mt-3'>
-                            <span className='text-xs text-purple-600 dark:text-purple-400 font-medium'>📦 节点集合</span>
+                            <span className='text-xs text-purple-600 dark:text-purple-400 font-medium'>📦 代理集合</span>
                           </div>
                         )}
                         {proxyProviderConfigs.map((config) => (
@@ -1464,6 +1627,12 @@ export function EditNodesDialog({
                 </div>
               )}
               {activeDragItem?.data.type === 'proxy-provider' && (
+                <div className='flex items-center gap-2 p-2 rounded border border-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-2xl pointer-events-none'>
+                  <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+                  <span className='text-sm truncate text-purple-700 dark:text-purple-300'>📦 {activeDragItem.data.providerName}</span>
+                </div>
+              )}
+              {activeDragItem?.data.type === 'use-item' && (
                 <div className='flex items-center gap-2 p-2 rounded border border-purple-400 bg-purple-50 dark:bg-purple-950/50 shadow-2xl pointer-events-none'>
                   <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
                   <span className='text-sm truncate text-purple-700 dark:text-purple-300'>📦 {activeDragItem.data.providerName}</span>

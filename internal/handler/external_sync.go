@@ -848,25 +848,27 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 	}
 
 	// 处理每个代理集合配置
+	cache := GetProxyProviderCache()
 	for _, config := range mmwConfigs {
 		log.Printf("[代理集合同步] 处理代理集合: %s", config.Name)
 
-		// 获取并过滤节点
-		yamlBytes, err := FetchAndFilterProxiesYAML(&sub, &config)
-		if err != nil {
-			log.Printf("[代理集合同步] 获取代理集合 %s 的节点失败: %v", config.Name, err)
-			continue
+		var proxiesRaw []any
+
+		// 优先使用缓存
+		if entry, ok := cache.Get(config.ID); ok && !cache.IsExpired(entry) {
+			log.Printf("[代理集合同步] 使用缓存 ID=%d, 节点数=%d", config.ID, entry.NodeCount)
+			proxiesRaw = entry.Nodes
+		} else {
+			// 缓存未命中或过期，刷新缓存
+			entry, err := RefreshProxyProviderCache(&sub, &config)
+			if err != nil {
+				log.Printf("[代理集合同步] 获取代理集合 %s 的节点失败: %v", config.Name, err)
+				continue
+			}
+			proxiesRaw = entry.Nodes
 		}
 
-		// 解析 YAML 获取节点列表
-		var proxiesYAML map[string]any
-		if err := yaml.Unmarshal(yamlBytes, &proxiesYAML); err != nil {
-			log.Printf("[代理集合同步] 解析代理集合 %s 的节点失败: %v", config.Name, err)
-			continue
-		}
-
-		proxiesRaw, ok := proxiesYAML["proxies"].([]any)
-		if !ok || len(proxiesRaw) == 0 {
+		if len(proxiesRaw) == 0 {
 			log.Printf("[代理集合同步] 代理集合 %s 没有节点", config.Name)
 			continue
 		}

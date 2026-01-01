@@ -3857,6 +3857,44 @@ func (r *TrafficRepository) GetProxyProviderConfig(ctx context.Context, id int64
 	return &config, nil
 }
 
+// GetProxyProviderConfigByName retrieves a proxy provider config by name
+func (r *TrafficRepository) GetProxyProviderConfigByName(ctx context.Context, name string) (*ProxyProviderConfig, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, username, external_subscription_id, name, type, interval, proxy, size_limit,
+			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
+			health_check_timeout, health_check_lazy, health_check_expected_status,
+			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
+			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
+		FROM proxy_provider_configs WHERE name = ?
+	`, name)
+
+	var config ProxyProviderConfig
+	var healthCheckEnabled, healthCheckLazy int
+	err := row.Scan(
+		&config.ID, &config.Username, &config.ExternalSubscriptionID, &config.Name, &config.Type,
+		&config.Interval, &config.Proxy, &config.SizeLimit, &config.Header,
+		&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
+		&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
+		&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
+		&config.GeoIPFilter, &config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get proxy provider config by name: %w", err)
+	}
+
+	config.HealthCheckEnabled = healthCheckEnabled != 0
+	config.HealthCheckLazy = healthCheckLazy != 0
+
+	return &config, nil
+}
+
 // ListProxyProviderConfigs returns all proxy provider configs for a user
 func (r *TrafficRepository) ListProxyProviderConfigs(ctx context.Context, username string) ([]ProxyProviderConfig, error) {
 	if r == nil || r.db == nil {
