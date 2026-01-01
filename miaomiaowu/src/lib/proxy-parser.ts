@@ -738,18 +738,26 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
             host: queryParams.host ? [safeDecodeURIComponent(queryParams.host)] : [],
             path: safeDecodeURIComponent(queryParams.path) || '/'
           }
+        } else if (queryParams.type === 'xhttp') {
+          // xhttp 与 reality一样使用opts
+          node.network = 'xhttp'
+          node['xhttp-opts'] = {
+            path: safeDecodeURIComponent(queryParams.path) || '/',
+            headers: queryParams.host ? { Host: safeDecodeURIComponent(queryParams.host) } : {}
+          }
         }
 
         // 其他常见参数
         if (queryParams.alpn) {
           node.alpn = queryParams.alpn.split(',')
         }
-        if (queryParams.host) {
-          node.host = queryParams.host
-        }
-        if (queryParams.path) {
-          node.path = queryParams.path
-        }
+        // 
+        // if (queryParams.host) {
+        //   node.host = queryParams.host
+        // }
+        // if (queryParams.path) {
+        //   node.path = queryParams.path
+        // }
         if (queryParams.headerType) {
           node.headerType = queryParams.headerType
         }
@@ -1062,7 +1070,8 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     // 已处理的参数
     'security', // 已转换为 tls 和 reality-opts
     'fingerprint', // 已转换为 client-fingerprint
-    'client-fingerprint' // SS plugin 中的 client-fingerprint，已单独处理
+    'client-fingerprint', // SS plugin 中的 client-fingerprint，已单独处理
+    '_original-network' // xhttp 原始网络类型，用于 URI 生成，不输出到 Clash
   ])
 
   const clash: ClashProxy = {

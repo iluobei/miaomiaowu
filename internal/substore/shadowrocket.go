@@ -196,6 +196,26 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			}
 		}
 
+		// 处理xhttp参数
+		if proxyType == "vless" && network == "xhttp" {
+			if xhttpOpts := GetMap(transformed, "xhttp-opts"); xhttpOpts != nil {
+				transformed["obfs"] = network
+				if IsPresent(transformed, "xhttp-opts", "path") {
+					if path, ok := xhttpOpts["path"].(string); ok {
+						transformed["path"] = path
+					}
+				}
+
+				if headers := GetMap(xhttpOpts, "headers"); headers != nil {
+					if IsPresent(transformed, "xhttp-opts", "headers", "Host") {
+						if host, ok := headers["Host"].(string); ok {
+							transformed["obfsParam"] = host
+						}
+					}
+				}
+			}
+		}
+
 		// Handle H2 network options
 		if (proxyType == "vmess" || proxyType == "vless") && network == "h2" {
 			if h2Opts := GetMap(transformed, "h2-opts"); h2Opts != nil {
