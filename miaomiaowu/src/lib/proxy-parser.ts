@@ -830,6 +830,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
             path: safeDecodeURIComponent(queryParams.path) || '/',
             headers: queryParams.host ? { Host: safeDecodeURIComponent(queryParams.host) } : {}
           }
+          node.mode = queryParams.mode || 'auto' // xhttp 没有解析mode参数, 参考shadowrocket客户端默认为auto
         }
 
         // 其他常见参数
