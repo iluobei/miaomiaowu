@@ -6,7 +6,7 @@
 set -e
 
 # 配置
-VERSION="v0.3.7"
+VERSION="v0.3.8"
 GITHUB_REPO="Jimleerx/miaomiaowu"
 BINARY_NAME=""  # 将根据架构自动设置
 INSTALL_DIR="/usr/local/bin"
