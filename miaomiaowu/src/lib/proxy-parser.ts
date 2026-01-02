@@ -824,9 +824,9 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
             path: safeDecodeURIComponent(queryParams.path) || '/'
           }
         } else if (queryParams.type === 'xhttp') {
-          // xhttp 与 reality一样使用opts
-          node.network = 'xhttp'
-          node['xhttp-opts'] = {
+          // xhttp 与 reality一样使用opts, mihomo的xhttp需要转换为splithttp
+          node.network = 'splithttp'
+          node['splithttp-opts'] = {
             path: safeDecodeURIComponent(queryParams.path) || '/',
             headers: queryParams.host ? { Host: safeDecodeURIComponent(queryParams.host) } : {}
           }

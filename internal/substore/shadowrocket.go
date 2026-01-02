@@ -216,6 +216,26 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			}
 		}
 
+		// 兼容0.3.7后续版本xhttp改为splithttp的情况
+		if proxyType == "vless" && network == "splithttp" {
+			if splithttpOpts := GetMap(transformed, "splithttp-opts"); splithttpOpts != nil {
+				transformed["obfs"] = network
+				if IsPresent(transformed, "splithttp-opts", "path") {
+					if path, ok := splithttpOpts["path"].(string); ok {
+						transformed["path"] = path
+					}
+				}
+
+				if headers := GetMap(splithttpOpts, "headers"); headers != nil {
+					if IsPresent(transformed, "splithttp-opts", "headers", "Host") {
+						if host, ok := headers["Host"].(string); ok {
+							transformed["obfsParam"] = host
+						}
+					}
+				}
+			}
+		}
+
 		// Handle H2 network options
 		if (proxyType == "vmess" || proxyType == "vless") && network == "h2" {
 			if h2Opts := GetMap(transformed, "h2-opts"); h2Opts != nil {

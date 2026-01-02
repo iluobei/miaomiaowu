@@ -250,8 +250,36 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 				params.Set("serviceName", serviceName)
 			}
 		}
-	}
+	case "xhttp":
+		if mode := GetString(proxy, "mode"); mode != "" {
+			params.Set("mode", mode)
+		}
+		if xhttpOpts := GetMap(proxy, "xhttp-opts"); xhttpOpts != nil {
+			if path := GetString(xhttpOpts, "path"); path != "" {
+				params.Set("path", path)
+			}
+			if headers := GetMap(xhttpOpts, "headers"); headers != nil {
+				if host := GetString(headers, "Host"); host != "" {
+					params.Set("host", host)
+				}
+			}
+		}
 
+	case "splithttp":
+		if mode := GetString(proxy, "mode"); mode != "" {
+			params.Set("mode", mode)
+		}
+		if xhttpOpts := GetMap(proxy, "splithttp-opts"); xhttpOpts != nil {
+			if path := GetString(xhttpOpts, "path"); path != "" {
+				params.Set("path", path)
+			}
+			if headers := GetMap(xhttpOpts, "headers"); headers != nil {
+				if host := GetString(headers, "Host"); host != "" {
+					params.Set("host", host)
+				}
+			}
+		}
+	}
 	uri := fmt.Sprintf("vless://%s@%s:%d?%s#%s",
 		uuid, server, port, params.Encode(), url.PathEscape(name))
 	return uri, nil
