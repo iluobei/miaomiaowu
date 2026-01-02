@@ -405,80 +405,89 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// 检查是否需要汇总外部订阅的流量信息
 	externalTrafficLimit, externalTrafficUsed := int64(0), int64(0)
+	usesProbeNodes := false      // 是否使用了探针节点
+	probeBindingEnabled := false // 是否开启了探针服务器绑定
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
-		if err == nil && settings.SyncTraffic {
-			log.Printf("[Subscription] User %s has SyncTraffic enabled, checking for external subscription nodes", username)
-			// 解析 YAML 文件，获取其中使用的节点名称
-			var yamlConfig map[string]any
-			if err := yaml.Unmarshal(data, &yamlConfig); err == nil {
-				if proxies, ok := yamlConfig["proxies"].([]any); ok {
-					log.Printf("[Subscription] Found %d proxies in subscription YAML", len(proxies))
-					// 收集所有节点名称
-					usedNodeNames := make(map[string]bool)
-					for _, proxy := range proxies {
-						if proxyMap, ok := proxy.(map[string]any); ok {
-							if name, ok := proxyMap["name"].(string); ok && name != "" {
-								usedNodeNames[name] = true
+		if err == nil {
+			probeBindingEnabled = settings.EnableProbeBinding
+			if settings.SyncTraffic {
+				log.Printf("[Subscription] User %s has SyncTraffic enabled, checking for external subscription nodes", username)
+				// 解析 YAML 文件，获取其中使用的节点名称
+				var yamlConfig map[string]any
+				if err := yaml.Unmarshal(data, &yamlConfig); err == nil {
+					if proxies, ok := yamlConfig["proxies"].([]any); ok {
+						log.Printf("[Subscription] Found %d proxies in subscription YAML", len(proxies))
+						// 收集所有节点名称
+						usedNodeNames := make(map[string]bool)
+						for _, proxy := range proxies {
+							if proxyMap, ok := proxy.(map[string]any); ok {
+								if name, ok := proxyMap["name"].(string); ok && name != "" {
+									usedNodeNames[name] = true
+								}
 							}
 						}
-					}
 
-					// 如果有节点名称，从数据库查询这些节点的 tag
-					if len(usedNodeNames) > 0 {
-						log.Printf("[Subscription] Querying database for %d nodes", len(usedNodeNames))
-						nodes, err := h.repo.ListNodes(r.Context(), username)
-						if err == nil {
-							// 收集使用到的外部订阅名称（通过 tag 识别）
-							usedExternalSubs := make(map[string]bool)
-							for _, node := range nodes {
-								// 检查节点是否在订阅文件中
-								if usedNodeNames[node.NodeName] {
-									// 如果 tag 不是默认值，说明是外部订阅节点
-									if node.Tag != "" && node.Tag != "手动输入" {
-										usedExternalSubs[node.Tag] = true
-										log.Printf("[Subscription] Node '%s' is from external subscription '%s'", node.NodeName, node.Tag)
-									}
-								}
-							}
-
-							// 如果有使用到外部订阅的节点，汇总这些订阅的流量
-							if len(usedExternalSubs) > 0 {
-								log.Printf("[Subscription] Found %d external subscriptions in use: %v", len(usedExternalSubs), getKeys(usedExternalSubs))
-								externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
-								if err == nil {
-									now := time.Now()
-									for _, sub := range externalSubs {
-										// 只汇总使用到的外部订阅
-										if usedExternalSubs[sub.Name] {
-											// 如果有过期时间且已过期，则跳过
-											// 如果过期时间为空，表示长期订阅，不跳过
-											if sub.Expire != nil && sub.Expire.Before(now) {
-												log.Printf("[Subscription] Skipping expired external subscription '%s' (expired at %s)", sub.Name, sub.Expire.Format("2006-01-02 15:04:05"))
-												continue
-											}
-											if sub.Expire == nil {
-												log.Printf("[Subscription] Adding traffic from long-term external subscription '%s': upload=%d, download=%d, total=%d",
-													sub.Name, sub.Upload, sub.Download, sub.Total)
-											} else {
-												log.Printf("[Subscription] Adding traffic from external subscription '%s': upload=%d, download=%d, total=%d (expires at %s)",
-													sub.Name, sub.Upload, sub.Download, sub.Total, sub.Expire.Format("2006-01-02 15:04:05"))
-											}
-											externalTrafficLimit += sub.Total
-											externalTrafficUsed += sub.Upload + sub.Download
+						// 如果有节点名称，从数据库查询这些节点的 tag
+						if len(usedNodeNames) > 0 {
+							log.Printf("[Subscription] Querying database for %d nodes", len(usedNodeNames))
+							nodes, err := h.repo.ListNodes(r.Context(), username)
+							if err == nil {
+								// 收集使用到的外部订阅名称（通过 tag 识别）
+								usedExternalSubs := make(map[string]bool)
+								for _, node := range nodes {
+									// 检查节点是否在订阅文件中
+									if usedNodeNames[node.NodeName] {
+										// 检测是否为探针节点（有绑定探针服务器）
+										if node.ProbeServer != "" {
+											usesProbeNodes = true
+										}
+										// 如果 tag 不是默认值，说明是外部订阅节点
+										if node.Tag != "" && node.Tag != "手动输入" {
+											usedExternalSubs[node.Tag] = true
+											log.Printf("[Subscription] Node '%s' is from external subscription '%s'", node.NodeName, node.Tag)
 										}
 									}
-									log.Printf("[Subscription] External subscriptions traffic total: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-										externalTrafficLimit, float64(externalTrafficLimit)/(1024*1024*1024),
-										externalTrafficUsed, float64(externalTrafficUsed)/(1024*1024*1024))
+								}
+
+								// 如果有使用到外部订阅的节点，汇总这些订阅的流量
+								if len(usedExternalSubs) > 0 {
+									log.Printf("[Subscription] Found %d external subscriptions in use: %v", len(usedExternalSubs), getKeys(usedExternalSubs))
+									externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
+									if err == nil {
+										now := time.Now()
+										for _, sub := range externalSubs {
+											// 只汇总使用到的外部订阅
+											if usedExternalSubs[sub.Name] {
+												// 如果有过期时间且已过期，则跳过
+												// 如果过期时间为空，表示长期订阅，不跳过
+												if sub.Expire != nil && sub.Expire.Before(now) {
+													log.Printf("[Subscription] Skipping expired external subscription '%s' (expired at %s)", sub.Name, sub.Expire.Format("2006-01-02 15:04:05"))
+													continue
+												}
+												if sub.Expire == nil {
+													log.Printf("[Subscription] Adding traffic from long-term external subscription '%s': upload=%d, download=%d, total=%d",
+														sub.Name, sub.Upload, sub.Download, sub.Total)
+												} else {
+													log.Printf("[Subscription] Adding traffic from external subscription '%s': upload=%d, download=%d, total=%d (expires at %s)",
+														sub.Name, sub.Upload, sub.Download, sub.Total, sub.Expire.Format("2006-01-02 15:04:05"))
+												}
+												externalTrafficLimit += sub.Total
+												externalTrafficUsed += sub.Upload + sub.Download
+											}
+										}
+										log.Printf("[Subscription] External subscriptions traffic total: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
+											externalTrafficLimit, float64(externalTrafficLimit)/(1024*1024*1024),
+											externalTrafficUsed, float64(externalTrafficUsed)/(1024*1024*1024))
+									} else {
+										log.Printf("[Subscription] Failed to list external subscriptions: %v", err)
+									}
 								} else {
-									log.Printf("[Subscription] Failed to list external subscriptions: %v", err)
+									log.Printf("[Subscription] No external subscription nodes found in use")
 								}
 							} else {
-								log.Printf("[Subscription] No external subscription nodes found in use")
+								log.Printf("[Subscription] Failed to list nodes: %v", err)
 							}
-						} else {
-							log.Printf("[Subscription] Failed to list nodes: %v", err)
 						}
 					}
 				}
@@ -556,14 +565,28 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", contentType)
 	// 只有在有流量信息时才添加 subscription-userinfo 头
 	if hasTrafficInfo || externalTrafficLimit > 0 {
-		// 汇总探针流量和外部订阅流量
-		finalLimit := totalLimit + externalTrafficLimit
-		finalUsed := totalUsed + externalTrafficUsed
+		var finalLimit, finalUsed int64
 
-		log.Printf("[Subscription] Final traffic summary for user %s:", username)
-		log.Printf("[Subscription]   Probe traffic:    limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-			totalLimit, float64(totalLimit)/(1024*1024*1024),
-			totalUsed, float64(totalUsed)/(1024*1024*1024))
+		// 判断是否需要包含探针流量：
+		// 1. 探针服务器绑定关闭时，始终包含探针流量
+		// 2. 探针服务器绑定开启时，只有使用了探针节点才包含探针流量
+		includeProbeTraffic := !probeBindingEnabled || usesProbeNodes
+
+		if includeProbeTraffic && hasTrafficInfo {
+			finalLimit = totalLimit + externalTrafficLimit
+			finalUsed = totalUsed + externalTrafficUsed
+			log.Printf("[Subscription] Final traffic summary for user %s:", username)
+			log.Printf("[Subscription]   Probe traffic:    limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
+				totalLimit, float64(totalLimit)/(1024*1024*1024),
+				totalUsed, float64(totalUsed)/(1024*1024*1024))
+		} else {
+			// 仅统计外部订阅流量
+			finalLimit = externalTrafficLimit
+			finalUsed = externalTrafficUsed
+			log.Printf("[Subscription] Final traffic summary for user %s:", username)
+			log.Printf("[Subscription]   Probe traffic:    (not included - probe binding enabled but no probe nodes used)")
+		}
+
 		log.Printf("[Subscription]   External traffic: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
 			externalTrafficLimit, float64(externalTrafficLimit)/(1024*1024*1024),
 			externalTrafficUsed, float64(externalTrafficUsed)/(1024*1024*1024))
