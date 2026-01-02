@@ -252,6 +252,9 @@ MIT License
 
 ### v0.3.9 (2026-01-03)
 - 🌈 更新应用时增加使用代理重试更新
+- 🌈 优化批量修改节点时的订阅刷新性能
+- 🛠️ fix:vless xhttp以mihomo为准,xhttp转换为splithttp
+- 🛠️ fix:仅使用外部订阅节点的订阅只统计外部订阅流量
 ### v0.3.8 (2026-01-02)
 - 🛠️ fix:vless xhttp没有解析mode参数
 - 🛠️ fix:vless xhttp以mihomo为准,xhttp转换为splithttp
