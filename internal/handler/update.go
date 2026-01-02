@@ -198,13 +198,17 @@ func NewUpdateApplySSEHandler() http.Handler {
 		log.Printf("开始下载更新: %s", info.DownloadURL)
 
 		lastProgress := 0
-		tempFile, err := downloadBinaryWithProgress(info.DownloadURL, func(downloaded, total int64) {
+		tempFile, err := downloadBinaryWithProgressAndRetry(info.DownloadURL, func(downloaded, total int64) {
 			progress := int(downloaded * 100 / total)
 			// Only send update every 5% to reduce traffic
 			if progress >= lastProgress+5 || progress == 100 {
 				lastProgress = progress
 				sendProgress("downloading", progress, fmt.Sprintf("正在下载... %d%%", progress))
 			}
+		}, func(proxyURL string) {
+			// 切换到代理时重置进度并提示用户
+			lastProgress = 0
+			sendProgress("downloading", 0, "直接下载失败，正在使用代理重试...")
 		})
 		if err != nil {
 			sendProgress("error", 0, fmt.Sprintf("下载失败: %v", err))
@@ -348,13 +352,49 @@ func parseVersion(v string) []int {
 }
 
 // downloadBinary downloads the binary to a temp file
+// GitHub 代理地址
+const githubProxyURL = "https://1ms.cc/"
+
 func downloadBinary(url string) (string, error) {
 	return downloadBinaryWithProgress(url, nil)
 }
 
 // downloadBinaryWithProgress downloads the binary to a temp file with progress callback
+// 如果直接下载失败或超时，会尝试使用 GitHub 代理重试
 func downloadBinaryWithProgress(url string, onProgress func(downloaded, total int64)) (string, error) {
-	client := &http.Client{Timeout: 5 * time.Minute}
+	return downloadBinaryWithProgressAndRetry(url, onProgress, nil)
+}
+
+// downloadBinaryWithProgressAndRetry 下载二进制文件，支持进度回调和重试通知
+func downloadBinaryWithProgressAndRetry(url string, onProgress func(downloaded, total int64), onRetry func(proxyURL string)) (string, error) {
+	// 首先尝试直接下载，使用较短的超时时间
+	tempFile, err := downloadBinaryDirect(url, onProgress, 60*time.Second)
+	if err == nil {
+		return tempFile, nil
+	}
+
+	log.Printf("直接下载失败: %v，尝试使用代理下载...", err)
+
+	// 使用 GitHub 代理重试
+	proxyURL := githubProxyURL + url
+	log.Printf("使用代理下载: %s", proxyURL)
+
+	// 通知切换到代理
+	if onRetry != nil {
+		onRetry(proxyURL)
+	}
+
+	tempFile, err = downloadBinaryDirect(proxyURL, onProgress, 5*time.Minute)
+	if err != nil {
+		return "", fmt.Errorf("代理下载也失败: %w", err)
+	}
+
+	return tempFile, nil
+}
+
+// downloadBinaryDirect 直接下载二进制文件（不含重试逻辑）
+func downloadBinaryDirect(url string, onProgress func(downloaded, total int64), timeout time.Duration) (string, error) {
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
