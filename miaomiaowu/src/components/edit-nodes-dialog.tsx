@@ -125,6 +125,13 @@ export function EditNodesDialog({
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
 
+  // 检查新代理组名称是否与现有组冲突
+  const isGroupNameDuplicate = useMemo(() => {
+    const trimmedName = newGroupName.trim()
+    if (!trimmedName) return false
+    return proxyGroups.some(group => group.name === trimmedName)
+  }, [newGroupName, proxyGroups])
+
   // 代理组改名状态
   const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
   const [editingGroupValue, setEditingGroupValue] = useState('')
@@ -1703,25 +1710,33 @@ export function EditNodesDialog({
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddGroup()
+                  if (e.key === 'Enter' && !isGroupNameDuplicate) handleAddGroup()
                 }}
+                className={isGroupNameDuplicate ? 'border-destructive' : ''}
               />
+              {isGroupNameDuplicate && (
+                <p className='text-sm text-destructive mt-1'>已存在同名代理组</p>
+              )}
             </div>
 
             <div>
               <p className='text-sm text-muted-foreground mb-2'>快速选择：</p>
               <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
-                {Object.entries(OUTBOUND_NAMES).map(([key, value]) => (
-                  <Button
-                    key={key}
-                    variant='outline'
-                    size='sm'
-                    className='justify-start text-left h-auto py-2 px-3'
-                    onClick={() => handleQuickSelect(value)}
-                  >
-                    <span className='truncate'>{value}</span>
-                  </Button>
-                ))}
+                {Object.entries(OUTBOUND_NAMES).map(([key, value]) => {
+                  const isDuplicate = proxyGroups.some(g => g.name === value)
+                  return (
+                    <Button
+                      key={key}
+                      variant='outline'
+                      size='sm'
+                      className={`justify-start text-left h-auto py-2 px-3 ${isDuplicate ? 'opacity-50' : ''}`}
+                      onClick={() => handleQuickSelect(value)}
+                      disabled={isDuplicate}
+                    >
+                      <span className='truncate'>{value}</span>
+                    </Button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -1730,7 +1745,7 @@ export function EditNodesDialog({
             <Button variant='outline' onClick={() => setAddGroupDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleAddGroup} disabled={!newGroupName.trim()}>
+            <Button onClick={handleAddGroup} disabled={!newGroupName.trim() || isGroupNameDuplicate}>
               保存
             </Button>
           </DialogFooter>
