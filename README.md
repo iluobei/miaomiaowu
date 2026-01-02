@@ -253,6 +253,8 @@ MIT License
 ### v0.3.8 (2026-01-02)
 - 🛠️ fix:vless xhttp没有解析mode参数
 - 🛠️ fix:vless xhttp以mihomo为准,xhttp转换为splithttp
+- 🛠️ fix:节点名称以'[开头无法手动分组
+- 🛠️ fix:添加代理组时没有校验同名代理组
 ### v0.3.7 (2026-01-01)
 - 🌈 优化代理集合的处理逻辑
 - 🛠️ fix:新增节点时节点列表闪一下
