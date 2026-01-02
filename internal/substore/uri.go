@@ -266,6 +266,7 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 		}
 
 	case "splithttp":
+		params.Set("type", "xhttp")
 		if mode := GetString(proxy, "mode"); mode != "" {
 			params.Set("mode", mode)
 		}

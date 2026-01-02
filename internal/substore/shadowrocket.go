@@ -218,8 +218,9 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 
 		// 兼容0.3.7后续版本xhttp改为splithttp的情况
 		if proxyType == "vless" && network == "splithttp" {
+			transformed["network"] = "xhttp"
+			transformed["obfs"] = "xhttp"
 			if splithttpOpts := GetMap(transformed, "splithttp-opts"); splithttpOpts != nil {
-				transformed["obfs"] = network
 				if IsPresent(transformed, "splithttp-opts", "path") {
 					if path, ok := splithttpOpts["path"].(string); ok {
 						transformed["path"] = path

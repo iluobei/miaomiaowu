@@ -45,6 +45,20 @@ interface Proxy {
         };
         method?: string;
     };
+    'xhttp-opts'?: {
+        path?: string | string[];
+        headers?: {
+            Host?: string | string[];
+        };
+        method?: string;
+    };
+    'splithttp-opts'?: {
+        path?: string | string[];
+        headers?: {
+            Host?: string | string[];
+        };
+        method?: string;
+    };
     'h2-opts'?: {
         path?: string | string[];
         host?: string | string[];
@@ -170,7 +184,7 @@ function vless(proxy: Proxy): string {
     if (proxy.encryption) {
         encryption = `&encryption=${encodeURIComponent(proxy.encryption)}`;
     }
-    let vlessType = proxy.network;
+    let vlessType = proxy.network === 'splithttp' ? 'xhttp' : proxy.network;
     if (proxy.network === 'ws' && proxy['ws-opts']?.['v2ray-http-upgrade']) {
         vlessType = 'httpupgrade';
     }
@@ -187,6 +201,10 @@ function vless(proxy: Proxy): string {
         }
     }
 
+    if (['splithttp'].includes(proxy.network || '')) {
+        vlessTransport += `&mode=${encodeURIComponent(proxy.mode) || 'auto'}`;
+    }
+
     const vlessTransportServiceName =
         proxy[`${proxy.network}-opts`]?.[`${proxy.network}-service-name`];
     const vlessTransportPath = proxy[`${proxy.network}-opts`]?.path;
@@ -198,6 +216,9 @@ function vless(proxy: Proxy): string {
                 : vlessTransportPath,
         )}`;
     }
+
+    // 兼容xhttp在mmw被转成splithttp的情况
+    
     if (vlessTransportHost) {
         vlessTransport += `&host=${encodeURIComponent(
             Array.isArray(vlessTransportHost)
