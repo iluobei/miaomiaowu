@@ -114,19 +114,19 @@ const PROXY_TYPES = [
 // 地域分裂配置（用于 Pro 批量创建）
 // countryCode 用于 GeoIP 匹配（仅 MMW 模式生效）
 const REGION_CONFIGS = [
-  { name: '香港节点', emoji: '🇭🇰', filter: '港|HK|hk|Hong Kong|HongKong|hongkong', countryCode: 'HK' },
-  { name: '美国节点', emoji: '🇺🇸', filter: '美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates', countryCode: 'US' },
-  { name: '日本节点', emoji: '🇯🇵', filter: '日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan', countryCode: 'JP' },
-  { name: '新加坡节点', emoji: '🇸🇬', filter: '新加坡|坡|狮城|SG|Singapore', countryCode: 'SG' },
-  { name: '台湾节点', emoji: '🇹🇼', filter: '台|新北|彰化|TW|Taiwan', countryCode: 'TW' },
-  { name: '韩国节点', emoji: '🇰🇷', filter: '韩|KR|Korea|KOR|首尔', countryCode: 'KR' },
-  { name: '加拿大节点', emoji: '🇨🇦', filter: '加拿大|CA|Canada', countryCode: 'CA' },
-  { name: '英国节点', emoji: '🇬🇧', filter: '英|UK|伦敦|英格兰|GB|United Kingdom', countryCode: 'GB' },
-  { name: '法国节点', emoji: '🇫🇷', filter: '法|FR|France|巴黎', countryCode: 'FR' },
-  { name: '德国节点', emoji: '🇩🇪', filter: '德|DE|Germany|法兰克福', countryCode: 'DE' },
-  { name: '荷兰节点', emoji: '🇳🇱', filter: '荷|NL|Netherlands|阿姆斯特丹', countryCode: 'NL' },
-  { name: '土耳其节点', emoji: '🇹🇷', filter: '土耳其|TR|Turkey|伊斯坦布尔', countryCode: 'TR' },
-  { name: '其他地区', emoji: '🌍', filter: '', excludeFilter: '港|HK|hk|Hong Kong|HongKong|hongkong|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan|新加坡|坡|狮城|SG|Singapore|台|新北|彰化|TW|Taiwan|韩|KR|Korea|KOR|首尔|加拿大|CA|Canada|英|UK|伦敦|英格兰|GB|United Kingdom|法|FR|France|巴黎|德|DE|Germany|法兰克福|荷|NL|Netherlands|阿姆斯特丹|土耳其|TR|Turkey|伊斯坦布尔', countryCode: '' },
+  { name: '香港节点', emoji: '🇭🇰', filter: '🇭🇰|港|HK|hk|Hong Kong|HongKong|hongkong', countryCode: 'HK' },
+  { name: '美国节点', emoji: '🇺🇸', filter: '🇺🇸|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates', countryCode: 'US' },
+  { name: '日本节点', emoji: '🇯🇵', filter: '🇯🇵|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan', countryCode: 'JP' },
+  { name: '新加坡节点', emoji: '🇸🇬', filter: '🇸🇬|新加坡|坡|狮城|SG|Singapore', countryCode: 'SG' },
+  { name: '台湾节点', emoji: '🇹🇼', filter: '🇹🇼|台|新北|彰化|TW|Taiwan', countryCode: 'TW' },
+  { name: '韩国节点', emoji: '🇰🇷', filter: '🇰🇷|韩|KR|Korea|KOR|首尔', countryCode: 'KR' },
+  { name: '加拿大节点', emoji: '🇨🇦', filter: '🇨🇦|加拿大|CA|Canada', countryCode: 'CA' },
+  { name: '英国节点', emoji: '🇬🇧', filter: '🇬🇧|英|UK|伦敦|英格兰|GB|United Kingdom', countryCode: 'GB' },
+  { name: '法国节点', emoji: '🇫🇷', filter: '🇫🇷|法|FR|France|巴黎', countryCode: 'FR' },
+  { name: '德国节点', emoji: '🇩🇪', filter: '🇩🇪|德|DE|Germany|法兰克福', countryCode: 'DE' },
+  { name: '荷兰节点', emoji: '🇳🇱', filter: '🇳🇱|荷|NL|Netherlands|阿姆斯特丹', countryCode: 'NL' },
+  { name: '土耳其节点', emoji: '🇹🇷', filter: '🇹🇷|土耳其|TR|Turkey|伊斯坦布尔', countryCode: 'TR' },
+  { name: '其他地区', emoji: '🌍', filter: '', excludeFilter: '🇭🇰|🇺🇸|🇯🇵|🇸🇬|🇹🇼|🇰🇷|🇨🇦|🇬🇧|🇫🇷|🇩🇪|🇳🇱|🇹🇷|港|HK|hk|Hong Kong|HongKong|hongkong|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|US|United States|UnitedStates|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|JP|Japan|新加坡|坡|狮城|SG|Singapore|台|新北|彰化|TW|Taiwan|韩|KR|Korea|KOR|首尔|加拿大|CA|Canada|英|UK|伦敦|英格兰|GB|United Kingdom|法|FR|France|巴黎|德|DE|Germany|法兰克福|荷|NL|Netherlands|阿姆斯特丹|土耳其|TR|Turkey|伊斯坦布尔', countryCode: '' },
 ]
 
 // 协议分裂配置（用于 Pro 批量创建）
@@ -791,11 +791,86 @@ function SubscribeFilesPage() {
 
     setProCreatingRegion(true)
     setProCreationResults([])
-    const results: Array<{name: string, success: boolean, error?: string}> = []
+    const results: Array<{name: string, success: boolean, error?: string, skipped?: boolean}> = []
     const prefix = proNamePrefix.trim()
 
+    // 先获取外部订阅的节点名称列表（仅用于非 GeoIP 模式）
+    let nodeNames: string[] = []
+    if (!enableGeoIPMatching) {
+      try {
+        const response = await api.get(`/api/user/external-subscriptions/nodes?id=${proSelectedExternalSub.id}`)
+        nodeNames = response.data.node_names || []
+      } catch (error: any) {
+        toast.error('获取节点列表失败: ' + (error.response?.data?.error || error.message))
+        setProCreatingRegion(false)
+        return
+      }
+
+      if (nodeNames.length === 0) {
+        toast.error('订阅中没有节点')
+        setProCreatingRegion(false)
+        return
+      }
+    }
+
+    // 检查每个地区是否有匹配的节点（仅用于非 GeoIP 模式的前端检查）
+    const checkRegionHasNodesLocal = (filter: string, excludeFilter?: string): boolean => {
+      if (!filter && !excludeFilter) return true // 无过滤条件，认为有节点
+
+      let matchedNodes = nodeNames
+
+      // 应用 filter（包含过滤）- 区分大小写
+      if (filter) {
+        const filterRegex = new RegExp(filter)
+        matchedNodes = matchedNodes.filter(name => filterRegex.test(name))
+      }
+
+      // 应用 excludeFilter（排除过滤）- 区分大小写
+      if (excludeFilter) {
+        const excludeRegex = new RegExp(excludeFilter)
+        matchedNodes = matchedNodes.filter(name => !excludeRegex.test(name))
+      }
+
+      return matchedNodes.length > 0
+    }
+
+    // 检查是否有匹配的节点（GeoIP 模式使用后端 API）
+    const checkRegionHasNodes = async (filter: string, excludeFilter?: string, geoIPFilter?: string): Promise<boolean> => {
+      // 如果开启 GeoIP 匹配，调用后端 API 检查（后端会同时检查正则和 IP 地域）
+      if (enableGeoIPMatching) {
+        try {
+          const response = await api.post('/api/user/external-subscriptions/check-filter', {
+            subscription_id: proSelectedExternalSub.id,
+            filter: filter || '',
+            exclude_filter: excludeFilter || '',
+            geo_ip_filter: geoIPFilter || '',
+          })
+          return response.data.match_count > 0
+        } catch (error) {
+          // 如果 API 调用失败，默认不创建该地区（保守处理）
+          console.error('检查过滤器失败:', error)
+          return false
+        }
+      }
+
+      // 非 GeoIP 模式，使用前端检查
+      return checkRegionHasNodesLocal(filter, excludeFilter)
+    }
+
+    let skippedCount = 0
     for (const region of REGION_CONFIGS) {
       const providerName = `${prefix}-${region.emoji}${region.name}`
+
+      // 检查该地区是否有匹配的节点
+      const geoIPFilter = enableGeoIPMatching ? (region.countryCode || '') : ''
+      const hasNodes = await checkRegionHasNodes(region.filter, region.excludeFilter, geoIPFilter)
+      if (!hasNodes) {
+        results.push({ name: providerName, success: false, skipped: true, error: '无匹配节点' })
+        skippedCount++
+        setProCreationResults([...results])
+        continue
+      }
+
       try {
         await api.post('/api/user/proxy-provider-configs', {
           external_subscription_id: proSelectedExternalSub.id,
@@ -830,7 +905,14 @@ function SubscribeFilesPage() {
     queryClient.invalidateQueries({ queryKey: ['proxy-provider-configs'] })
 
     const successCount = results.filter(r => r.success).length
-    toast.success(`创建完成: ${successCount}/${results.length} 个代理集合`)
+    const failedCount = results.filter(r => !r.success && !r.skipped).length
+    if (skippedCount > 0) {
+      toast.success(`创建完成: ${successCount} 个成功, ${skippedCount} 个跳过(无节点), ${failedCount} 个失败`)
+    } else {
+      toast.success(`创建完成: ${successCount}/${results.length} 个代理集合`)
+    }
+    // 清空名称前缀
+    setProNamePrefix('')
   }
 
   // 批量创建代理集合 - 按协议
@@ -886,6 +968,8 @@ function SubscribeFilesPage() {
 
     const successCount = results.filter(r => r.success).length
     toast.success(`创建完成: ${successCount}/${results.length} 个代理集合`)
+    // 清空名称前缀
+    setProNamePrefix('')
   }
 
   // 预览妙妙屋处理后的配置
@@ -2697,13 +2781,22 @@ function SubscribeFilesPage() {
                       variant={proxyProviderFilterSubId === 'all' ? 'default' : 'outline'}
                       onClick={() => {
                         setProxyProviderFilterSubId('all')
-                        setSelectedProxyProviderIds(new Set())
+                        // 切换逻辑：如果已全选则取消，否则选中所有
+                        const allIds = new Set(proxyProviderConfigs.map(c => c.id))
+                        const isAllSelected = proxyProviderConfigs.length > 0 &&
+                          proxyProviderConfigs.every(c => selectedProxyProviderIds.has(c.id))
+                        if (isAllSelected) {
+                          setSelectedProxyProviderIds(new Set())
+                        } else {
+                          setSelectedProxyProviderIds(allIds)
+                        }
                       }}
                     >
                       全部 ({proxyProviderConfigs.length})
                     </Button>
                     {externalSubs.map(sub => {
                       const subConfigs = proxyProviderConfigs.filter(c => c.external_subscription_id === sub.id)
+                      if (subConfigs.length === 0) return null
                       const subConfigIds = new Set(subConfigs.map(c => c.id))
                       // 检查是否已全选该订阅下的配置
                       const isAllSelected = subConfigs.length > 0 && subConfigs.every(c => selectedProxyProviderIds.has(c.id))

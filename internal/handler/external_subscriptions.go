@@ -344,3 +344,118 @@ func handleDeleteExternalSubscription(w http.ResponseWriter, r *http.Request, re
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// NewExternalSubscriptionNodesHandler returns a handler that lists node names from an external subscription
+func NewExternalSubscriptionNodesHandler(repo *storage.TrafficRepository) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+
+		username := auth.UsernameFromContext(r.Context())
+		if strings.TrimSpace(username) == "" {
+			writeError(w, http.StatusUnauthorized, errors.New("unauthorized"))
+			return
+		}
+
+		idStr := r.URL.Query().Get("id")
+		if idStr == "" {
+			writeError(w, http.StatusBadRequest, errors.New("subscription id is required"))
+			return
+		}
+
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("invalid subscription id"))
+			return
+		}
+
+		// 获取外部订阅
+		sub, err := repo.GetExternalSubscription(r.Context(), id, username)
+		if err != nil {
+			if errors.Is(err, storage.ErrExternalSubscriptionNotFound) {
+				writeError(w, http.StatusNotFound, errors.New("subscription not found"))
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		// 获取节点信息列表（名称和服务器地址）
+		nodes, err := fetchSubscriptionNodes(&sub)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		// 提取节点名称
+		nodeNames := make([]string, len(nodes))
+		for i, node := range nodes {
+			nodeNames[i] = node.Name
+		}
+
+		log.Printf("[ExternalSubscriptionNodes] 订阅 %s 返回 %d 个节点", sub.Name, len(nodeNames))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"node_names": nodeNames,
+			"nodes":      nodes,
+			"count":      len(nodes),
+		})
+	})
+}
+
+// NewExternalSubscriptionCheckFilterHandler returns a handler that checks if a filter matches any nodes
+func NewExternalSubscriptionCheckFilterHandler(repo *storage.TrafficRepository) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+
+		username := auth.UsernameFromContext(r.Context())
+		if strings.TrimSpace(username) == "" {
+			writeError(w, http.StatusUnauthorized, errors.New("unauthorized"))
+			return
+		}
+
+		var req struct {
+			SubscriptionID int64  `json:"subscription_id"`
+			Filter         string `json:"filter"`
+			ExcludeFilter  string `json:"exclude_filter"`
+			GeoIPFilter    string `json:"geo_ip_filter"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+
+		// 获取外部订阅
+		sub, err := repo.GetExternalSubscription(r.Context(), req.SubscriptionID, username)
+		if err != nil {
+			if errors.Is(err, storage.ErrExternalSubscriptionNotFound) {
+				writeError(w, http.StatusNotFound, errors.New("subscription not found"))
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		// 检查过滤条件是否有匹配的节点
+		matchCount, err := checkFilterMatches(&sub, req.Filter, req.ExcludeFilter, req.GeoIPFilter)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"has_matches": matchCount > 0,
+			"match_count": matchCount,
+		})
+	})
+}

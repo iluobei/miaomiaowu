@@ -1240,7 +1240,13 @@ function SubscriptionGeneratorPage() {
       for (const [, data] of Object.entries(mmwNodesMap)) {
         data.nodes.forEach((node: any) => {
           const prefixedNode = { ...node, name: data.prefix + node.name }
-          parsedConfig.proxies.push(reorderProxyFields(prefixedNode))
+          // 检查是否已存在同名节点，避免重复添加
+          const existingIndex = parsedConfig.proxies.findIndex((p: any) => p.name === prefixedNode.name)
+          if (existingIndex >= 0) {
+            parsedConfig.proxies[existingIndex] = reorderProxyFields(prefixedNode)
+          } else {
+            parsedConfig.proxies.push(reorderProxyFields(prefixedNode))
+          }
         })
       }
 

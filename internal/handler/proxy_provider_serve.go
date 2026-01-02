@@ -324,6 +324,188 @@ func findProxiesNode(root *yaml.Node) *yaml.Node {
 	return nil
 }
 
+// fetchSubscriptionNodeNames fetches subscription content and returns all node names
+func fetchSubscriptionNodeNames(sub *storage.ExternalSubscription) ([]string, error) {
+	// Fetch subscription content (with caching)
+	body, err := fetchSubscriptionContent(sub)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse YAML content
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(body, &rootNode); err != nil {
+		return nil, fmt.Errorf("parse yaml: %w", err)
+	}
+
+	// Find proxies node
+	proxiesNode := findProxiesNode(&rootNode)
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("no proxies found in subscription")
+	}
+
+	// Extract node names
+	var nodeNames []string
+	for _, proxyNode := range proxiesNode.Content {
+		if proxyNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// Find "name" field
+		for i := 0; i < len(proxyNode.Content)-1; i += 2 {
+			keyNode := proxyNode.Content[i]
+			valueNode := proxyNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "name" && valueNode.Kind == yaml.ScalarNode {
+				nodeNames = append(nodeNames, valueNode.Value)
+				break
+			}
+		}
+	}
+
+	return nodeNames, nil
+}
+
+// NodeInfo 节点信息（名称和服务器地址）
+type NodeInfo struct {
+	Name   string `json:"name"`
+	Server string `json:"server"`
+}
+
+// fetchSubscriptionNodes fetches subscription content and returns all nodes with name and server
+func fetchSubscriptionNodes(sub *storage.ExternalSubscription) ([]NodeInfo, error) {
+	// Fetch subscription content (with caching)
+	body, err := fetchSubscriptionContent(sub)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse YAML content
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(body, &rootNode); err != nil {
+		return nil, fmt.Errorf("parse yaml: %w", err)
+	}
+
+	// Find proxies node
+	proxiesNode := findProxiesNode(&rootNode)
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("no proxies found in subscription")
+	}
+
+	// Extract node info (name and server)
+	var nodes []NodeInfo
+	for _, proxyNode := range proxiesNode.Content {
+		if proxyNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		node := NodeInfo{}
+		for i := 0; i < len(proxyNode.Content)-1; i += 2 {
+			keyNode := proxyNode.Content[i]
+			valueNode := proxyNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && valueNode.Kind == yaml.ScalarNode {
+				switch keyNode.Value {
+				case "name":
+					node.Name = valueNode.Value
+				case "server":
+					node.Server = valueNode.Value
+				}
+			}
+		}
+		if node.Name != "" {
+			nodes = append(nodes, node)
+		}
+	}
+
+	return nodes, nil
+}
+
+// checkFilterMatches checks if filter/exclude-filter/geo-ip-filter matches any nodes
+// Returns the count of matching nodes
+func checkFilterMatches(sub *storage.ExternalSubscription, filter, excludeFilter, geoIPFilter string) (int, error) {
+	// Fetch nodes
+	nodes, err := fetchSubscriptionNodes(sub)
+	if err != nil {
+		return 0, err
+	}
+
+	log.Printf("[checkFilterMatches] 订阅 %s 共 %d 个节点, filter=%s, excludeFilter=%s, geoIPFilter=%s",
+		sub.Name, len(nodes), filter, excludeFilter, geoIPFilter)
+
+	// Compile regexes
+	var filterRegex, excludeRegex *regexp.Regexp
+
+	if filter != "" {
+		filterRegex, err = regexp.Compile(filter)
+		if err != nil {
+			log.Printf("[checkFilterMatches] Invalid filter regex: %v", err)
+			return 0, fmt.Errorf("invalid filter regex: %w", err)
+		}
+	}
+
+	if excludeFilter != "" {
+		excludeRegex, err = regexp.Compile(excludeFilter)
+		if err != nil {
+			log.Printf("[checkFilterMatches] Invalid exclude-filter regex: %v", err)
+			return 0, fmt.Errorf("invalid exclude-filter regex: %w", err)
+		}
+	}
+
+	// Build GeoIP filter country codes map
+	geoIPCountryCodes := make(map[string]bool)
+	if geoIPFilter != "" {
+		for _, code := range strings.Split(geoIPFilter, ",") {
+			geoIPCountryCodes[strings.TrimSpace(strings.ToUpper(code))] = true
+		}
+	}
+
+	// Count matching nodes
+	matchCount := 0
+	for _, node := range nodes {
+		// Apply exclude-filter first (remove matching names)
+		if excludeRegex != nil && excludeRegex.MatchString(node.Name) {
+			continue
+		}
+
+		// Apply filter and GeoIP matching
+		if filterRegex != nil {
+			if filterRegex.MatchString(node.Name) {
+				// Node name matches filter regex, count it
+				matchCount++
+				continue
+			}
+
+			// Node name doesn't match, check GeoIP if available
+			if len(geoIPCountryCodes) > 0 && node.Server != "" {
+				countryCode := getGeoIPCountryCode(node.Server)
+				if countryCode != "" && geoIPCountryCodes[countryCode] {
+					// IP location matches, count it
+					matchCount++
+					continue
+				}
+			}
+			// Neither regex nor GeoIP matched, skip this node
+			continue
+		}
+
+		// No filter regex, only GeoIP filter
+		if len(geoIPCountryCodes) > 0 {
+			if node.Server != "" {
+				countryCode := getGeoIPCountryCode(node.Server)
+				if countryCode != "" && geoIPCountryCodes[countryCode] {
+					matchCount++
+				}
+			}
+			continue
+		}
+
+		// No filter at all, count all nodes
+		matchCount++
+	}
+
+	log.Printf("[checkFilterMatches] 匹配结果: filter=%s, geoIPFilter=%s, matchCount=%d", filter, geoIPFilter, matchCount)
+	return matchCount, nil
+}
+
 // reorderProxiesNode reorders fields in each proxy node using util.ReorderProxyNode
 func reorderProxiesNode(proxiesNode *yaml.Node) {
 	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
@@ -368,6 +550,9 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 		}
 	}
 
+	log.Printf("[applyFiltersToNode] 配置 %s: filter=%q, excludeFilter(len=%d)=%q, filterRegex=%v, excludeRegex=%v",
+		config.Name, config.Filter, len(config.ExcludeFilter), config.ExcludeFilter, filterRegex != nil, excludeRegex != nil)
+
 	// Build exclude type map
 	excludeTypeMap := make(map[string]bool)
 	if config.ExcludeType != "" {
@@ -398,6 +583,7 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 
 		// Apply exclude-filter first (remove matching names)
 		if excludeRegex != nil && excludeRegex.MatchString(name) {
+			log.Printf("[applyFiltersToNode] 排除节点(excludeFilter): %s", name)
 			continue
 		}
 
@@ -471,6 +657,20 @@ func applyOverridesToNode(proxiesNode *yaml.Node, overrideJSON string) {
 	}
 }
 
+// createEmptyCacheEntry 创建空缓存条目
+func createEmptyCacheEntry(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) *CacheEntry {
+	return &CacheEntry{
+		ConfigID:  config.ID,
+		YAMLData:  []byte("proxies: []\n"),
+		Nodes:     []any{},
+		NodeNames: []string{},
+		Prefix:    sub.Name,
+		FetchedAt: time.Now(),
+		Interval:  config.Interval,
+		NodeCount: 0,
+	}
+}
+
 // RefreshProxyProviderCache 刷新代理集合缓存
 func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storage.ProxyProviderConfig) (*CacheEntry, error) {
 	// 拉取并过滤节点
@@ -479,10 +679,28 @@ func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storag
 		return nil, fmt.Errorf("fetch and filter proxies: %w", err)
 	}
 
+	// 检查返回内容是否为空
+	if len(yamlBytes) == 0 {
+		log.Printf("[RefreshProxyProviderCache] 配置 %d 返回空内容", config.ID)
+		entry := createEmptyCacheEntry(sub, config)
+		cache := GetProxyProviderCache()
+		cache.Set(config.ID, entry)
+		return entry, nil
+	}
+
 	// 解析 YAML 获取节点列表
 	var result map[string]any
 	if err := yaml.Unmarshal(yamlBytes, &result); err != nil {
-		return nil, fmt.Errorf("parse yaml result: %w", err)
+		// YAML 解析失败，记录日志并返回空缓存（而不是报错）
+		contentPreview := string(yamlBytes)
+		if len(contentPreview) > 200 {
+			contentPreview = contentPreview[:200] + "..."
+		}
+		log.Printf("[RefreshProxyProviderCache] 配置 %d YAML 解析失败: %v, 原始内容: %s", config.ID, err, contentPreview)
+		entry := createEmptyCacheEntry(sub, config)
+		cache := GetProxyProviderCache()
+		cache.Set(config.ID, entry)
+		return entry, nil
 	}
 
 	proxiesRaw, ok := result["proxies"].([]any)

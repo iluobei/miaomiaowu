@@ -121,6 +121,8 @@ func main() {
 	mux.Handle("/api/user/config", auth.RequireToken(tokenStore, handler.NewUserConfigHandler(repo)))
 	mux.Handle("/api/user/token", auth.RequireToken(tokenStore, handler.NewUserTokenHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo)))
+	mux.Handle("/api/user/external-subscriptions/nodes", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionNodesHandler(repo)))
+	mux.Handle("/api/user/external-subscriptions/check-filter", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionCheckFilterHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-configs", auth.RequireToken(tokenStore, handler.NewProxyProviderConfigsHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-cache/refresh", auth.RequireToken(tokenStore, handler.NewProxyProviderCacheRefreshHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-cache/status", auth.RequireToken(tokenStore, handler.NewProxyProviderCacheStatusHandler(repo)))
