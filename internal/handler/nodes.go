@@ -734,6 +734,7 @@ func (h *nodesHandler) handleBatchRename(w http.ResponseWriter, r *http.Request)
 	successCount := 0
 	failCount := 0
 	var updatedNodes []nodeDTO
+	var yamlUpdates []NodeUpdate // 收集 YAML 同步更新
 
 	for _, update := range req.Updates {
 		if update.NewName == "" {
@@ -779,15 +780,25 @@ func (h *nodesHandler) handleBatchRename(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		// Sync to YAML files using the sync manager
+		// 收集 YAML 同步更新（不立即同步）
 		if updated.ClashConfig != "" {
-			if err := h.yamlSyncManager.SyncNode(oldNodeName, update.NewName, updated.ClashConfig); err != nil {
-				// Log error but don't fail the request
-			}
+			yamlUpdates = append(yamlUpdates, NodeUpdate{
+				OldName:         oldNodeName,
+				NewName:         update.NewName,
+				ClashConfigJSON: updated.ClashConfig,
+			})
 		}
 
 		successCount++
 		updatedNodes = append(updatedNodes, convertNode(updated))
+	}
+
+	// 批量同步到 YAML 文件（只读写文件一次）
+	if len(yamlUpdates) > 0 {
+		if err := h.yamlSyncManager.BatchSyncNodes(yamlUpdates); err != nil {
+			// Log error but don't fail the request
+			log.Printf("[批量重命名] YAML 同步失败: %v", err)
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

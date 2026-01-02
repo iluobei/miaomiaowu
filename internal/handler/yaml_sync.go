@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -578,6 +579,206 @@ func syncNodeToYAMLFiles(subscribeDir, oldNodeName, newNodeName string, clashCon
 		if err := os.WriteFile(filePath, []byte(fixed), 0644); err != nil {
 			continue // Skip files we can't write
 		}
+	}
+
+	return nil
+}
+
+// 批量同步多个节点更新到 YAML 文件，只读写每个文件一次，避免大量节点时耗时特别高
+func batchSyncNodesToYAMLFiles(subscribeDir string, updates []NodeUpdate) error {
+	if subscribeDir == "" || len(updates) == 0 {
+		return nil
+	}
+
+	// 预解析所有更新的 clash config
+	type parsedUpdate struct {
+		oldName     string
+		newName     string
+		clashConfig map[string]any
+	}
+	parsedUpdates := make([]parsedUpdate, 0, len(updates))
+	for _, update := range updates {
+		var clashConfig map[string]any
+		if err := json.Unmarshal([]byte(update.ClashConfigJSON), &clashConfig); err != nil {
+			continue // 跳过无法解析的
+		}
+		convertNilToEmptyString(clashConfig)
+		parsedUpdates = append(parsedUpdates, parsedUpdate{
+			oldName:     update.OldName,
+			newName:     update.NewName,
+			clashConfig: clashConfig,
+		})
+	}
+
+	if len(parsedUpdates) == 0 {
+		return nil
+	}
+
+	// 构建旧名称到更新的映射，方便快速查找
+	updateMap := make(map[string]parsedUpdate)
+	for _, u := range parsedUpdates {
+		updateMap[u.oldName] = u
+	}
+
+	// 获取所有 YAML 文件
+	entries, err := os.ReadDir(subscribeDir)
+	if err != nil {
+		return fmt.Errorf("read subscribe directory: %w", err)
+	}
+
+	// 处理每个 YAML 文件
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		if filepath.Ext(filename) != ".yaml" && filepath.Ext(filename) != ".yml" {
+			continue
+		}
+		if filename == ".keep.yaml" {
+			continue
+		}
+
+		filePath := filepath.Join(subscribeDir, filename)
+
+		// 读取 YAML 文件
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+
+		// 解析为 yaml.Node 以保留格式
+		var rootNode yaml.Node
+		if err := yaml.Unmarshal(data, &rootNode); err != nil {
+			continue
+		}
+
+		modified := false
+
+		// 找到 proxies 部分并更新
+		if rootNode.Kind == yaml.DocumentNode && len(rootNode.Content) > 0 {
+			docNode := rootNode.Content[0]
+			if docNode.Kind == yaml.MappingNode {
+				// 找到 proxies key
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					keyNode := docNode.Content[i]
+					if keyNode.Value == "proxies" {
+						proxiesNode := docNode.Content[i+1]
+						if proxiesNode.Kind == yaml.SequenceNode {
+							// 遍历每个 proxy 节点
+							for j, proxyNode := range proxiesNode.Content {
+								if proxyNode.Kind != yaml.MappingNode {
+									continue
+								}
+
+								// 找到 name 字段
+								var proxyName string
+								for k := 0; k < len(proxyNode.Content); k += 2 {
+									if k+1 >= len(proxyNode.Content) {
+										break
+									}
+									if proxyNode.Content[k].Value == "name" {
+										proxyName = proxyNode.Content[k+1].Value
+										break
+									}
+								}
+
+								// 检查是否需要更新此节点
+								if update, exists := updateMap[proxyName]; exists {
+									nameChanged := update.oldName != update.newName
+									if nameChanged {
+										// 名称改变：替换整个节点
+										proxiesNode.Content[j] = util.ReorderProxyFieldsToNode(update.clashConfig)
+									} else {
+										// 名称不变：就地更新字段
+										updateProxyNodeFields(proxyNode, update.clashConfig)
+										reorderProxyNodeFieldsInPlace(proxyNode)
+									}
+									modified = true
+								}
+							}
+						}
+						break
+					}
+				}
+
+				// 更新 proxy-groups 中的名称引用
+				for _, update := range parsedUpdates {
+					if update.oldName != update.newName {
+						for i := 0; i < len(docNode.Content); i += 2 {
+							if i+1 >= len(docNode.Content) {
+								break
+							}
+							if docNode.Content[i].Value == "proxy-groups" {
+								updateProxyGroupsNode(docNode.Content[i+1], update.oldName, update.newName)
+								modified = true
+								break
+							}
+						}
+
+						// 更新 rules 中的名称引用
+						for i := 0; i < len(docNode.Content); i += 2 {
+							if i+1 >= len(docNode.Content) {
+								break
+							}
+							if docNode.Content[i].Value == "rules" {
+								updateRulesNode(docNode.Content[i+1], update.oldName, update.newName)
+								modified = true
+								break
+							}
+						}
+					}
+				}
+
+				// 重排序 proxy-groups 字段
+				for i := 0; i < len(docNode.Content); i += 2 {
+					if i+1 >= len(docNode.Content) {
+						break
+					}
+					if docNode.Content[i].Value == "proxy-groups" {
+						proxyGroupsNode := docNode.Content[i+1]
+						if proxyGroupsNode.Kind == yaml.SequenceNode {
+							for _, groupNode := range proxyGroupsNode.Content {
+								if groupNode.Kind == yaml.MappingNode {
+									reorderProxyGroupFields(groupNode)
+								}
+							}
+						}
+						break
+					}
+				}
+
+				// 重排序顶层字段
+				reorderTopLevelFields(docNode)
+			}
+		}
+
+		// 如果没有修改，跳过此文件
+		if !modified {
+			continue
+		}
+
+		// 修复 short-id 字段样式
+		fixShortIdStyleInNode(&rootNode)
+
+		// 编码为 YAML
+		output, err := MarshalYAMLWithIndent(&rootNode)
+		if err != nil {
+			continue
+		}
+
+		// 修复 emoji 转义和引号数字
+		fixed := RemoveUnicodeEscapeQuotes(string(output))
+
+		if err := os.WriteFile(filePath, []byte(fixed), 0644); err != nil {
+			continue
+		}
+
+		log.Printf("[YAML同步] 批量更新文件: %s", filename)
 	}
 
 	return nil

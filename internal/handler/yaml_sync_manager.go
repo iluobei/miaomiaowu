@@ -103,3 +103,32 @@ func (m *YAMLSyncManager) BatchDeleteNodes(nodeNames []string) error {
 
 	return nil
 }
+
+// NodeUpdate 表示单个节点的更新信息
+type NodeUpdate struct {
+	OldName         string
+	NewName         string
+	ClashConfigJSON string
+}
+
+// BatchSyncNodes efficiently syncs multiple node updates with a single lock
+// 批量同步多个节点更新，只读写 YAML 文件一次
+func (m *YAMLSyncManager) BatchSyncNodes(updates []NodeUpdate) error {
+	if m.subscribeDir == "" || len(updates) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	log.Printf("[YAML同步] 开始批量同步 %d 个节点", len(updates))
+
+	err := batchSyncNodesToYAMLFiles(m.subscribeDir, updates)
+	if err != nil {
+		log.Printf("[YAML同步] 批量同步失败: %v", err)
+		return err
+	}
+
+	log.Printf("[YAML同步] 批量同步完成")
+	return nil
+}
