@@ -85,6 +85,23 @@ const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
   quotingType: '"',  // 使用双引号而不是单引号
 }
 
+// 预处理 YAML 字符串，将以 [ 或 { 开头的未引用值用引号包裹，避免解析错误
+function preprocessYaml(yamlStr: string): string {
+  // 匹配 "key: [xxx" 或 "key: {xxx" 格式（值以 [ 或 { 开头但不是有效的 YAML 数组/对象）
+  // 排除已经被引号包裹的值
+  return yamlStr.replace(
+    /^(\s*[\w-]+:\s*)(\[[^\]]*[^\],\s\d][^\]]*\]?)$/gm,
+    (match, prefix, value) => {
+      // 检查是否是有效的 YAML 数组格式（如 [a, b, c] 或 [1, 2, 3]）
+      // 如果看起来像节点名称（包含中文或特殊字符），则加引号
+      if (/[\u4e00-\u9fa5]/.test(value) || /\[[^\[\]]*[^\],\s\w.-][^\[\]]*\]?/.test(value)) {
+        return `${prefix}"${value.replace(/"/g, '\\"')}"`
+      }
+      return match
+    }
+  )
+}
+
 // 协议颜色映射
 const PROTOCOL_COLORS: Record<string, string> = {
   vmess: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
@@ -1051,7 +1068,7 @@ function SubscriptionGeneratorPage() {
 
     try {
       // 解析当前的 Clash 配置
-      const parsedConfig = yaml.load(clashConfig) as any
+      const parsedConfig = yaml.load(preprocessYaml(clashConfig)) as any
 
       if (!parsedConfig['proxy-groups']) {
         toast.error('配置中没有找到代理组')
@@ -1082,7 +1099,7 @@ function SubscriptionGeneratorPage() {
   const handleApplyGrouping = async () => {
     try {
       // 解析当前配置
-      const parsedConfig = yaml.load(clashConfig) as any
+      const parsedConfig = yaml.load(preprocessYaml(clashConfig)) as any
 
       // 获取所有 MMW 模式代理集合的名称（用于后续检查）
       const allMmwProviderNames = proxyProviderConfigs
@@ -1391,7 +1408,7 @@ function SubscriptionGeneratorPage() {
   // 应用缺失节点替换
   const handleApplyReplacement = () => {
     try {
-      const parsedConfig = yaml.load(pendingConfigAfterGrouping) as any
+      const parsedConfig = yaml.load(preprocessYaml(pendingConfigAfterGrouping)) as any
       const rules = parsedConfig.rules || []
       const proxyGroupNames = new Set(parsedConfig['proxy-groups']?.map((g: any) => g.name) || [])
 
@@ -1660,7 +1677,7 @@ function SubscriptionGeneratorPage() {
 
     try {
       // 用 yaml.load 只是为了获取结构信息，不用于输出
-      const parsedConfig = yaml.load(clashConfig) as any
+      const parsedConfig = yaml.load(preprocessYaml(clashConfig)) as any
       const groups = parsedConfig['proxy-groups'] as any[]
 
       if (!groups || groups.length === 0) {
@@ -1860,7 +1877,7 @@ function SubscriptionGeneratorPage() {
     // 同时更新待处理的配置（如果存在）
     if (pendingConfigAfterGrouping) {
       try {
-        const parsedConfig = yaml.load(pendingConfigAfterGrouping) as any
+        const parsedConfig = yaml.load(preprocessYaml(pendingConfigAfterGrouping)) as any
         if (parsedConfig && parsedConfig['proxy-groups']) {
           // 更新 proxy-groups 中的组名
           parsedConfig['proxy-groups'] = parsedConfig['proxy-groups'].map((group: any) => ({
@@ -1909,7 +1926,7 @@ function SubscriptionGeneratorPage() {
     // 更新当前显示的配置（如果存在）
     if (clashConfig) {
       try {
-        const parsedConfig = yaml.load(clashConfig) as any
+        const parsedConfig = yaml.load(preprocessYaml(clashConfig)) as any
         if (parsedConfig && parsedConfig['proxy-groups']) {
           // 更新 proxy-groups 中的组名
           parsedConfig['proxy-groups'] = parsedConfig['proxy-groups'].map((group: any) => ({
@@ -2600,7 +2617,7 @@ function SubscriptionGeneratorPage() {
                 </Button>
                 {(() => {
                   try {
-                    const parsedConfig = yaml.load(pendingConfigAfterGrouping) as any
+                    const parsedConfig = yaml.load(preprocessYaml(pendingConfigAfterGrouping)) as any
                     const proxyGroupNames = parsedConfig['proxy-groups']?.map((g: any) => g.name) || []
                     return proxyGroupNames.map((name: string) => (
                       <Button
