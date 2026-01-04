@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -179,7 +179,7 @@ interface SortableTableRowProps {
   children: React.ReactNode
 }
 
-function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableTableRowProps) {
+const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableTableRowProps) {
   const {
     setNodeRef,
     transform,
@@ -218,7 +218,7 @@ function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onC
       {children}
     </TableRow>
   )
-}
+})
 
 // 可拖拽排序的移动端卡片组件
 interface SortableCardProps {
@@ -231,7 +231,7 @@ interface SortableCardProps {
   children: React.ReactNode
 }
 
-function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableCardProps) {
+const SortableCard = React.memo(function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableCardProps) {
   const {
     setNodeRef,
     transform,
@@ -269,7 +269,7 @@ function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick
       {children}
     </Card>
   )
-}
+})
 
 // DragOverlay 内容组件
 function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; protocolColors: Record<string, string> }) {
@@ -430,6 +430,30 @@ function NodesPage() {
   const handleSubscriptionUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSubscriptionUrl(e.target.value)
   }, [])
+
+  // 节点选择回调 - 使用函数式更新避免依赖 selectedNodeIds
+  const handleNodeSelect = useCallback((nodeId: number) => {
+    setSelectedNodeIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId)
+      } else {
+        newSet.add(nodeId)
+      }
+      return newSet
+    })
+  }, [])
+
+  // 表格行点击处理 - 过滤掉按钮/复选框等的点击
+  const handleRowClick = useCallback((e: React.MouseEvent, nodeId: number | undefined) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
+      return
+    }
+    if (nodeId) {
+      handleNodeSelect(nodeId)
+    }
+  }, [handleNodeSelect])
 
   // 节点排序状态
   const [nodeOrder, setNodeOrder] = useState<number[]>([])
@@ -2282,17 +2306,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             dbId={node.dbId}
                             batchDraggingIds={batchDraggingIds}
                             isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                            onClick={() => {
-                              if (node.isSaved && node.dbId) {
-                                const newSet = new Set(selectedNodeIds)
-                                if (selectedNodeIds.has(node.dbId)) {
-                                  newSet.delete(node.dbId)
-                                } else {
-                                  newSet.add(node.dbId)
-                                }
-                                setSelectedNodeIds(newSet)
-                              }
-                            }}
+                            onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
                           >
                             <CardContent className='p-3 space-y-2'>
                               {/* 头部：协议、节点名称、已保存标签 */}
@@ -2607,21 +2621,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             dbId={node.dbId}
                             batchDraggingIds={batchDraggingIds}
                             isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                            onClick={(e) => {
-                              const target = e.target as HTMLElement
-                              if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
-                                return
-                              }
-                              if (node.isSaved && node.dbId) {
-                                const newSet = new Set(selectedNodeIds)
-                                if (newSet.has(node.dbId)) {
-                                  newSet.delete(node.dbId)
-                                } else {
-                                  newSet.add(node.dbId)
-                                }
-                                setSelectedNodeIds(newSet)
-                              }
-                            }}
+                            onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
                           >
                             <TableCell className='w-9 px-2'>
                               {node.isSaved && (
@@ -2882,22 +2882,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 dbId={node.dbId}
                                 batchDraggingIds={batchDraggingIds}
                                 isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                                onClick={(e) => {
-                                  // 如果点击的是按钮、输入框等交互元素，不触发选中
-                                  const target = e.target as HTMLElement
-                                  if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
-                                    return
-                                  }
-                                  if (node.isSaved && node.dbId) {
-                                    const newSet = new Set(selectedNodeIds)
-                                    if (newSet.has(node.dbId)) {
-                                      newSet.delete(node.dbId)
-                                    } else {
-                                      newSet.add(node.dbId)
-                                    }
-                                    setSelectedNodeIds(newSet)
-                                  }
-                                }}
+                                onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
                               >
                                 <TableCell className='w-9 px-2'>
                                   {node.isSaved && (

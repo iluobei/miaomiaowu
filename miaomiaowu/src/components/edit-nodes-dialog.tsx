@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, memo } from 'react'
 import { GripVertical, X, Plus, Check, Search, Settings2, Eye, EyeOff } from 'lucide-react'
 import { Twemoji } from '@/components/twemoji'
 import {
@@ -61,6 +61,116 @@ interface ActiveDragItem {
 
 // 特殊节点列表
 const SPECIAL_NODES = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
+
+// 可拖动的可用节点（提取到外部并 memoize）
+interface DraggableAvailableNodeProps {
+  proxy: string
+  index: number
+}
+
+const DraggableAvailableNode = memo(function DraggableAvailableNode({ proxy, index }: DraggableAvailableNodeProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `available-node-${proxy}-${index}`,
+    data: {
+      type: 'available-node',
+      nodeName: proxy,
+      index
+    } as DragItemData
+  })
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent cursor-move transition-colors duration-75'
+    >
+      <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+      <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
+    </div>
+  )
+})
+
+// 可拖动的代理集合（提取到外部并 memoize）
+interface DraggableProxyProviderProps {
+  name: string
+}
+
+const DraggableProxyProvider = memo(function DraggableProxyProvider({ name }: DraggableProxyProviderProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `proxy-provider-${name}`,
+    data: {
+      type: 'proxy-provider',
+      providerName: name
+    } as DragItemData
+  })
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className='flex items-center gap-2 p-2 rounded border border-purple-200 dark:border-purple-800 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 cursor-move transition-colors duration-75'
+    >
+      <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+      <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {name}</span>
+    </div>
+  )
+})
+
+// 可拖动的可用节点卡片标题（批量拖动）
+interface DraggableAvailableHeaderProps {
+  filteredNodes: string[]
+  totalNodes: number
+}
+
+const DraggableAvailableHeader = memo(function DraggableAvailableHeader({ filteredNodes, totalNodes }: DraggableAvailableHeaderProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: 'available-header',
+    data: {
+      type: 'available-header',
+      nodeNames: filteredNodes
+    } as DragItemData
+  })
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className='flex items-center gap-2 cursor-move rounded-md px-2 py-1 hover:bg-accent transition-colors'
+    >
+      <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+      <div>
+        <CardTitle className='text-base'>可用节点</CardTitle>
+        <CardDescription className='text-xs'>
+          {filteredNodes.length} / {totalNodes} 个节点
+        </CardDescription>
+      </div>
+    </div>
+  )
+})
 
 interface EditNodesDialogProps {
   allNodes?: Node[]
@@ -819,116 +929,6 @@ export function EditNodesDialog({
       g.name === groupName ? updatedGroup : g
     )
     onProxyGroupsChange(updatedGroups)
-  }
-
-  // 可拖动的可用节点
-  interface DraggableAvailableNodeProps {
-    proxy: string
-    index: number
-  }
-
-  const DraggableAvailableNode = ({ proxy, index }: DraggableAvailableNodeProps) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-      id: `available-node-${proxy}-${index}`,
-      data: {
-        type: 'available-node',
-        nodeName: proxy,
-        index
-      } as DragItemData
-    })
-
-    const style: React.CSSProperties = {
-      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-      opacity: isDragging ? 0.5 : 1,
-      touchAction: 'none',
-    }
-
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        className='flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent cursor-move transition-colors duration-75'
-      >
-        <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-        <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
-      </div>
-    )
-  }
-
-  // 可拖动的可用节点卡片标题（批量拖动）
-  interface DraggableAvailableHeaderProps {
-    filteredNodes: string[]
-    totalNodes: number
-  }
-
-  const DraggableAvailableHeader = ({ filteredNodes, totalNodes }: DraggableAvailableHeaderProps) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-      id: 'available-header',
-      data: {
-        type: 'available-header',
-        nodeNames: filteredNodes
-      } as DragItemData
-    })
-
-    const style: React.CSSProperties = {
-      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-      opacity: isDragging ? 0.5 : 1,
-      touchAction: 'none',
-    }
-
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        className='flex items-center gap-2 cursor-move rounded-md px-2 py-1 hover:bg-accent transition-colors'
-      >
-        <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-        <div>
-          <CardTitle className='text-base'>可用节点</CardTitle>
-          <CardDescription className='text-xs'>
-            {filteredNodes.length} / {totalNodes} 个节点
-          </CardDescription>
-        </div>
-      </div>
-    )
-  }
-
-  // 可拖动的代理集合
-  interface DraggableProxyProviderProps {
-    name: string
-  }
-
-  const DraggableProxyProvider = ({ name }: DraggableProxyProviderProps) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-      id: `proxy-provider-${name}`,
-      data: {
-        type: 'proxy-provider',
-        providerName: name
-      } as DragItemData
-    })
-
-    const style: React.CSSProperties = {
-      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-      opacity: isDragging ? 0.5 : 1,
-      touchAction: 'none',
-    }
-
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        className='flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 hover:border-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900/30 cursor-move transition-colors duration-75'
-      >
-        <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
-        <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {name}</span>
-      </div>
-    )
   }
 
   // 快捷拖放区（添加到所有代理组）
