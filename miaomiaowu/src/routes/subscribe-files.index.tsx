@@ -1603,17 +1603,14 @@ function SubscribeFilesPage() {
           // 合并：使用新的节点配置，添加现有但未使用的节点
           const updatedProxies = [...nodeConfigs]
 
-          // 添加现有但未使用的节点（也重新排序）
-          // 重要：保留 MMW 节点，不要过滤掉它们
+          // 只保留 MMW 代理集合的节点，移除其他未使用的节点
           existingProxies.forEach((proxy: any) => {
             if (!usedNodeNames.has(proxy.name) && !updatedProxies.some(p => p.name === proxy.name)) {
-              // 如果是 MMW 节点，保留它
+              // 只有 MMW 节点才保留（因为它们是通过代理集合同步的）
               if (mmwNodeNames.has(proxy.name)) {
                 updatedProxies.push(reorderProxyProperties(proxy))
-              } else {
-                // 非 MMW 节点，也保留（可能是手动添加的节点）
-                updatedProxies.push(reorderProxyProperties(proxy))
               }
+              // 其他未使用的节点不再保留，会从 proxies 列表中移除
             }
           })
 
