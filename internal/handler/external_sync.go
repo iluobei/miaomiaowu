@@ -598,6 +598,10 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Upload = v
 				log.Printf("[External Sync] Parsed upload: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
+			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+				// 支持带小数点的值，取整
+				sub.Upload = int64(f)
+				log.Printf("[External Sync] Parsed upload (float): %d bytes (%.2f MB)", sub.Upload, f/(1024*1024))
 			} else {
 				log.Printf("[External Sync] Failed to parse upload value '%s': %v", value, err)
 			}
@@ -605,6 +609,10 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Download = v
 				log.Printf("[External Sync] Parsed download: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
+			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+				// 支持带小数点的值，取整
+				sub.Download = int64(f)
+				log.Printf("[External Sync] Parsed download (float): %d bytes (%.2f MB)", sub.Download, f/(1024*1024))
 			} else {
 				log.Printf("[External Sync] Failed to parse download value '%s': %v", value, err)
 			}
@@ -612,6 +620,10 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Total = v
 				log.Printf("[External Sync] Parsed total: %d bytes (%.2f GB)", v, float64(v)/(1024*1024*1024))
+			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+				// 支持带小数点的值，取整
+				sub.Total = int64(f)
+				log.Printf("[External Sync] Parsed total (float): %d bytes (%.2f GB)", sub.Total, f/(1024*1024*1024))
 			} else {
 				log.Printf("[External Sync] Failed to parse total value '%s': %v", value, err)
 			}
@@ -620,6 +632,11 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 				expireTime := time.Unix(v, 0)
 				sub.Expire = &expireTime
 				log.Printf("[External Sync] Parsed expire: %s", expireTime.Format("2006-01-02 15:04:05"))
+			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+				// 支持带小数点的值，取整
+				expireTime := time.Unix(int64(f), 0)
+				sub.Expire = &expireTime
+				log.Printf("[External Sync] Parsed expire (float): %s", expireTime.Format("2006-01-02 15:04:05"))
 			} else {
 				log.Printf("[External Sync] Failed to parse expire value '%s': %v", value, err)
 			}
