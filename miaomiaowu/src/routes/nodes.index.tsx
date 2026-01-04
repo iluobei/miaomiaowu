@@ -29,7 +29,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
 import URI_Producer from '@/lib/substore/producers/uri'
-import { countryCodeToFlag, hasEmojiPrefix, getGeoIPInfo } from '@/lib/country-flag'
+import { countryCodeToFlag, hasRegionEmoji, getGeoIPInfo } from '@/lib/country-flag'
 import { Twemoji } from '@/components/twemoji'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import {
@@ -1064,7 +1064,7 @@ function NodesPage() {
         if (!node) continue
 
         // 检查节点名称是否已有 emoji 前缀
-        if (hasEmojiPrefix(node.node_name)) {
+        if (hasRegionEmoji(node.node_name)) {
           skipCount++
           continue
         }
@@ -1164,7 +1164,7 @@ function NodesPage() {
     if (!node) return
 
     // 检查节点名称是否已有 emoji 前缀
-    if (hasEmojiPrefix(node.node_name)) {
+    if (hasRegionEmoji(node.node_name)) {
       toast.info('该节点已有 emoji 前缀')
       return
     }
@@ -2420,7 +2420,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
                                   </Button>
                                 )}
-                                {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
+                                {node.isSaved && node.dbNode && !hasRegionEmoji(node.name) && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button
@@ -2743,7 +2743,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       />
                                     </Button>
                                   )}
-                                  {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
+                                  {node.isSaved && node.dbNode && !hasRegionEmoji(node.name) && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
@@ -2990,7 +2990,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       />
                                     </Button>
                                   )}
-                                  {node.isSaved && node.dbNode && !hasEmojiPrefix(node.name) && (
+                                  {node.isSaved && node.dbNode && !hasRegionEmoji(node.name) && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button

@@ -115,6 +115,19 @@ export function hasEmojiPrefix(text: string): boolean {
 }
 
 /**
+ * 检查字符串中是否包含区域 emoji（旗帜）
+ * 不限于开头位置，可以在任意位置
+ */
+export function hasRegionEmoji(text: string): boolean {
+  if (!text) return false
+
+  // 匹配区域指示符号对（旗帜 emoji）
+  const regionEmojiRegex = /[\u{1F1E6}-\u{1F1FF}]{2}/u
+
+  return regionEmojiRegex.test(text)
+}
+
+/**
  * 从 ipinfo.io 获取 IP 地理位置信息
  */
 export interface GeoIPInfo {
@@ -131,7 +144,10 @@ export interface GeoIPInfo {
 const IPINFO_TOKEN = 'cddae164b36656'
 
 export async function getGeoIPInfo(ip: string): Promise<GeoIPInfo> {
-  const response = await fetch(`https://api.ipinfo.io/lite/${ip}?token=${IPINFO_TOKEN}`)
+  // 去除 IPv6 地址的方括号（如 [2a03:4000:6:d221::1] -> 2a03:4000:6:d221::1）
+  const cleanIp = ip.replace(/^\[|\]$/g, '')
+
+  const response = await fetch(`https://api.ipinfo.io/lite/${cleanIp}?token=${IPINFO_TOKEN}`)
 
   if (!response.ok) {
     throw new Error(`Failed to get GeoIP info: ${response.status}`)
