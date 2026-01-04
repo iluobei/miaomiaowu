@@ -103,9 +103,9 @@ function parseVmess(url: string): ProxyNode | null {
 
     // SNI/Servername
     if (config.sni) {
-      node.servername = config.sni
+      node.servername = safeDecodeURIComponent(config.sni)
     } else if (config.host && config.tls) {
-      node.servername = config.host
+      node.servername = safeDecodeURIComponent(config.host)
     }
 
     // ALPN
@@ -743,7 +743,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
     switch (protocol) {
       case 'trojan':
         node.password = password
-        node.sni = queryParams.sni || queryParams.peer || queryParams.host || server
+        node.sni = safeDecodeURIComponent(queryParams.sni || queryParams.peer || queryParams.host || server)
         node.network = queryParams.type || 'tcp'
 
         // TLS 设置
@@ -793,8 +793,8 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         node.security = queryParams.security || 'none'
         node.tls = queryParams.security === 'tls' || queryParams.security === 'reality'
         node.network = queryParams.type || 'tcp'
-        node.sni = queryParams.sni || server
-        node.servername = queryParams.sni || server
+        node.sni = safeDecodeURIComponent(queryParams.sni || server)
+        node.servername = safeDecodeURIComponent(queryParams.sni || server)
         node.skipCertVerify = queryParams.allowInsecure === '1'
         node['spider-x'] = queryParams.spx
 
@@ -863,7 +863,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         // node.ports = queryParams.mport || port.toString()
         node.obfs = queryParams.obfs
         node['obfs-password'] = queryParams['obfs-password'] || queryParams.obfsParam
-        node.sni = queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server)
+        node.sni = safeDecodeURIComponent(queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server))
         node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : undefined
         // insecure=1 表示跳过证书验证
         node.skipCertVerify = queryParams.insecure === '1' || queryParams.allowInsecure === '1' || queryParams['skip-cert-verify'] === '1'
@@ -897,7 +897,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
             node.password = queryParams.password || ''
           }
         }
-        node.sni = queryParams.sni || server
+        node.sni = safeDecodeURIComponent(queryParams.sni || server)
         node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : ['h3']
         node.skipCertVerify = queryParams.allowInsecure === '1' || queryParams.allow_insecure === '1'
         node['congestion-controller'] = queryParams.congestion_control || 'bbr'
@@ -913,7 +913,7 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
 
       case 'anytls':
         node.password = password
-        node.sni = queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server)
+        node.sni = safeDecodeURIComponent(queryParams.peer || queryParams.sni || (server.startsWith('[') ? '' : server))
         node.alpn = queryParams.alpn ? queryParams.alpn.split(',') : undefined
         node.skipCertVerify = queryParams.insecure === '1' || queryParams.allowInsecure === '1' || queryParams['skip-cert-verify'] === '1'
         // client-fingerprint

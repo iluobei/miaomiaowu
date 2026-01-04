@@ -96,6 +96,14 @@ func decodeProxyURLFields(proxy map[string]any) {
 	if host, ok := proxy["host"].(string); ok {
 		proxy["host"] = safeURLDecode(host)
 	}
+
+	// 处理 sni 和 servername 字段（TLS 相关）
+	if sni, ok := proxy["sni"].(string); ok {
+		proxy["sni"] = safeURLDecode(sni)
+	}
+	if servername, ok := proxy["servername"].(string); ok {
+		proxy["servername"] = safeURLDecode(servername)
+	}
 }
 
 type nodesHandler struct {
