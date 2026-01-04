@@ -466,14 +466,22 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 													continue
 												}
 												if sub.Expire == nil {
-													log.Printf("[Subscription] Adding traffic from long-term external subscription '%s': upload=%d, download=%d, total=%d",
-														sub.Name, sub.Upload, sub.Download, sub.Total)
+													log.Printf("[Subscription] Adding traffic from long-term external subscription '%s': upload=%d, download=%d, total=%d, mode=%s",
+														sub.Name, sub.Upload, sub.Download, sub.Total, sub.TrafficMode)
 												} else {
-													log.Printf("[Subscription] Adding traffic from external subscription '%s': upload=%d, download=%d, total=%d (expires at %s)",
-														sub.Name, sub.Upload, sub.Download, sub.Total, sub.Expire.Format("2006-01-02 15:04:05"))
+													log.Printf("[Subscription] Adding traffic from external subscription '%s': upload=%d, download=%d, total=%d, mode=%s (expires at %s)",
+														sub.Name, sub.Upload, sub.Download, sub.Total, sub.TrafficMode, sub.Expire.Format("2006-01-02 15:04:05"))
 												}
 												externalTrafficLimit += sub.Total
-												externalTrafficUsed += sub.Upload + sub.Download
+												// 根据 TrafficMode 计算已用流量
+												switch sub.TrafficMode {
+												case "download":
+													externalTrafficUsed += sub.Download
+												case "upload":
+													externalTrafficUsed += sub.Upload
+												default: // "both" 或空
+													externalTrafficUsed += sub.Upload + sub.Download
+												}
 											}
 										}
 										log.Printf("[Subscription] External subscriptions traffic total: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",

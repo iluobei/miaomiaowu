@@ -77,6 +77,7 @@ type ExternalSubscription = {
   download: number
   total: number
   expire: string | null
+  traffic_mode: 'download' | 'upload' | 'both'
   created_at: string
   updated_at: string
 }
@@ -315,6 +316,16 @@ function SubscribeFilesPage() {
   // 外部订阅卡片折叠状态 - 默认折叠
   const [isExternalSubsExpanded, setIsExternalSubsExpanded] = useState(false)
 
+  // 编辑外部订阅对话框状态
+  const [editExternalSubDialogOpen, setEditExternalSubDialogOpen] = useState(false)
+  const [editingExternalSub, setEditingExternalSub] = useState<ExternalSubscription | null>(null)
+  const [editExternalSubForm, setEditExternalSubForm] = useState({
+    name: '',
+    url: '',
+    user_agent: '',
+    traffic_mode: 'both' as 'download' | 'upload' | 'both'
+  })
+
   // 代理集合对话框状态
   const [proxyProviderDialogOpen, setProxyProviderDialogOpen] = useState(false)
   const [selectedExternalSub, setSelectedExternalSub] = useState<ExternalSubscription | null>(null)
@@ -538,6 +549,26 @@ function SubscribeFilesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '删除失败')
+    },
+  })
+
+  // 更新外部订阅
+  const updateExternalSubMutation = useMutation({
+    mutationFn: async (data: { id: number; name: string; url: string; user_agent: string; traffic_mode: string }) => {
+      await api.put(`/api/user/external-subscriptions?id=${data.id}`, {
+        name: data.name,
+        url: data.url,
+        user_agent: data.user_agent,
+        traffic_mode: data.traffic_mode
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
+      toast.success('外部订阅已更新')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '更新失败')
     },
   })
 
@@ -2458,40 +2489,83 @@ function SubscribeFilesPage() {
                         if (sub.total <= 0) {
                           return <span className='text-sm text-muted-foreground'>-</span>
                         }
-                        const used = sub.upload + sub.download
+                        // 根据 traffic_mode 计算已用流量
+                        const mode = sub.traffic_mode || 'both'
+                        const used = mode === 'download' ? sub.download : mode === 'upload' ? sub.upload : sub.upload + sub.download
                         const percentage = Math.min((used / sub.total) * 100, 100)
                         const remaining = Math.max(sub.total - used, 0)
+                        const modeLabel = mode === 'download' ? '仅下行' : mode === 'upload' ? '仅上行' : '上下行'
                         return (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className='w-24 space-y-1 cursor-help'>
-                                <Progress value={percentage} className='h-2' />
-                                <div className='text-xs text-center text-muted-foreground'>
-                                  {percentage.toFixed(0)}%
+                          <div className='flex items-center gap-1'>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className='w-20 space-y-1 cursor-help'>
+                                  <Progress value={percentage} className='h-2' />
+                                  <div className='text-xs text-center text-muted-foreground'>
+                                    {percentage.toFixed(0)}%
+                                  </div>
                                 </div>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent className='space-y-1'>
-                              <div className='text-xs'>
-                                <span className='font-medium'>已用: </span>
-                                {formatTrafficGB(used)}
-                              </div>
-                              <div className='text-xs'>
-                                <span className='font-medium'>总量: </span>
-                                {formatTrafficGB(sub.total)}
-                              </div>
-                              <div className='text-xs'>
-                                <span className='font-medium'>剩余: </span>
-                                {formatTrafficGB(remaining)}
-                              </div>
-                              <div className='text-xs text-muted-foreground'>
-                                上传: {formatTrafficGB(sub.upload)} / 下载: {formatTrafficGB(sub.download)}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
+                              </TooltipTrigger>
+                              <TooltipContent className='space-y-1'>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>上传: </span>
+                                  {formatTrafficGB(sub.upload)}
+                                </div>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>下载: </span>
+                                  {formatTrafficGB(sub.download)}
+                                </div>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>总量: </span>
+                                  {formatTrafficGB(sub.total)}
+                                </div>
+                                <div className='text-xs'>
+                                  <span className='font-medium'>剩余: </span>
+                                  {formatTrafficGB(remaining)}
+                                </div>
+                                <div className='text-xs text-muted-foreground'>
+                                  统计方式: {modeLabel}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant='ghost'
+                                  size='icon'
+                                  className='h-6 w-6'
+                                  onClick={() => {
+                                    // 循环切换: both -> download -> upload -> both
+                                    const nextMode = mode === 'both' ? 'download' : mode === 'download' ? 'upload' : 'both'
+                                    updateExternalSubMutation.mutate({
+                                      id: sub.id,
+                                      name: sub.name,
+                                      url: sub.url,
+                                      user_agent: sub.user_agent,
+                                      traffic_mode: nextMode
+                                    })
+                                  }}
+                                  disabled={updateExternalSubMutation.isPending}
+                                >
+                                  {mode === 'download' ? (
+                                    <Download className='h-3 w-3' />
+                                  ) : mode === 'upload' ? (
+                                    <Upload className='h-3 w-3' />
+                                  ) : (
+                                    <svg className='h-3 w-3' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                      <path d='M12 5v14M5 12l7-7 7 7M5 12l7 7 7-7' />
+                                    </svg>
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <span>切换统计方式: {modeLabel}</span>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                         )
                       },
-                      width: '120px'
+                      width: '140px'
                     },
                     {
                       header: '到期时间',
@@ -2515,6 +2589,22 @@ function SubscribeFilesPage() {
                       header: '操作',
                       cell: (sub) => (
                         <div className='flex items-center gap-1'>
+                          <Button
+                            variant='ghost'
+                            size='sm'
+                            onClick={() => {
+                              setEditingExternalSub(sub)
+                              setEditExternalSubForm({
+                                name: sub.name,
+                                url: sub.url,
+                                user_agent: sub.user_agent,
+                                traffic_mode: sub.traffic_mode || 'both'
+                              })
+                              setEditExternalSubDialogOpen(true)
+                            }}
+                          >
+                            <Edit className='h-4 w-4' />
+                          </Button>
                           <Button
                             variant='ghost'
                             size='sm'
@@ -2588,6 +2678,24 @@ function SubscribeFilesPage() {
                             variant='outline'
                             size='icon'
                             className='size-8 shrink-0'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingExternalSub(sub)
+                              setEditExternalSubForm({
+                                name: sub.name,
+                                url: sub.url,
+                                user_agent: sub.user_agent,
+                                traffic_mode: sub.traffic_mode || 'both'
+                              })
+                              setEditExternalSubDialogOpen(true)
+                            }}
+                          >
+                            <Edit className='size-4' />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='size-8 shrink-0'
                             disabled={syncingSingleId === sub.id || syncExternalSubsMutation.isPending}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -2637,33 +2745,77 @@ function SubscribeFilesPage() {
                           if (sub.total <= 0) {
                             return <span className='text-muted-foreground'>-</span>
                           }
-                          const used = sub.upload + sub.download
+                          // 根据 traffic_mode 计算已用流量
+                          const mode = sub.traffic_mode || 'both'
+                          const used = mode === 'download' ? sub.download : mode === 'upload' ? sub.upload : sub.upload + sub.download
                           const percentage = Math.min((used / sub.total) * 100, 100)
                           const remaining = Math.max(sub.total - used, 0)
+                          const modeLabel = mode === 'download' ? '仅下行' : mode === 'upload' ? '仅上行' : '上下行'
                           return (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className='flex items-center gap-2 cursor-help'>
-                                  <Progress value={percentage} className='h-2 flex-1 max-w-24' />
-                                  <span className='text-xs whitespace-nowrap'>
-                                    {formatTrafficGB(used)} / {formatTrafficGB(sub.total)}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent className='space-y-1'>
-                                <div className='text-xs'>
-                                  <span className='font-medium'>已用: </span>
-                                  {formatTrafficGB(used)} ({percentage.toFixed(1)}%)
-                                </div>
-                                <div className='text-xs'>
-                                  <span className='font-medium'>剩余: </span>
-                                  {formatTrafficGB(remaining)}
-                                </div>
-                                <div className='text-xs text-muted-foreground'>
-                                  上传: {formatTrafficGB(sub.upload)} / 下载: {formatTrafficGB(sub.download)}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
+                            <div className='flex items-center gap-2'>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className='flex items-center gap-2 cursor-help flex-1'>
+                                    <Progress value={percentage} className='h-2 flex-1 max-w-20' />
+                                    <span className='text-xs whitespace-nowrap'>
+                                      {formatTrafficGB(used)} / {formatTrafficGB(sub.total)}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent className='space-y-1'>
+                                  <div className='text-xs'>
+                                    <span className='font-medium'>上传: </span>
+                                    {formatTrafficGB(sub.upload)}
+                                  </div>
+                                  <div className='text-xs'>
+                                    <span className='font-medium'>下载: </span>
+                                    {formatTrafficGB(sub.download)}
+                                  </div>
+                                  <div className='text-xs'>
+                                    <span className='font-medium'>剩余: </span>
+                                    {formatTrafficGB(remaining)}
+                                  </div>
+                                  <div className='text-xs text-muted-foreground'>
+                                    统计方式: {modeLabel}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-6 w-6 shrink-0'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      // 循环切换: both -> download -> upload -> both
+                                      const nextMode = mode === 'both' ? 'download' : mode === 'download' ? 'upload' : 'both'
+                                      updateExternalSubMutation.mutate({
+                                        id: sub.id,
+                                        name: sub.name,
+                                        url: sub.url,
+                                        user_agent: sub.user_agent,
+                                        traffic_mode: nextMode
+                                      })
+                                    }}
+                                    disabled={updateExternalSubMutation.isPending}
+                                  >
+                                    {mode === 'download' ? (
+                                      <Download className='h-3 w-3' />
+                                    ) : mode === 'upload' ? (
+                                      <Upload className='h-3 w-3' />
+                                    ) : (
+                                      <svg className='h-3 w-3' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                        <path d='M12 5v14M5 12l7-7 7 7M5 12l7 7 7-7' />
+                                      </svg>
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <span>切换统计方式: {modeLabel}</span>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           )
                         }
                       },
@@ -4306,6 +4458,75 @@ function SubscribeFilesPage() {
             </Button>
             <Button variant='outline' onClick={() => setPreviewDialogOpen(false)}>
               关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑外部订阅对话框 */}
+      <Dialog open={editExternalSubDialogOpen} onOpenChange={(open) => {
+        setEditExternalSubDialogOpen(open)
+        if (!open) {
+          setEditingExternalSub(null)
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑外部订阅</DialogTitle>
+            <DialogDescription>
+              修改外部订阅的地址和流量统计方式
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <Label>订阅地址</Label>
+              <Input
+                value={editExternalSubForm.url}
+                onChange={(e) => setEditExternalSubForm(prev => ({ ...prev, url: e.target.value }))}
+                placeholder='https://example.com/subscribe'
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label>流量统计方式</Label>
+              <Select
+                value={editExternalSubForm.traffic_mode}
+                onValueChange={(value: 'download' | 'upload' | 'both') => setEditExternalSubForm(prev => ({ ...prev, traffic_mode: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='both'>上下行 (download + upload)</SelectItem>
+                  <SelectItem value='download'>仅下行 (download)</SelectItem>
+                  <SelectItem value='upload'>仅上行 (upload)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>
+                选择如何计算已用流量：上下行为两者相加，仅下行或仅上行则只计算对应流量
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setEditExternalSubDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingExternalSub) {
+                  updateExternalSubMutation.mutate({
+                    id: editingExternalSub.id,
+                    name: editingExternalSub.name,
+                    url: editExternalSubForm.url,
+                    user_agent: editingExternalSub.user_agent,
+                    traffic_mode: editExternalSubForm.traffic_mode
+                  })
+                  setEditExternalSubDialogOpen(false)
+                  setEditingExternalSub(null)
+                }
+              }}
+              disabled={updateExternalSubMutation.isPending || !editExternalSubForm.url}
+            >
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
