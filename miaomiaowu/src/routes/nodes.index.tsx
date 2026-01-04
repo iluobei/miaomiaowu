@@ -318,6 +318,35 @@ function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; prot
   )
 }
 
+// 节点管理状态缓存key
+const STORAGE_KEY_PROTOCOL = 'mmw_nodes_selectedProtocol'
+const STORAGE_KEY_TAG = 'mmw_nodes_tagFilter'
+const STORAGE_KEY_SELECTED_IDS = 'mmw_nodes_selectedIds'
+
+// 从 localStorage 获取保存的筛选状态
+function getStoredFilterState() {
+  try {
+    return {
+      protocol: localStorage.getItem(STORAGE_KEY_PROTOCOL) || 'all',
+      tag: localStorage.getItem(STORAGE_KEY_TAG) || 'all'
+    }
+  } catch {
+    return { protocol: 'all', tag: 'all' }
+  }
+}
+
+// 从 localStorage 获取保存的选中节点 ID
+function getStoredSelectedIds(): Set<number> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_SELECTED_IDS)
+    if (stored) {
+      const ids = JSON.parse(stored) as number[]
+      return new Set(ids)
+    }
+  } catch {}
+  return new Set()
+}
+
 function NodesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
@@ -331,9 +360,10 @@ function NodesPage() {
   const [userAgent, setUserAgent] = useState<string>('clash.meta')
   const [customUserAgent, setCustomUserAgent] = useState<string>('')
   const [tempNodes, setTempNodes] = useState<TempNode[]>([])
-  const [selectedProtocol, setSelectedProtocol] = useState<string>('all')
+  // 从 localStorage 恢复筛选状态
+  const [selectedProtocol, setSelectedProtocol] = useState<string>(() => getStoredFilterState().protocol)
   const [currentTag, setCurrentTag] = useState<string>('manual') // 'manual' 或 'subscription'
-  const [tagFilter, setTagFilter] = useState<string>('all')
+  const [tagFilter, setTagFilter] = useState<string>(() => getStoredFilterState().tag)
   const [editingNode, setEditingNode] = useState<{ id: string; value: string } | null>(null)
   const [resolvingIpFor, setResolvingIpFor] = useState<string | null>(null) // 正在解析IP的节点ID
   const [ipMenuState, setIpMenuState] = useState<{ nodeId: string; ips: string[] } | null>(null) // IP选择菜单状态
@@ -350,8 +380,8 @@ function NodesPage() {
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
 
-  // 批量操作状态
-  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
+  // 批量操作状态 - 从 localStorage 恢复选中状态
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(() => getStoredSelectedIds())
   const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false)
   const [batchTag, setBatchTag] = useState<string>('')
   const [batchRenameDialogOpen, setBatchRenameDialogOpen] = useState(false)
@@ -431,6 +461,26 @@ function NodesPage() {
     }
   }, [userConfig?.node_order])
 
+  // 保存筛选状态到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_PROTOCOL, selectedProtocol)
+    } catch {}
+  }, [selectedProtocol])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_TAG, tagFilter)
+    } catch {}
+  }, [tagFilter])
+
+  // 保存选中节点状态到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SELECTED_IDS, JSON.stringify(Array.from(selectedNodeIds)))
+    } catch {}
+  }, [selectedNodeIds])
+
   // dnd-kit sensors
   // 移动端需要更长的 delay 以允许正常滚动，只有长按才触发拖拽
   const sensors = useSensors(
@@ -487,6 +537,20 @@ function NodesPage() {
   })
 
   const savedNodes = useMemo(() => nodesData?.nodes ?? [], [nodesData?.nodes])
+
+  // 节点数据加载后，清理已不存在的选中节点 ID
+  useEffect(() => {
+    if (!nodesData) return
+    const validIds = new Set(savedNodes.map(n => n.id))
+    setSelectedNodeIds(prev => {
+      const filtered = new Set(Array.from(prev).filter(id => validIds.has(id)))
+      // 只有当有变化时才更新，避免不必要的重渲染
+      if (filtered.size !== prev.size) {
+        return filtered
+      }
+      return prev
+    })
+  }, [nodesData, savedNodes])
 
   const updateConfigName = (config, name) => {
     if (!config) return config
@@ -1777,7 +1841,11 @@ function NodesPage() {
   }, [savedNodes])
 
   // 当选中的筛选器对应的节点都被删除时，自动重置为 'all'
+  // 注意：只有在节点数据加载完成后才执行检查，避免在初始化时错误重置从 localStorage 恢复的状态
   useEffect(() => {
+    // 如果节点数据还没加载完成，不执行检查
+    if (!nodesData) return
+
     // 检查 tagFilter
     if (tagFilter !== 'all' && (!tagCounts[tagFilter] || tagCounts[tagFilter] === 0)) {
       setTagFilter('all')
@@ -1786,7 +1854,7 @@ function NodesPage() {
     if (selectedProtocol !== 'all' && (!protocolCounts[selectedProtocol] || protocolCounts[selectedProtocol] === 0)) {
       setSelectedProtocol('all')
     }
-  }, [tagCounts, protocolCounts, tagFilter, selectedProtocol])
+  }, [nodesData, tagCounts, protocolCounts, tagFilter, selectedProtocol])
 
   return (
     <div className='min-h-svh bg-background'>
