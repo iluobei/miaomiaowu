@@ -898,16 +898,22 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 			namePrefix = config.Name[:idx]
 		}
 		prefix := fmt.Sprintf("〖%s〗", namePrefix)
+
+		// 复制节点数据并添加前缀（避免污染缓存中的原始数据）
+		proxiesCopy := make([]any, len(proxiesRaw))
 		nodeNames := make([]string, 0, len(proxiesRaw))
-		for _, proxy := range proxiesRaw {
+		for i, proxy := range proxiesRaw {
 			if proxyMap, ok := proxy.(map[string]any); ok {
-				if originalName, ok := proxyMap["name"].(string); ok {
+				nodeCopy := copyMapForSync(proxyMap)
+				if originalName, ok := nodeCopy["name"].(string); ok {
 					newName := prefix + originalName
-					proxyMap["name"] = newName
+					nodeCopy["name"] = newName
 					nodeNames = append(nodeNames, newName)
 				}
+				proxiesCopy[i] = nodeCopy
 			}
 		}
+		proxiesRaw = proxiesCopy
 
 		// 更新每个订阅文件
 		for _, file := range files {
@@ -1225,4 +1231,28 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 
 	log.Printf("[代理集合同步] 文件 %s 更新完成", filename)
 	return nil
+}
+
+// copyMapForSync 深拷贝 map（用于代理节点同步，避免污染缓存）
+func copyMapForSync(m map[string]any) map[string]any {
+	result := make(map[string]any)
+	for k, v := range m {
+		switch vv := v.(type) {
+		case map[string]any:
+			result[k] = copyMapForSync(vv)
+		case []any:
+			copied := make([]any, len(vv))
+			for i, item := range vv {
+				if itemMap, ok := item.(map[string]any); ok {
+					copied[i] = copyMapForSync(itemMap)
+				} else {
+					copied[i] = item
+				}
+			}
+			result[k] = copied
+		default:
+			result[k] = v
+		}
+	}
+	return result
 }
