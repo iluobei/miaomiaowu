@@ -855,10 +855,15 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 
 // convertSubscription converts a YAML subscription file to the specified client format
 func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType string) ([]byte, error) {
-	// 读取yaml
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(yamlData, &config); err != nil {
+	// 使用 yaml.Node 解析, 解决值前导零的问题
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	config, err := yamlNodeToMap(&rootNode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert YAML node: %w", err)
 	}
 
 	// 读取yaml中proxies属性的节点列表

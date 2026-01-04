@@ -96,3 +96,91 @@ func convertUnicodeEscapes(s string) string {
 		return string(rune(codepoint))
 	})
 }
+
+// yaml.Unmarshal 方法会丢失数字前面的0, 先转为yaml.Node, 再转为map
+func yamlNodeToMap(node *yaml.Node) (map[string]interface{}, error) {
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) > 0 {
+			return yamlNodeToMap(node.Content[0])
+		}
+		return nil, nil
+	}
+
+	if node.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("expected mapping node, got %v", node.Kind)
+	}
+
+	result := make(map[string]interface{})
+	for i := 0; i < len(node.Content); i += 2 {
+		if i+1 >= len(node.Content) {
+			break
+		}
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+
+		key := keyNode.Value
+		value, err := yamlNodeToValue(valueNode)
+		if err != nil {
+			return nil, err
+		}
+		result[key] = value
+	}
+	return result, nil
+}
+
+// 转换为对应的 Go 类型值, 0开头的值保留其原始字符串格式
+func yamlNodeToValue(node *yaml.Node) (interface{}, error) {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		// 对于带引号的字符串，保持字符串格式
+		if node.Tag == "!!str" || node.Style == yaml.DoubleQuotedStyle || node.Style == yaml.SingleQuotedStyle {
+			return node.Value, nil
+		}
+		if looksLikeNumericStringWithLeadingZero(node.Value) {
+			return node.Value, nil
+		}
+		// 对于其他标量，使用标准解析
+		var value interface{}
+		if err := node.Decode(&value); err != nil {
+			return node.Value, nil // 解码失败时返回原始字符串
+		}
+		return value, nil
+
+	case yaml.SequenceNode:
+		var result []interface{}
+		for _, child := range node.Content {
+			value, err := yamlNodeToValue(child)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, value)
+		}
+		return result, nil
+
+	case yaml.MappingNode:
+		return yamlNodeToMap(node)
+
+	case yaml.AliasNode:
+		return yamlNodeToValue(node.Alias)
+
+	default:
+		return nil, nil
+	}
+}
+
+// 判断yaml节点的value是否是0开头的数字
+func looksLikeNumericStringWithLeadingZero(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	// 以 0 开头且后续都是数字的字符串（如 "045678"）
+	if s[0] == '0' && len(s) > 1 && s[1] >= '0' && s[1] <= '9' {
+		for _, c := range s[1:] {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
