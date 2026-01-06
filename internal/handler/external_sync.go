@@ -483,6 +483,21 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 				}
 			} else {
 				log.Printf("[外部订阅同步] 保留原节点名称: %s (外部订阅名称: %s)", oldNodeName, node.NodeName)
+				// 更新 ClashConfig 和 ParsedConfig 中的 name 字段为保留的节点名称
+				var clashConfig map[string]any
+				if err := json.Unmarshal([]byte(existingNode.ClashConfig), &clashConfig); err == nil {
+					clashConfig["name"] = oldNodeName
+					if updatedClash, err := json.Marshal(clashConfig); err == nil {
+						existingNode.ClashConfig = string(updatedClash)
+					}
+				}
+				var parsedConfig map[string]any
+				if err := json.Unmarshal([]byte(existingNode.ParsedConfig), &parsedConfig); err == nil {
+					parsedConfig["name"] = oldNodeName
+					if updatedParsed, err := json.Marshal(parsedConfig); err == nil {
+						existingNode.ParsedConfig = string(updatedParsed)
+					}
+				}
 			}
 
 			_, err := repo.UpdateNode(ctx, *existingNode)

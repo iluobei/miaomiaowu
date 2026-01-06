@@ -201,7 +201,7 @@ function vless(proxy: Proxy): string {
         }
     }
 
-    if (['splithttp'].includes(proxy.network || '')) {
+    if (['splithttp', "xhttp"].includes(proxy.network || '')) {
         vlessTransport += `&mode=${encodeURIComponent(proxy.mode) || 'auto'}`;
     }
 
@@ -216,8 +216,6 @@ function vless(proxy: Proxy): string {
                 : vlessTransportPath,
         )}`;
     }
-
-    // 兼容xhttp在mmw被转成splithttp的情况
     
     if (vlessTransportHost) {
         vlessTransport += `&host=${encodeURIComponent(
