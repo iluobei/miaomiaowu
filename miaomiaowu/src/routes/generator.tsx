@@ -2879,17 +2879,6 @@ function SubscriptionGeneratorPage() {
           <DialogHeader>
             <DialogTitle className='flex items-center justify-between'>
               <span>配置预览</span>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => {
-                  navigator.clipboard.writeText(templatePreviewContent)
-                  toast.success('已复制到剪贴板')
-                }}
-              >
-                <Copy className='h-4 w-4 mr-2' />
-                复制
-              </Button>
             </DialogTitle>
             <DialogDescription>
               生成的配置文件预览
@@ -2915,9 +2904,6 @@ function SubscriptionGeneratorPage() {
         <DialogContent className='sm:max-w-[75vw] max-h-[80vh]'>
           <DialogHeader>
             <DialogTitle>源文件预览 - {sourcePreviewTitle}</DialogTitle>
-            <DialogDescription>
-              ACL4SSR 规则源文件内容
-            </DialogDescription>
           </DialogHeader>
 
           <div className='overflow-auto max-h-[60vh]'>

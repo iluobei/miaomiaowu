@@ -172,6 +172,214 @@ const DraggableAvailableHeader = memo(function DraggableAvailableHeader({ filter
   )
 })
 
+// 可排序的代理组内节点 - 提取到外部并 memoize
+interface SortableProxyProps {
+  proxy: string
+  groupName: string
+  index: number
+  isMmwProvider: boolean
+  isActiveDragging: boolean  // 是否有拖拽正在进行
+  onRemove: (groupName: string, index: number) => void
+}
+
+const SortableProxy = memo(function SortableProxy({
+  proxy,
+  groupName,
+  index,
+  isMmwProvider,
+  isActiveDragging,
+  onRemove
+}: SortableProxyProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({
+    id: `${groupName}-${proxy}`,
+    transition: {
+      duration: 150,
+      easing: 'ease-out',
+    },
+    data: {
+      type: isMmwProvider ? 'use-item' : 'group-node',
+      groupName,
+      nodeName: proxy,
+      providerName: isMmwProvider ? proxy : undefined,
+      index
+    } as DragItemData,
+  })
+
+  // 判断是否显示插入指示器：有拖拽进行中 + 当前项被悬停 + 当前项不是正在拖拽的项
+  const showDropIndicator = isActiveDragging && isOver && !isDragging
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || 'transform 150ms ease-out',
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  // MMW 代理集合使用紫色样式
+  if (isMmwProvider) {
+    return (
+      <div className='relative'>
+        {showDropIndicator && (
+          <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+        )}
+        <div
+          ref={setNodeRef}
+          style={style}
+          {...attributes}
+          {...listeners}
+          className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
+            showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
+          } ${isDragging ? 'shadow-lg' : ''}`}
+          data-use-item
+        >
+          <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+          <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {proxy}</span>
+          <Button
+            variant='ghost'
+            size='sm'
+            className='h-6 w-6 p-0 flex-shrink-0'
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove(groupName, index)
+            }}
+          >
+            <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className='relative'>
+      {/* 顶部插入指示器 */}
+      {showDropIndicator && (
+        <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+      )}
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className={`flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item cursor-move ${
+          showDropIndicator ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30' : ''
+        }`}
+        data-proxy-item
+      >
+        <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
+        <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='h-6 w-6 p-0 flex-shrink-0'
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove(groupName, index)
+          }}
+        >
+          <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
+        </Button>
+      </div>
+    </div>
+  )
+})
+
+// 可排序的代理集合项 - 提取到外部并 memoize
+interface SortableUseItemProps {
+  providerName: string
+  groupName: string
+  index: number
+  isActiveDragging: boolean
+  onRemove: () => void
+}
+
+const SortableUseItem = memo(function SortableUseItem({
+  providerName,
+  groupName,
+  index,
+  isActiveDragging,
+  onRemove
+}: SortableUseItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver
+  } = useSortable({
+    id: `use-${groupName}-${providerName}`,
+    transition: {
+      duration: 150,
+      easing: 'ease-out',
+    },
+    data: {
+      type: 'use-item',
+      groupName,
+      providerName,
+      index
+    } as DragItemData,
+  })
+
+  // 判断是否显示插入指示器
+  const showDropIndicator = isActiveDragging && isOver && !isDragging
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || 'transform 150ms ease-out',
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <div className='relative'>
+      {/* 顶部插入指示器 */}
+      {showDropIndicator && (
+        <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
+      )}
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
+          showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
+        } ${isDragging ? 'shadow-lg' : ''}`}
+        data-use-item
+      >
+        <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
+        <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {providerName}</span>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='h-6 w-6 p-0 flex-shrink-0'
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+        >
+          <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
+        </Button>
+      </div>
+    </div>
+  )
+})
+
 interface EditNodesDialogProps {
   allNodes?: Node[]
   open: boolean
@@ -1056,200 +1264,6 @@ export function EditNodesDialog({
     )
   }
 
-  // 可排序的代理组内节点
-  interface SortableProxyProps {
-    proxy: string
-    groupName: string
-    index: number
-  }
-
-  const SortableProxy = ({ proxy, groupName, index }: SortableProxyProps) => {
-    // 检查是否是 MMW 代理集合的引用（MMW 模式下代理集合名称作为代理组名出现在 proxies 中）
-    const isMmwProvider = mmwProviderNames.has(proxy)
-
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-      isOver,
-    } = useSortable({
-      id: `${groupName}-${proxy}`,
-      transition: {
-        duration: 150,
-        easing: 'ease-out',
-      },
-      data: {
-        type: isMmwProvider ? 'use-item' : 'group-node',
-        groupName,
-        nodeName: proxy,
-        providerName: isMmwProvider ? proxy : undefined,
-        index
-      } as DragItemData,
-    })
-
-    // 判断是否显示插入指示器：有拖拽进行中 + 当前项被悬停 + 当前项不是正在拖拽的项
-    const showDropIndicator = activeDragItem && isOver && !isDragging
-
-    const style: React.CSSProperties = {
-      transform: CSS.Transform.toString(transform),
-      transition: transition || 'transform 150ms ease-out',
-      opacity: isDragging ? 0.5 : 1,
-      touchAction: 'none',
-    }
-
-    // MMW 代理集合使用紫色样式
-    if (isMmwProvider) {
-      return (
-        <div className='relative'>
-          {showDropIndicator && (
-            <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
-          )}
-          <div
-            ref={setNodeRef}
-            style={style}
-            {...attributes}
-            {...listeners}
-            className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
-              showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
-            } ${isDragging ? 'shadow-lg' : ''}`}
-            data-use-item
-          >
-            <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
-            <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {proxy}</span>
-            <Button
-              variant='ghost'
-              size='sm'
-              className='h-6 w-6 p-0 flex-shrink-0'
-              onPointerDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation()
-                wrappedRemoveNodeFromGroup(groupName, index)
-              }}
-            >
-              <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
-            </Button>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div className='relative'>
-        {/* 顶部插入指示器 */}
-        {showDropIndicator && (
-          <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
-        )}
-        <div
-          ref={setNodeRef}
-          style={style}
-          {...attributes}
-          {...listeners}
-          className={`flex items-center gap-2 p-2 rounded border hover:border-border hover:bg-accent group/item cursor-move ${
-            showDropIndicator ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30' : ''
-          }`}
-          data-proxy-item
-        >
-          <GripVertical className='h-4 w-4 text-muted-foreground flex-shrink-0' />
-          <span className='text-sm truncate flex-1'><Twemoji>{proxy}</Twemoji></span>
-          <Button
-            variant='ghost'
-            size='sm'
-            className='h-6 w-6 p-0 flex-shrink-0'
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              wrappedRemoveNodeFromGroup(groupName, index)
-            }}
-          >
-            <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  // 可排序的代理集合项
-  interface SortableUseItemProps {
-    providerName: string
-    groupName: string
-    index: number
-    onRemove: () => void
-  }
-
-  const SortableUseItem = ({ providerName, groupName, index, onRemove }: SortableUseItemProps) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-      isOver
-    } = useSortable({
-      id: `use-${groupName}-${providerName}`,
-      transition: {
-        duration: 150,
-        easing: 'ease-out',
-      },
-      data: {
-        type: 'use-item',
-        groupName,
-        providerName,
-        index
-      } as DragItemData,
-    })
-
-    // 判断是否显示插入指示器
-    const showDropIndicator = activeDragItem && isOver && !isDragging
-
-    const style: React.CSSProperties = {
-      transform: CSS.Transform.toString(transform),
-      transition: transition || 'transform 150ms ease-out',
-      opacity: isDragging ? 0.5 : 1,
-      touchAction: 'none',
-    }
-
-    return (
-      <div className='relative'>
-        {/* 顶部插入指示器 */}
-        {showDropIndicator && (
-          <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
-        )}
-        <div
-          ref={setNodeRef}
-          style={style}
-          {...attributes}
-          {...listeners}
-          className={`flex items-center gap-2 p-2 rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/20 cursor-move ${
-            showDropIndicator ? 'border-blue-400 bg-blue-100 dark:bg-blue-950/30' : ''
-          } ${isDragging ? 'shadow-lg' : ''}`}
-          data-use-item
-        >
-          <GripVertical className='h-4 w-4 text-purple-500 flex-shrink-0' />
-          <span className='text-sm truncate flex-1 text-purple-700 dark:text-purple-300'>📦 {providerName}</span>
-          <Button
-            variant='ghost'
-            size='sm'
-            className='h-6 w-6 p-0 flex-shrink-0'
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              onRemove()
-            }}
-          >
-            <X className='h-4 w-4 text-purple-400 hover:text-destructive' />
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   // 可排序的代理组卡片
   interface SortableCardProps {
     group: ProxyGroup
@@ -1375,6 +1389,9 @@ export function EditNodesDialog({
                   proxy={proxy}
                   groupName={group.name}
                   index={idx}
+                  isMmwProvider={mmwProviderNames.has(proxy)}
+                  isActiveDragging={!!activeDragItem}
+                  onRemove={wrappedRemoveNodeFromGroup}
                 />
               )
             ))}
@@ -1386,6 +1403,7 @@ export function EditNodesDialog({
                 providerName={providerName}
                 groupName={group.name}
                 index={idx}
+                isActiveDragging={!!activeDragItem}
                 onRemove={() => {
                   const updatedGroups = proxyGroups.map(g => {
                     if (g.name === group.name) {

@@ -571,17 +571,6 @@ function TemplatesPage() {
 					<DialogHeader>
 						<DialogTitle className="flex items-center justify-between">
 							<span>配置预览</span>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => {
-									navigator.clipboard.writeText(previewContent)
-									toast.success('已复制到剪贴板')
-								}}
-							>
-								<Copy className="h-4 w-4 mr-2" />
-								复制
-							</Button>
 						</DialogTitle>
 						<DialogDescription>
 							生成的配置文件预览

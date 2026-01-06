@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useMemo, useCallback, useEffect, memo } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, memo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -172,14 +172,13 @@ function DragHandle({ id, size = 'default' }: { id: string; size?: 'default' | '
 interface SortableTableRowProps {
   id: string
   isSaved: boolean
-  dbId?: number
-  batchDraggingIds: Set<number>
+  isBatchDragging?: boolean
   isSelected?: boolean
   onClick?: (e: React.MouseEvent) => void
   children: React.ReactNode
 }
 
-const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableTableRowProps) {
+const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, isBatchDragging, isSelected, onClick, children }: SortableTableRowProps) {
   const {
     setNodeRef,
     transform,
@@ -191,8 +190,7 @@ const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, dbI
     animateLayoutChanges: () => false,
   })
 
-  // 检查是否是批量拖动中的节点（但不是被直接拖动的那个）
-  const isBatchDragging = dbId && batchDraggingIds.size > 0 && batchDraggingIds.has(dbId) && !isDragging
+  const batchDragging = Boolean(isBatchDragging && !isDragging)
 
   const style: React.CSSProperties = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -208,11 +206,11 @@ const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, dbI
       className={cn(
         'cursor-pointer group/row',
         isDragging
-          ? 'opacity-0'  // 被直接拖动的节点完全隐藏，由 DragOverlay 显示
-          : isBatchDragging
-            ? 'opacity-30 bg-primary/10'  // 其他选中节点也变淡
+          ? 'opacity-0'
+          : batchDragging
+            ? 'opacity-30 bg-primary/10'
             : '',
-        isSelected && !isDragging && !isBatchDragging && 'bg-primary/15 ring-2 ring-inset ring-primary/50 hover:bg-primary/20'
+        isSelected && !isDragging && !batchDragging && 'bg-primary/15 ring-2 ring-inset ring-primary/50 hover:bg-primary/20'
       )}
     >
       {children}
@@ -224,14 +222,13 @@ const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, dbI
 interface SortableCardProps {
   id: string
   isSaved: boolean
-  dbId?: number
-  batchDraggingIds: Set<number>
+  isBatchDragging?: boolean
   isSelected?: boolean
   onClick?: (e: React.MouseEvent) => void
   children: React.ReactNode
 }
 
-const SortableCard = React.memo(function SortableCard({ id, isSaved, dbId, batchDraggingIds, isSelected, onClick, children }: SortableCardProps) {
+const SortableCard = React.memo(function SortableCard({ id, isSaved, isBatchDragging, isSelected, onClick, children }: SortableCardProps) {
   const {
     setNodeRef,
     transform,
@@ -243,7 +240,7 @@ const SortableCard = React.memo(function SortableCard({ id, isSaved, dbId, batch
     animateLayoutChanges: () => false,
   })
 
-  const isBatchDragging = dbId && batchDraggingIds.size > 0 && batchDraggingIds.has(dbId) && !isDragging
+  const batchDragging = Boolean(isBatchDragging && !isDragging)
 
   const style: React.CSSProperties = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -260,10 +257,10 @@ const SortableCard = React.memo(function SortableCard({ id, isSaved, dbId, batch
         'overflow-hidden cursor-pointer',
         isDragging
           ? 'opacity-0'
-          : isBatchDragging
+          : batchDragging
             ? 'opacity-30 bg-primary/10'
             : '',
-        isSelected && !isDragging && !isBatchDragging && 'bg-accent'
+        isSelected && !isDragging && !batchDragging && 'bg-accent'
       )}
     >
       {children}
@@ -628,6 +625,8 @@ function NodesPage() {
     },
   })
 
+  const isUpdatingNodeName = updateNodeNameMutation.isPending
+
   // DNS解析IP地址
   const resolveIpMutation = useMutation({
     mutationFn: async (hostname: string) => {
@@ -712,7 +711,7 @@ function NodesPage() {
   })
 
   // 处理 Clash 配置编辑（支持已保存节点和临时节点）
-  const handleEditClashConfig = (node: ParsedNode | TempNode) => {
+  const handleEditClashConfig = useCallback((node: ParsedNode | TempNode) => {
     // 对于已保存节点，使用 clash_config 字段
     // 对于临时节点，使用 clash 对象
     const clashConfig = 'clash_config' in node
@@ -739,7 +738,7 @@ function NodesPage() {
     setClashConfigError('')
     setJsonErrorLines([])
     setClashDialogOpen(true)
-  }
+  }, [])
 
   // 验证并保存 Clash 配置
   const handleSaveClashConfig = () => {
@@ -808,7 +807,7 @@ function NodesPage() {
   }
 
   // 复制 URI 到剪贴板
-  const handleCopyUri = async (node: ParsedNode) => {
+  const handleCopyUri = useCallback(async (node: ParsedNode) => {
     if (!node.clash_config) return
 
     try {
@@ -831,7 +830,7 @@ function NodesPage() {
     } catch (error) {
       toast.error('生成 URI 失败: ' + (error instanceof Error ? error.message : String(error)))
     }
-  }
+  }, [])
 
   // 处理IP解析
   const handleResolveIp = async (node: TempNode) => {
@@ -1000,6 +999,8 @@ function NodesPage() {
       toast.error(error.response?.data?.error || '删除失败')
     },
   })
+
+  const isDeletingNode = deleteMutation.isPending
 
   // 清空所有节点
   const clearAllMutation = useMutation({
@@ -1573,28 +1574,28 @@ function NodesPage() {
     }
   }
 
-  const handleDelete = (id: number) => {
+  const handleDelete = useCallback((id: number) => {
     deleteMutation.mutate(id)
-  }
+  }, [deleteMutation])
 
-  const handleDeleteTemp = (id: string) => {
+  const handleDeleteTemp = useCallback((id: string) => {
     setTempNodes(prev => prev.filter(node => node.id !== id))
     toast.success('已移除临时节点')
-  }
+  }, [])
 
-  const handleNameEditStart = (node) => {
+  const handleNameEditStart = useCallback((node) => {
     setEditingNode({ id: node.id, value: node.name })
-  }
+  }, [])
 
-  const handleNameEditChange = (value: string) => {
+  const handleNameEditChange = useCallback((value: string) => {
     setEditingNode(prev => (prev ? { ...prev, value } : prev))
-  }
+  }, [])
 
-  const handleNameEditCancel = () => {
+  const handleNameEditCancel = useCallback(() => {
     setEditingNode(null)
-  }
+  }, [])
 
-  const handleNameEditSubmit = (node) => {
+  const handleNameEditSubmit = useCallback((node) => {
     if (!editingNode) return
     const trimmed = editingNode.value.trim()
     if (!trimmed) {
@@ -1624,7 +1625,7 @@ function NodesPage() {
     )
     toast.success('已更新临时节点名称')
     setEditingNode(null)
-  }
+  }, [editingNode, updateNodeNameMutation])
 
   const handleClearAll = () => {
     clearAllMutation.mutate()
@@ -1817,21 +1818,23 @@ function NodesPage() {
     return nodes
   }, [displayNodes, selectedProtocol, tagFilter])
 
+  const deferredFilteredNodes = useDeferredValue(filteredNodes)
+
   // 获取要在 DragOverlay 中显示的节点
   const dragOverlayNodes = useMemo(() => {
     if (!activeId) return []
 
-    const activeNode = filteredNodes.find(n => n.id === activeId)
+    const activeNode = deferredFilteredNodes.find(n => n.id === activeId)
     if (!activeNode) return []
 
     // 如果是批量拖动，返回所有选中的节点
     if (activeNode.dbId && selectedNodeIds.has(activeNode.dbId) && selectedNodeIds.size > 1) {
-      return filteredNodes.filter(n => n.dbId && selectedNodeIds.has(n.dbId))
+      return deferredFilteredNodes.filter(n => n.dbId && selectedNodeIds.has(n.dbId))
     }
 
     // 单节点拖动
     return [activeNode]
-  }, [activeId, filteredNodes, selectedNodeIds])
+  }, [activeId, deferredFilteredNodes, selectedNodeIds])
 
   const protocolCounts = useMemo(() => {
     const counts: Record<string, number> = { all: displayNodes.length }
@@ -2029,7 +2032,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
               <CardHeader>
                 <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
                   <div>
-                    <CardTitle>节点列表 ({filteredNodes.length})</CardTitle>
+                    <CardTitle>节点列表 ({deferredFilteredNodes.length})</CardTitle>
                     <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
                     <p className='mt-2 text-xs text-primary flex flex-wrap items-center gap-1'>
                       <Pencil className='h-4 w-4 inline' /> 编辑节点名称，
@@ -2287,24 +2290,23 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   onDragCancel={handleDragCancel}
                 >
                   <SortableContext
-                    items={filteredNodes.map(n => n.id)}
+                    items={deferredFilteredNodes.map(n => n.id)}
                     strategy={verticalListSortingStrategy}
                   >
                     <div className='space-y-3'>
-                      {filteredNodes.length === 0 ? (
+                      {deferredFilteredNodes.length === 0 ? (
                         <Card>
                           <CardContent className='text-center text-muted-foreground py-8'>
                             没有找到匹配的节点
                           </CardContent>
                         </Card>
                       ) : (
-                        filteredNodes.map(node => (
+                        deferredFilteredNodes.map(node => (
                           <SortableCard
                             key={node.id}
                             id={node.id}
                             isSaved={node.isSaved}
-                            dbId={node.dbId}
-                            batchDraggingIds={batchDraggingIds}
+                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
                             isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
                             onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
                           >
@@ -2374,7 +2376,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     size='icon'
                                     className='size-7 text-emerald-600 shrink-0'
                                     onClick={() => handleNameEditSubmit(node)}
-                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                    disabled={node.isSaved ? isUpdatingNodeName : false}
                                   >
                                     <Check className='size-3.5' />
                                   </Button>
@@ -2399,7 +2401,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   size='icon'
                                   className='size-7 text-[#d97757] hover:text-[#c66647]'
                                   onClick={() => handleNameEditStart(node)}
-                                  disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                      disabled={node.isSaved ? isUpdatingNodeName : false}
                                 >
                                   <Pencil className='size-4' />
                                 </Button>
@@ -2538,7 +2540,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   variant='outline'
                                   size='sm'
                                   className='flex-1 text-destructive hover:text-destructive hover:bg-destructive/10'
-                                  disabled={node.isSaved && deleteMutation.isPending}
+                                  disabled={node.isSaved && isDeletingNode}
                                 >
                                   删除
                                 </Button>
@@ -2591,7 +2593,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   {isTablet && !isDesktop && (
                   <div className='rounded-md border'>
                     <SortableContext
-                      items={filteredNodes.map(n => n.id)}
+                    items={deferredFilteredNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
                     >
                     <Table className='w-full'>
@@ -2606,20 +2608,19 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredNodes.length === 0 ? (
+                      {deferredFilteredNodes.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className='text-center text-muted-foreground py-8'>
                             没有找到匹配的节点
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredNodes.map(node => (
+                        deferredFilteredNodes.map(node => (
                           <SortableTableRow
                             key={node.id}
                             id={node.id}
                             isSaved={node.isSaved}
-                            dbId={node.dbId}
-                            batchDraggingIds={batchDraggingIds}
+                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
                             isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
                             onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
                           >
@@ -2671,7 +2672,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       size='icon'
                                       className='size-7 text-emerald-600 shrink-0'
                                       onClick={() => handleNameEditSubmit(node)}
-                                      disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                      disabled={node.isSaved ? isUpdatingNodeName : false}
                                     >
                                       <Check className='size-3.5' />
                                     </Button>
@@ -2722,7 +2723,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     size='icon'
                                     className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                     onClick={() => handleNameEditStart(node)}
-                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                    disabled={node.isSaved ? isUpdatingNodeName : false}
                                   >
                                     <Pencil className='size-4' />
                                   </Button>
@@ -2814,7 +2815,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     variant='ghost'
                                     size='sm'
                                     className='h-7 text-xs'
-                                    disabled={node.isSaved && deleteMutation.isPending}
+                                    disabled={node.isSaved && isDeletingNode}
                                   >
                                     删除
                                   </Button>
@@ -2851,7 +2852,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                   {isDesktop && (
                   <div className='rounded-md border'>
                     <SortableContext
-                      items={filteredNodes.map(n => n.id)}
+                      items={deferredFilteredNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
                     >
                       <Table className='w-full'>
@@ -2867,23 +2868,22 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredNodes.length === 0 ? (
+                          {deferredFilteredNodes.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={7} className='text-center text-muted-foreground py-8'>
                                 没有找到匹配的节点
                               </TableCell>
                             </TableRow>
                           ) : (
-                            filteredNodes.map(node => (
-                              <SortableTableRow
-                                key={node.id}
-                                id={node.id}
-                                isSaved={node.isSaved}
-                                dbId={node.dbId}
-                                batchDraggingIds={batchDraggingIds}
-                                isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                                onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
-                              >
+                            deferredFilteredNodes.map(node => (
+                          <SortableTableRow
+                            key={node.id}
+                            id={node.id}
+                            isSaved={node.isSaved}
+                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
+                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
+                            onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
+                          >
                                 <TableCell className='w-9 px-2'>
                                   {node.isSaved && (
                                     <DragHandle id={node.id} />
@@ -2930,7 +2930,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     size='icon'
                                     className='size-7 text-emerald-600 shrink-0'
                                     onClick={() => handleNameEditSubmit(node)}
-                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                    disabled={node.isSaved ? isUpdatingNodeName : false}
                                   >
                                     <Check className='size-3.5' />
                                   </Button>
@@ -2954,7 +2954,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                     size='icon'
                                     className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
                                     onClick={() => handleNameEditStart(node)}
-                                    disabled={node.isSaved ? updateNodeNameMutation.isPending : false}
+                                    disabled={node.isSaved ? isUpdatingNodeName : false}
                                   >
                                     <Pencil className='size-4' />
                                   </Button>
@@ -3273,7 +3273,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   <Button
                                     variant='ghost'
                                     size='sm'
-                                    disabled={node.isSaved && deleteMutation.isPending}
+                                    disabled={node.isSaved && isDeletingNode}
                                   >
                                     删除
                                   </Button>
