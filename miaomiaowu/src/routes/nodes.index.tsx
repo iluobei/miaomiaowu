@@ -2486,6 +2486,11 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLSèŠ‚ç‚
                                     {node.parsed.network}
                                   </Badge>
                                 )}
+                                {node.parsed.network === 'xhttp' && node.parsed.mode && (
+                                  <Badge variant='outline' className='text-xs'>
+                                    {node.parsed.mode}
+                                  </Badge>
+                                )}
                               </div>
                             )}
                             <div className='flex items-center gap-2 flex-wrap text-xs'>
@@ -2694,6 +2699,11 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLSèŠ‚ç‚
                                           {node.parsed.network}
                                         </Badge>
                                       )}
+                                      {node.parsed.network === 'xhttp' && node.parsed.mode && (
+                                        <Badge variant='outline' className='text-xs shrink-0'>
+                                          {node.parsed.mode}
+                                        </Badge>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -2713,6 +2723,11 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLSèŠ‚ç‚
                                         {node.parsed.network && node.parsed.network !== 'tcp' && (
                                           <Badge variant='outline' className='text-xs shrink-0'>
                                             {node.parsed.network}
+                                          </Badge>
+                                        )}
+                                        {node.parsed.network === 'xhttp' && node.parsed.mode && (
+                                          <Badge variant='outline' className='text-xs shrink-0'>
+                                            {node.parsed.mode}
                                           </Badge>
                                         )}
                                       </div>
@@ -3018,10 +3033,15 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLSèŠ‚ç‚
                                     <div className='min-w-0 flex-1'>
                                       <div className='font-mono truncate' title={`${node.parsed.server}:${node.parsed.port}`}>{node.parsed.server}:{node.parsed.port}</div>
                                       {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                        <div className='text-xs mt-1'>
+                                        <div className='text-xs mt-1 flex items-center gap-1'>
                                           <Badge variant='outline' className='text-xs'>
                                             {node.parsed.network}
                                           </Badge>
+                                          {node.parsed.network === 'xhttp' && node.parsed.mode && (
+                                            <Badge variant='outline' className='text-xs'>
+                                              {node.parsed.mode}
+                                            </Badge>
+                                          )}
                                         </div>
                                       )}
                                     </div>
