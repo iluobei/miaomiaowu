@@ -302,8 +302,36 @@
     transition:
       transform 0.18s ease,
       box-shadow 0.18s ease,
-      background-color 0.18s ease,
-      border-color 0.18s ease;
+      background-color 0.18s ease;
+  }
+
+  /* 边框绘制动画 */
+  .pixel-button::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: rgba(217, 119, 87, 0.9);
+    z-index: -1;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0);
+    transition: clip-path 0.35s ease-out;
+    pointer-events: none;
+  }
+
+  .pixel-button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: inherit;
+    background-color: inherit;
+    z-index: -1;
+  }
+
+  /* Hover时顺时针绘制边框 */
+  .pixel-button:hover::before {
+    clip-path: polygon(
+      0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+      2px 2px, 2px calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 2px, 2px 2px
+    );
   }
 
   .pixel-button:hover {
@@ -318,6 +346,10 @@
 
   .dark .pixel-button {
     box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  .dark .pixel-button::before {
+    background: rgba(251, 191, 36, 0.95);
   }
 
   .dark .pixel-button:hover {
