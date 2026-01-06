@@ -1,5 +1,5 @@
 import React, { useState, useMemo, memo, useContext, createContext } from 'react'
-import { GripVertical, X, Plus, Check, Search, Settings2, Eye, EyeOff } from 'lucide-react'
+import { GripVertical, X, Plus, Check, Search, Settings2, Eye, EyeOff, Smile } from 'lucide-react'
 import { Twemoji } from '@/components/twemoji'
 import {
   DndContext,
@@ -25,6 +25,42 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
+
+// 预置的代理分流服务相关 emoji
+const PROXY_SERVICE_EMOJIS = [
+  // 搜索服务
+  { emoji: '🔍', label: '谷歌' },
+  { emoji: '🍏', label: '苹果' },
+  { emoji: 'Ⓜ️', label: '微软' },
+  // 社交媒体
+  { emoji: '📲', label: 'Telegram' },
+  { emoji: '🐦', label: 'Twitter/X' },
+  { emoji: '📘', label: 'Facebook' },
+  { emoji: '📷', label: 'Instagram' },
+  { emoji: '🎵', label: 'TikTok' },
+  // 流媒体
+  { emoji: '📺', label: 'Netflix' },
+  { emoji: '🏰', label: 'Disney+' },
+  { emoji: '📹', label: 'YouTube' },
+  { emoji: '🎬', label: 'Streaming' },
+  { emoji: '🎮', label: '游戏' },
+  // 开发工具
+  { emoji: '🐱', label: 'GitHub' },
+  { emoji: '☁️', label: '云服务' },
+  // AI 服务
+  { emoji: '💬', label: 'AI' },
+  { emoji: '🤖', label: 'ChatGPT' },
+  // 其他
+  { emoji: '🚀', label: '节点选择' },
+  { emoji: '♻️', label: '自动选择' },
+  { emoji: '🐟', label: '漏网之鱼' },
+  { emoji: '🛑', label: '广告拦截' },
+  { emoji: '🌐', label: '国际' },
+  { emoji: '🔒', label: '国内' },
+  { emoji: '🏠', label: '私有网络' },
+  { emoji: '💰', label: '金融' },
+  { emoji: '📚', label: '教育' },
+]
 
 interface ProxyGroup {
   name: string
@@ -853,13 +889,20 @@ export function EditNodesDialog({
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
+  const [selectedEmoji, setSelectedEmoji] = useState('')
+
+  // 组合最终代理组名称（emoji + 空格 + 名称）
+  const finalGroupName = useMemo(() => {
+    const trimmedName = newGroupName.trim()
+    if (!trimmedName) return ''
+    return selectedEmoji ? `${selectedEmoji} ${trimmedName}` : trimmedName
+  }, [selectedEmoji, newGroupName])
 
   // 检查新代理组名称是否与现有组冲突
   const isGroupNameDuplicate = useMemo(() => {
-    const trimmedName = newGroupName.trim()
-    if (!trimmedName) return false
-    return proxyGroups.some(group => group.name === trimmedName)
-  }, [newGroupName, proxyGroups])
+    if (!finalGroupName) return false
+    return proxyGroups.some(group => group.name === finalGroupName)
+  }, [finalGroupName, proxyGroups])
 
   // 代理组改名状态
   const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
@@ -1449,21 +1492,32 @@ export function EditNodesDialog({
 
   // 添加新代理组
   const handleAddGroup = () => {
-    if (!newGroupName.trim()) return
+    if (!finalGroupName) return
 
     const newGroup: ProxyGroup = {
-      name: newGroupName.trim(),
+      name: finalGroupName,
       type: 'select',
       proxies: []
     }
 
     onProxyGroupsChange([newGroup, ...proxyGroups])
     setNewGroupName('')
+    setSelectedEmoji('')
     setAddGroupDialogOpen(false)
   }
 
   const handleQuickSelect = (name: string) => {
-    setNewGroupName(name)
+    // 检测名称是否以 emoji 开头，自动分离 emoji 和名称
+    // 匹配开头的 emoji（包括组合 emoji）
+    const emojiRegex = /^([\p{Emoji}\p{Emoji_Component}\uFE0F]+)\s*/u
+    const match = name.match(emojiRegex)
+    if (match) {
+      setSelectedEmoji(match[1].trim())
+      setNewGroupName(name.slice(match[0].length).trim())
+    } else {
+      setSelectedEmoji('')
+      setNewGroupName(name)
+    }
   }
 
   // 代理组类型变更处理
@@ -1789,7 +1843,16 @@ export function EditNodesDialog({
       </Dialog>
 
       {/* 添加代理组对话框 */}
-      <Dialog open={addGroupDialogOpen} onOpenChange={setAddGroupDialogOpen}>
+      <Dialog
+        open={addGroupDialogOpen}
+        onOpenChange={(open) => {
+          setAddGroupDialogOpen(open)
+          if (!open) {
+            setSelectedEmoji('')
+            setNewGroupName('')
+          }
+        }}
+      >
         <DialogContent className='max-w-2xl'>
           <DialogHeader>
             <DialogTitle>添加代理组</DialogTitle>
@@ -1800,15 +1863,54 @@ export function EditNodesDialog({
 
           <div className='space-y-4'>
             <div>
-              <Input
-                placeholder='输入代理组名称...'
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isGroupNameDuplicate) handleAddGroup()
-                }}
-                className={isGroupNameDuplicate ? 'border-destructive' : ''}
-              />
+              <div className='flex items-center gap-2'>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant='outline' size='icon' className='shrink-0 h-10 w-10'>
+                      {selectedEmoji ? (
+                        <Twemoji className='text-base'>{selectedEmoji}</Twemoji>
+                      ) : (
+                        <Smile className='h-4 w-4 text-muted-foreground' />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className='w-72 p-2' align='start'>
+                    <div className='grid grid-cols-6 gap-1'>
+                      {PROXY_SERVICE_EMOJIS.map(({ emoji, label }) => (
+                        <Button
+                          key={emoji}
+                          variant={selectedEmoji === emoji ? 'secondary' : 'ghost'}
+                          size='sm'
+                          className='h-9 w-9 p-0'
+                          title={label}
+                          onClick={() => setSelectedEmoji(emoji)}
+                        >
+                          <Twemoji className='text-lg'>{emoji}</Twemoji>
+                        </Button>
+                      ))}
+                    </div>
+                    {selectedEmoji && (
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        className='w-full mt-2 text-muted-foreground'
+                        onClick={() => setSelectedEmoji('')}
+                      >
+                        清除选择
+                      </Button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+                <Input
+                  placeholder='输入代理组名称...'
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isGroupNameDuplicate && finalGroupName) handleAddGroup()
+                  }}
+                  className={`flex-1 ${isGroupNameDuplicate ? 'border-destructive' : ''}`}
+                />
+              </div>
               {isGroupNameDuplicate && (
                 <p className='text-sm text-destructive mt-1'>已存在同名代理组</p>
               )}
@@ -1828,7 +1930,7 @@ export function EditNodesDialog({
                       onClick={() => handleQuickSelect(value)}
                       disabled={isDuplicate}
                     >
-                      <span className='truncate'>{value}</span>
+                      <Twemoji className='truncate'>{value}</Twemoji>
                     </Button>
                   )
                 })}
@@ -1840,7 +1942,7 @@ export function EditNodesDialog({
             <Button variant='outline' onClick={() => setAddGroupDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleAddGroup} disabled={!newGroupName.trim() || isGroupNameDuplicate}>
+            <Button onClick={handleAddGroup} disabled={!finalGroupName || isGroupNameDuplicate}>
               保存
             </Button>
           </DialogFooter>
