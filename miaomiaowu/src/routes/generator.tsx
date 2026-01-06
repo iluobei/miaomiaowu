@@ -306,6 +306,7 @@ function SubscriptionGeneratorPage() {
       return response.data as {
         use_new_template_system: boolean
         enable_proxy_provider: boolean
+        node_order?: number[]
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -369,6 +370,22 @@ function SubscriptionGeneratorPage() {
 
   const savedNodes = nodesData?.nodes ?? []
   const enabledNodes = savedNodes.filter(n => n.enabled)
+
+  // 按节点管理的排序顺序排列
+  const sortedEnabledNodes = useMemo(() => {
+    if (!userConfig?.node_order || userConfig.node_order.length === 0) {
+      return enabledNodes
+    }
+
+    const orderMap = new Map<number, number>()
+    userConfig.node_order.forEach((id, index) => orderMap.set(id, index))
+
+    return [...enabledNodes].sort((a, b) => {
+      const aOrder = orderMap.get(a.id) ?? Infinity
+      const bOrder = orderMap.get(b.id) ?? Infinity
+      return aOrder - bOrder
+    })
+  }, [enabledNodes, userConfig?.node_order])
 
   // 合并后台模板和预设模板（后台模板放在最前面）
   const allTemplates = useMemo(() => {
@@ -751,19 +768,19 @@ function SubscriptionGeneratorPage() {
   }
 
   // 获取所有协议类型
-  const protocols = Array.from(new Set(enabledNodes.map(n => n.protocol.toLowerCase()))).sort()
+  const protocols = Array.from(new Set(sortedEnabledNodes.map(n => n.protocol.toLowerCase()))).sort()
 
   // 获取所有标签类型
-  const tags = Array.from(new Set(enabledNodes.map(n => n.tag))).sort()
+  const tags = Array.from(new Set(sortedEnabledNodes.map(n => n.tag))).sort()
 
   // 节点列表根据选中的协议和标签筛选
   const filteredNodes = useMemo(() => {
     if (selectedProtocols.size === 0 && selectedTags.size === 0) {
       // 没有筛选条件，显示全部
-      return enabledNodes
+      return sortedEnabledNodes
     }
 
-    return enabledNodes.filter(node => {
+    return sortedEnabledNodes.filter(node => {
       // 协议筛选
       if (selectedProtocols.size > 0) {
         return selectedProtocols.has(node.protocol.toLowerCase())
@@ -774,7 +791,7 @@ function SubscriptionGeneratorPage() {
       }
       return true
     })
-  }, [enabledNodes, selectedProtocols, selectedTags])
+  }, [sortedEnabledNodes, selectedProtocols, selectedTags])
 
   const handleToggleNode = (nodeId: number) => {
     const newSet = new Set(selectedNodeIds)
@@ -1485,7 +1502,7 @@ function SubscriptionGeneratorPage() {
     const hasRelayNode = proxyGroups.some(g => g.name === '🌠 中转节点')
 
     // 从链式代理节点中提取落地节点和中转节点
-    const chainProxyNodes = enabledNodes.filter(node => node.node_name.includes('⇋'))
+    const chainProxyNodes = sortedEnabledNodes.filter(node => node.node_name.includes('⇋'))
 
     const landingNodeNames = new Set<string>()
     const relayNodeNames = new Set<string>()
@@ -2014,7 +2031,7 @@ function SubscriptionGeneratorPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              {enabledNodes.length === 0 ? (
+              {sortedEnabledNodes.length === 0 ? (
                 <div className='text-center py-8 text-muted-foreground'>
                   暂无可用节点，请先在节点管理中添加节点
                 </div>
@@ -2027,7 +2044,7 @@ function SubscriptionGeneratorPage() {
                       size='sm'
                       onClick={() => {
                         // 计算所有节点
-                        const allNodeIds = new Set(enabledNodes.map(n => n.id))
+                        const allNodeIds = new Set(sortedEnabledNodes.map(n => n.id))
                         const currentIds = Array.from(selectedNodeIds).sort()
                         const targetIds = Array.from(allNodeIds).sort()
 
@@ -2043,10 +2060,10 @@ function SubscriptionGeneratorPage() {
                         }
                       }}
                     >
-                      全部 ({enabledNodes.length})
+                      全部 ({sortedEnabledNodes.length})
                     </Button>
                     {protocols.map((protocol) => {
-                      const count = enabledNodes.filter(n => n.protocol.toLowerCase() === protocol).length
+                      const count = sortedEnabledNodes.filter(n => n.protocol.toLowerCase() === protocol).length
                       const isProtocolSelected = selectedProtocols.has(protocol)
                       return (
                         <Button
@@ -2055,7 +2072,7 @@ function SubscriptionGeneratorPage() {
                           size='sm'
                           onClick={() => {
                             // 获取该协议的所有节点（协议和标签互斥，不考虑标签）
-                            const protocolNodeIds = enabledNodes
+                            const protocolNodeIds = sortedEnabledNodes
                               .filter(n => n.protocol.toLowerCase() === protocol)
                               .map(n => n.id)
 
@@ -2095,7 +2112,7 @@ function SubscriptionGeneratorPage() {
                         size='sm'
                         onClick={() => {
                           // 计算所有节点
-                          const allNodeIds = new Set(enabledNodes.map(n => n.id))
+                          const allNodeIds = new Set(sortedEnabledNodes.map(n => n.id))
                           const currentIds = Array.from(selectedNodeIds).sort()
                           const targetIds = Array.from(allNodeIds).sort()
 
@@ -2111,10 +2128,10 @@ function SubscriptionGeneratorPage() {
                           }
                         }}
                       >
-                        全部标签 ({enabledNodes.length})
+                        全部标签 ({sortedEnabledNodes.length})
                       </Button>
                       {tags.map((tag) => {
-                        const count = enabledNodes.filter(n => n.tag === tag).length
+                        const count = sortedEnabledNodes.filter(n => n.tag === tag).length
                         const isTagSelected = selectedTags.has(tag)
                         return (
                           <Button
@@ -2123,7 +2140,7 @@ function SubscriptionGeneratorPage() {
                             size='sm'
                             onClick={() => {
                               // 获取该标签的所有节点（协议和标签互斥，不考虑协议）
-                              const tagNodeIds = enabledNodes
+                              const tagNodeIds = sortedEnabledNodes
                                 .filter(n => n.tag === tag)
                                 .map(n => n.id)
 
