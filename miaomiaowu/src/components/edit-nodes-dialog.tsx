@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react'
+import React, { useState, useMemo, memo, useContext, createContext } from 'react'
 import { GripVertical, X, Plus, Check, Search, Settings2, Eye, EyeOff } from 'lucide-react'
 import { Twemoji } from '@/components/twemoji'
 import {
@@ -62,6 +62,409 @@ interface ActiveDragItem {
 // 特殊节点列表
 const SPECIAL_NODES = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
 
+// 拖拽状态 Context - 避免 isActiveDragging 导致全量重渲染
+const DragStateContext = createContext<{ isActiveDragging: boolean }>({ isActiveDragging: false })
+
+// 代理组类型选择器 - 提取到外部
+interface ProxyTypeSelectorProps {
+  group: ProxyGroup
+  onChange: (updatedGroup: ProxyGroup) => void
+}
+
+const ProxyTypeSelector = memo(function ProxyTypeSelector({ group, onChange }: ProxyTypeSelectorProps) {
+  const types = [
+    { value: 'select', label: '手动选择', hasUrl: false, hasStrategy: false },
+    { value: 'url-test', label: '自动选择', hasUrl: true, hasStrategy: false },
+    { value: 'fallback', label: '自动回退', hasUrl: true, hasStrategy: false },
+    { value: 'load-balance', label: '负载均衡', hasUrl: true, hasStrategy: true },
+  ]
+
+  const handleTypeSelect = (type: string) => {
+    const typeConfig = types.find(t => t.value === type)
+    const updatedGroup: ProxyGroup = {
+      ...group,
+      type,
+    }
+
+    if (typeConfig?.hasUrl) {
+      updatedGroup.url = group.url || 'https://www.gstatic.com/generate_204'
+      updatedGroup.interval = group.interval || 300
+    } else {
+      delete updatedGroup.url
+      delete updatedGroup.interval
+    }
+
+    if (typeConfig?.hasStrategy) {
+      updatedGroup.strategy = group.strategy || 'round-robin'
+    } else {
+      delete updatedGroup.strategy
+    }
+
+    onChange(updatedGroup)
+  }
+
+  return (
+    <div className='space-y-1'>
+      {types.map(({ value, label }) => (
+        <Button
+          key={value}
+          variant={group.type === value ? 'default' : 'ghost'}
+          size='sm'
+          className='w-full justify-start'
+          onClick={() => handleTypeSelect(value)}
+        >
+          {label}
+        </Button>
+      ))}
+
+      {group.type === 'load-balance' && (
+        <div className='pt-2 border-t'>
+          <p className='text-xs text-muted-foreground mb-1'>策略</p>
+          <Select
+            value={group.strategy || 'round-robin'}
+            onValueChange={(value) => onChange({ ...group, strategy: value as ProxyGroup['strategy'] })}
+          >
+            <SelectTrigger className='h-8 text-xs'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='round-robin'>轮询</SelectItem>
+              <SelectItem value='consistent-hashing'>一致性哈希</SelectItem>
+              <SelectItem value='sticky-sessions'>粘性会话</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  )
+})
+
+// 快捷拖放区（添加到所有代理组）- 提取到外部
+const DroppableAllGroupsZone = memo(function DroppableAllGroupsZone() {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'all-groups-zone',
+    data: { type: 'all-groups-zone' }
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
+        isOver
+          ? 'border-primary bg-primary/10 border-solid'
+          : 'border-dashed border-muted-foreground/30 bg-muted/20'
+      }`}
+    >
+      <span className={isOver ? 'text-primary font-medium' : 'text-muted-foreground'}>
+        添加到所有代理组
+      </span>
+    </div>
+  )
+})
+
+// 快捷拖放区（从所有代理组移除）- 提取到外部
+const DroppableRemoveFromAllZone = memo(function DroppableRemoveFromAllZone() {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'remove-from-all-zone',
+    data: { type: 'remove-from-all-zone' }
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
+        isOver
+          ? 'border-destructive bg-destructive/10 border-solid'
+          : 'border-dashed border-muted-foreground/30 bg-muted/20'
+      }`}
+    >
+      <span className={isOver ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+        从所有代理组移除
+      </span>
+    </div>
+  )
+})
+
+// 可用节点区域（接收从代理组拖回的节点）- 提取到外部
+interface DroppableAvailableZoneProps {
+  children: React.ReactNode
+}
+
+const DroppableAvailableZone = memo(function DroppableAvailableZone({ children }: DroppableAvailableZoneProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'available-zone',
+    data: { type: 'available-zone' }
+  })
+
+  return (
+    <Card
+      ref={setNodeRef}
+      className={`flex flex-col flex-1 transition-all duration-75 ${
+        isOver ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : ''
+      }`}
+    >
+      {children}
+    </Card>
+  )
+})
+
+// 可拖动的代理组标题 - 提取到外部
+interface DraggableGroupTitleProps {
+  groupName: string
+  isEditing: boolean
+  editingValue: string
+  onEditingValueChange: (value: string) => void
+  onSubmitEdit: () => void
+  onCancelEdit: () => void
+  onStartEdit: (groupName: string) => void
+}
+
+const DraggableGroupTitle = memo(function DraggableGroupTitle({
+  groupName,
+  isEditing,
+  editingValue,
+  onEditingValueChange,
+  onSubmitEdit,
+  onCancelEdit,
+  onStartEdit
+}: DraggableGroupTitleProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `group-title-${groupName}`,
+    data: {
+      type: 'group-title',
+      groupName
+    } as DragItemData
+  })
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className='flex items-center gap-2 group/title'>
+      <div {...attributes} {...listeners} className='cursor-move' style={{ touchAction: 'none' }}>
+        <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
+      </div>
+      {isEditing ? (
+        <div className='flex items-center gap-1 flex-1 min-w-0'>
+          <Input
+            value={editingValue}
+            onChange={(e) => onEditingValueChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSubmitEdit()
+              else if (e.key === 'Escape') onCancelEdit()
+            }}
+            className='h-6 text-base flex-1 min-w-0'
+            placeholder='输入新名称...'
+            autoFocus
+          />
+          <Button size='sm' className='h-6 w-6 p-0' onClick={onSubmitEdit} variant='ghost'>
+            <Check className='h-3 w-3 text-green-600' />
+          </Button>
+        </div>
+      ) : (
+        <CardTitle
+          className='text-base truncate cursor-text hover:text-foreground/80 flex-1 min-w-0'
+          onClick={() => onStartEdit(groupName)}
+          title='点击编辑名称'
+        >
+          <Twemoji>{groupName}</Twemoji>
+        </CardTitle>
+      )}
+    </div>
+  )
+})
+
+// 可排序的代理组卡片 - 提取到外部
+interface SortableCardProps {
+  group: ProxyGroup
+  isEditing: boolean
+  editingValue: string
+  onEditingValueChange: (value: string) => void
+  onSubmitEdit: () => void
+  onCancelEdit: () => void
+  onStartEdit: (groupName: string) => void
+  onGroupTypeChange: (groupName: string, updatedGroup: ProxyGroup) => void
+  onRemoveGroup: (groupName: string) => void
+  onRemoveNodeFromGroup: (groupName: string, nodeIndex: number) => void
+  onRemoveUseItem: (groupName: string, index: number) => void
+  mmwProviderNames: Set<string>
+}
+
+const SortableCard = memo(function SortableCard({
+  group,
+  isEditing,
+  editingValue,
+  onEditingValueChange,
+  onSubmitEdit,
+  onCancelEdit,
+  onStartEdit,
+  onGroupTypeChange,
+  onRemoveGroup,
+  onRemoveNodeFromGroup,
+  onRemoveUseItem,
+  mmwProviderNames
+}: SortableCardProps) {
+  // 从 context 获取拖拽状态
+  const { isActiveDragging } = useContext(DragStateContext)
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: group.name,
+    data: {
+      type: 'group-card',
+      groupName: group.name,
+    } as DragItemData,
+    disabled: isEditing,
+  })
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop-${group.name}`,
+    data: {
+      type: 'proxy-group',
+      groupName: group.name,
+    },
+  })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? 'none' : transition,
+    opacity: isDragging ? 0.5 : 1,
+    // 拖拽时禁用非拖拽卡片的指针事件，避免 hover 效果触发
+    pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto',
+  }
+
+  return (
+    <Card
+      ref={(node) => {
+        setNodeRef(node)
+        setDropRef(node)
+      }}
+      style={style}
+      className={`flex flex-col transition-all ${
+        isOver ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : ''
+      }`}
+    >
+      <CardHeader className='pb-3'>
+        {/* 顶部居中拖动按钮 */}
+        <div
+          className={`flex justify-center -mt-2 mb-2 ${
+            isEditing ? 'cursor-not-allowed opacity-50' : 'cursor-move'
+          }`}
+          style={isEditing ? {} : { touchAction: 'none' }}
+          {...(isEditing ? {} : attributes)}
+          {...(isEditing ? {} : listeners)}
+        >
+          <div className={`group/drag-handle rounded-md px-3 py-1 transition-colors ${
+            isEditing ? 'opacity-50' : ''
+          } ${!isActiveDragging ? 'hover:bg-accent' : ''}`}>
+            <GripVertical className={`h-4 w-4 text-muted-foreground transition-colors ${!isActiveDragging ? 'group-hover/drag-handle:text-foreground' : ''}`} />
+          </div>
+        </div>
+
+        <div className='flex items-start justify-between gap-2'>
+          <div className='flex-1 min-w-0'>
+            <DraggableGroupTitle
+              groupName={group.name}
+              isEditing={isEditing}
+              editingValue={editingValue}
+              onEditingValueChange={onEditingValueChange}
+              onSubmitEdit={onSubmitEdit}
+              onCancelEdit={onCancelEdit}
+              onStartEdit={onStartEdit}
+            />
+            <CardDescription className='text-xs'>
+              {group.type} ({(group.proxies || []).length} 个节点{(group.use || []).length > 0 ? `, ${(group.use || []).length} 个集合` : ''})
+            </CardDescription>
+          </div>
+          {!isEditing && (
+            <div className='flex items-center gap-1'>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='h-8 w-8 p-0 flex-shrink-0'
+                    title='切换代理组类型'
+                  >
+                    <Settings2 className='h-4 w-4 text-muted-foreground hover:text-foreground' />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-48 p-2' align='end'>
+                  <ProxyTypeSelector
+                    group={group}
+                    onChange={(updatedGroup) => onGroupTypeChange(group.name, updatedGroup)}
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='h-8 w-8 p-0 flex-shrink-0'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemoveGroup(group.name)
+                }}
+              >
+                <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className='flex-1 space-y-1 min-h-[200px]' data-card-content>
+        {/* 合并 proxies 和 use 到同一个 SortableContext，解决单个 use-item 无法拖动的问题 */}
+        <SortableContext
+          items={[
+            ...(group.proxies || []).filter(p => p).map(p => `${group.name}-${p}`),
+            ...(group.use || []).map(providerName => `use-${group.name}-${providerName}`)
+          ]}
+          strategy={rectSortingStrategy}
+        >
+          {/* 普通节点 */}
+          {(group.proxies || []).map((proxy, idx) => (
+            proxy && (
+              <SortableProxy
+                key={`${group.name}-${proxy}-${idx}`}
+                proxy={proxy}
+                groupName={group.name}
+                index={idx}
+                isMmwProvider={mmwProviderNames.has(proxy)}
+                onRemove={onRemoveNodeFromGroup}
+              />
+            )
+          ))}
+
+          {/* 代理集合（use）显示 */}
+          {(group.use || []).map((providerName, idx) => (
+            <SortableUseItem
+              key={`use-${group.name}-${providerName}`}
+              providerName={providerName}
+              groupName={group.name}
+              index={idx}
+              onRemove={() => onRemoveUseItem(group.name, idx)}
+            />
+          ))}
+        </SortableContext>
+
+        {(group.proxies || []).filter(p => p).length === 0 && (group.use || []).length === 0 && (
+          <div className={`text-sm text-center py-8 transition-colors ${
+            isOver ? 'text-primary font-medium' : 'text-muted-foreground'
+          }`}>
+            将节点拖拽到这里
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+})
+
 // 可拖动的可用节点（提取到外部并 memoize）
 interface DraggableAvailableNodeProps {
   proxy: string
@@ -69,6 +472,8 @@ interface DraggableAvailableNodeProps {
 }
 
 const DraggableAvailableNode = memo(function DraggableAvailableNode({ proxy, index }: DraggableAvailableNodeProps) {
+  // 从 context 获取拖拽状态
+  const { isActiveDragging } = useContext(DragStateContext)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `available-node-${proxy}-${index}`,
     data: {
@@ -82,6 +487,8 @@ const DraggableAvailableNode = memo(function DraggableAvailableNode({ proxy, ind
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging ? 0.5 : 1,
     touchAction: 'none',
+    // 拖拽时禁用非拖拽元素的指针事件，避免 hover 效果触发
+    pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto',
   }
 
   return (
@@ -178,7 +585,6 @@ interface SortableProxyProps {
   groupName: string
   index: number
   isMmwProvider: boolean
-  isActiveDragging: boolean  // 是否有拖拽正在进行
   onRemove: (groupName: string, index: number) => void
 }
 
@@ -187,9 +593,10 @@ const SortableProxy = memo(function SortableProxy({
   groupName,
   index,
   isMmwProvider,
-  isActiveDragging,
   onRemove
 }: SortableProxyProps) {
+  // 从 context 获取拖拽状态
+  const { isActiveDragging } = useContext(DragStateContext)
   const {
     attributes,
     listeners,
@@ -221,12 +628,14 @@ const SortableProxy = memo(function SortableProxy({
     transition: transition || 'transform 150ms ease-out',
     opacity: isDragging ? 0.5 : 1,
     touchAction: 'none',
+    // 拖拽时禁用非拖拽元素的指针事件，避免 hover 效果触发
+    pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto',
   }
 
   // MMW 代理集合使用紫色样式
   if (isMmwProvider) {
     return (
-      <div className='relative'>
+      <div className='relative' style={{ pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto' }}>
         {showDropIndicator && (
           <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
         )}
@@ -261,7 +670,7 @@ const SortableProxy = memo(function SortableProxy({
   }
 
   return (
-    <div className='relative'>
+    <div className='relative' style={{ pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto' }}>
       {/* 顶部插入指示器 */}
       {showDropIndicator && (
         <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
@@ -301,7 +710,6 @@ interface SortableUseItemProps {
   providerName: string
   groupName: string
   index: number
-  isActiveDragging: boolean
   onRemove: () => void
 }
 
@@ -309,9 +717,10 @@ const SortableUseItem = memo(function SortableUseItem({
   providerName,
   groupName,
   index,
-  isActiveDragging,
   onRemove
 }: SortableUseItemProps) {
+  // 从 context 获取拖拽状态
+  const { isActiveDragging } = useContext(DragStateContext)
   const {
     attributes,
     listeners,
@@ -342,10 +751,12 @@ const SortableUseItem = memo(function SortableUseItem({
     transition: transition || 'transform 150ms ease-out',
     opacity: isDragging ? 0.5 : 1,
     touchAction: 'none',
+    // 拖拽时禁用非拖拽元素的指针事件，避免 hover 效果触发
+    pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto',
   }
 
   return (
-    <div className='relative'>
+    <div className='relative' style={{ pointerEvents: isActiveDragging && !isDragging ? 'none' : 'auto' }}>
       {/* 顶部插入指示器 */}
       {showDropIndicator && (
         <div className='absolute -top-0.5 left-0 right-0 h-1 bg-blue-500 rounded-full z-10' />
@@ -1055,380 +1466,30 @@ export function EditNodesDialog({
     setNewGroupName(name)
   }
 
-  // ================== 组件定义 ==================
-
-  // 代理组类型选择器
-  interface ProxyTypeSelectorProps {
-    group: ProxyGroup
-    onChange: (updatedGroup: ProxyGroup) => void
-  }
-
-  const ProxyTypeSelector = ({ group, onChange }: ProxyTypeSelectorProps) => {
-    const types = [
-      { value: 'select', label: '手动选择', hasUrl: false, hasStrategy: false },
-      { value: 'url-test', label: '自动选择', hasUrl: true, hasStrategy: false },
-      { value: 'fallback', label: '自动回退', hasUrl: true, hasStrategy: false },
-      { value: 'load-balance', label: '负载均衡', hasUrl: true, hasStrategy: true },
-    ]
-
-    const handleTypeSelect = (type: string) => {
-      const typeConfig = types.find(t => t.value === type)
-      const updatedGroup: ProxyGroup = {
-        ...group,
-        type,
-      }
-
-      if (typeConfig?.hasUrl) {
-        updatedGroup.url = group.url || 'https://www.gstatic.com/generate_204'
-        updatedGroup.interval = group.interval || 300
-      } else {
-        delete updatedGroup.url
-        delete updatedGroup.interval
-      }
-
-      if (typeConfig?.hasStrategy) {
-        updatedGroup.strategy = group.strategy || 'round-robin'
-      } else {
-        delete updatedGroup.strategy
-      }
-
-      onChange(updatedGroup)
-    }
-
-    return (
-      <div className='space-y-1'>
-        {types.map(({ value, label }) => (
-          <Button
-            key={value}
-            variant={group.type === value ? 'default' : 'ghost'}
-            size='sm'
-            className='w-full justify-start'
-            onClick={() => handleTypeSelect(value)}
-          >
-            {label}
-          </Button>
-        ))}
-
-        {group.type === 'load-balance' && (
-          <div className='pt-2 border-t'>
-            <p className='text-xs text-muted-foreground mb-1'>策略</p>
-            <Select
-              value={group.strategy || 'round-robin'}
-              onValueChange={(value) => onChange({ ...group, strategy: value as ProxyGroup['strategy'] })}
-            >
-              <SelectTrigger className='h-8 text-xs'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='round-robin'>轮询</SelectItem>
-                <SelectItem value='consistent-hashing'>一致性哈希</SelectItem>
-                <SelectItem value='sticky-sessions'>粘性会话</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   // 代理组类型变更处理
-  const handleGroupTypeChange = (groupName: string, updatedGroup: ProxyGroup) => {
+  const handleGroupTypeChange = React.useCallback((groupName: string, updatedGroup: ProxyGroup) => {
     const updatedGroups = proxyGroups.map(g =>
       g.name === groupName ? updatedGroup : g
     )
     onProxyGroupsChange(updatedGroups)
-  }
+  }, [proxyGroups, onProxyGroupsChange])
 
-  // 快捷拖放区（添加到所有代理组）
-  const DroppableAllGroupsZone = () => {
-    const { setNodeRef, isOver } = useDroppable({
-      id: 'all-groups-zone',
-      data: { type: 'all-groups-zone' }
+  // 移除 use-item 的回调
+  const handleRemoveUseItem = React.useCallback((groupName: string, index: number) => {
+    const updatedGroups = proxyGroups.map(g => {
+      if (g.name === groupName) {
+        const newUse = (g.use || []).filter((_, i) => i !== index)
+        return { ...g, use: newUse.length > 0 ? newUse : undefined }
+      }
+      return g
     })
+    onProxyGroupsChange(updatedGroups)
+  }, [proxyGroups, onProxyGroupsChange])
 
-    return (
-      <div
-        ref={setNodeRef}
-        className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
-          isOver
-            ? 'border-primary bg-primary/10 border-solid'
-            : 'border-dashed border-muted-foreground/30 bg-muted/20'
-        }`}
-      >
-        <span className={isOver ? 'text-primary font-medium' : 'text-muted-foreground'}>
-          添加到所有代理组
-        </span>
-      </div>
-    )
-  }
-
-  // 快捷拖放区（从所有代理组移除）
-  const DroppableRemoveFromAllZone = () => {
-    const { setNodeRef, isOver } = useDroppable({
-      id: 'remove-from-all-zone',
-      data: { type: 'remove-from-all-zone' }
-    })
-
-    return (
-      <div
-        ref={setNodeRef}
-        className={`w-40 h-20 border-2 rounded-lg flex items-center justify-center text-sm transition-all ${
-          isOver
-            ? 'border-destructive bg-destructive/10 border-solid'
-            : 'border-dashed border-muted-foreground/30 bg-muted/20'
-        }`}
-      >
-        <span className={isOver ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-          从所有代理组移除
-        </span>
-      </div>
-    )
-  }
-
-  // 可用节点区域（接收从代理组拖回的节点）
-  interface DroppableAvailableZoneProps {
-    children: React.ReactNode
-  }
-
-  const DroppableAvailableZone = ({ children }: DroppableAvailableZoneProps) => {
-    const { setNodeRef, isOver } = useDroppable({
-      id: 'available-zone',
-      data: { type: 'available-zone' }
-    })
-
-    return (
-      <Card
-        ref={setNodeRef}
-        className={`flex flex-col flex-1 transition-all duration-75 ${
-          isOver ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : ''
-        }`}
-      >
-        {children}
-      </Card>
-    )
-  }
-
-  // 可拖动的代理组标题
-  interface DraggableGroupTitleProps {
-    groupName: string
-  }
-
-  const DraggableGroupTitle = ({ groupName }: DraggableGroupTitleProps) => {
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-      id: `group-title-${groupName}`,
-      data: {
-        type: 'group-title',
-        groupName
-      } as DragItemData
-    })
-
-    const style: React.CSSProperties = {
-      transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-      opacity: isDragging ? 0.5 : 1,
-    }
-
-    const isEditing = editingGroupName === groupName
-
-    return (
-      <div ref={setNodeRef} style={style} className='flex items-center gap-2 group/title'>
-        <div {...attributes} {...listeners} className='cursor-move' style={{ touchAction: 'none' }}>
-          <GripVertical className='h-3 w-3 text-muted-foreground flex-shrink-0' />
-        </div>
-        {isEditing ? (
-          <div className='flex items-center gap-1 flex-1 min-w-0'>
-            <Input
-              value={editingGroupValue}
-              onChange={(e) => setEditingGroupValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitEditingGroup()
-                else if (e.key === 'Escape') cancelEditingGroup()
-              }}
-              className='h-6 text-base flex-1 min-w-0'
-              placeholder='输入新名称...'
-              autoFocus
-            />
-            <Button size='sm' className='h-6 w-6 p-0' onClick={submitEditingGroup} variant='ghost'>
-              <Check className='h-3 w-3 text-green-600' />
-            </Button>
-          </div>
-        ) : (
-          <CardTitle
-            className='text-base truncate cursor-text hover:text-foreground/80 flex-1 min-w-0'
-            onClick={() => startEditingGroup(groupName)}
-            title='点击编辑名称'
-          >
-            <Twemoji>{groupName}</Twemoji>
-          </CardTitle>
-        )}
-      </div>
-    )
-  }
-
-  // 可排序的代理组卡片
-  interface SortableCardProps {
-    group: ProxyGroup
-  }
-
-  const SortableCard = ({ group }: SortableCardProps) => {
-    const isEditing = editingGroupName === group.name
-
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({
-      id: group.name,
-      data: {
-        type: 'group-card',
-        groupName: group.name,
-      } as DragItemData,
-      disabled: isEditing,
-    })
-
-    const { setNodeRef: setDropRef, isOver } = useDroppable({
-      id: `drop-${group.name}`,
-      data: {
-        type: 'proxy-group',
-        groupName: group.name,
-      },
-    })
-
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition: isDragging ? 'none' : transition,
-      opacity: isDragging ? 0.5 : 1,
-    }
-
-    return (
-      <Card
-        ref={(node) => {
-          setNodeRef(node)
-          setDropRef(node)
-        }}
-        style={style}
-        className={`flex flex-col transition-all ${
-          isOver ? 'ring-2 ring-primary shadow-lg scale-[1.02]' : ''
-        }`}
-      >
-        <CardHeader className='pb-3'>
-          {/* 顶部居中拖动按钮 */}
-          <div
-            className={`flex justify-center -mt-2 mb-2 ${
-              isEditing ? 'cursor-not-allowed opacity-50' : 'cursor-move'
-            }`}
-            style={isEditing ? {} : { touchAction: 'none' }}
-            {...(isEditing ? {} : attributes)}
-            {...(isEditing ? {} : listeners)}
-          >
-            <div className={`group/drag-handle hover:bg-accent rounded-md px-3 py-1 transition-colors ${
-              isEditing ? 'opacity-50' : ''
-            }`}>
-              <GripVertical className='h-4 w-4 text-muted-foreground group-hover/drag-handle:text-foreground transition-colors' />
-            </div>
-          </div>
-
-          <div className='flex items-start justify-between gap-2'>
-            <div className='flex-1 min-w-0'>
-              <DraggableGroupTitle groupName={group.name} />
-              <CardDescription className='text-xs'>
-                {group.type} ({(group.proxies || []).length} 个节点{(group.use || []).length > 0 ? `, ${(group.use || []).length} 个集合` : ''})
-              </CardDescription>
-            </div>
-            {!isEditing && (
-              <div className='flex items-center gap-1'>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      className='h-8 w-8 p-0 flex-shrink-0'
-                      title='切换代理组类型'
-                    >
-                      <Settings2 className='h-4 w-4 text-muted-foreground hover:text-foreground' />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-48 p-2' align='end'>
-                    <ProxyTypeSelector
-                      group={group}
-                      onChange={(updatedGroup) => handleGroupTypeChange(group.name, updatedGroup)}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='h-8 w-8 p-0 flex-shrink-0'
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    wrappedRemoveGroup(group.name)
-                  }}
-                >
-                  <X className='h-4 w-4 text-muted-foreground hover:text-destructive' />
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className='flex-1 space-y-1 min-h-[200px]' data-card-content>
-          {/* 合并 proxies 和 use 到同一个 SortableContext，解决单个 use-item 无法拖动的问题 */}
-          <SortableContext
-            items={[
-              ...(group.proxies || []).filter(p => p).map(p => `${group.name}-${p}`),
-              ...(group.use || []).map(providerName => `use-${group.name}-${providerName}`)
-            ]}
-            strategy={rectSortingStrategy}
-          >
-            {/* 普通节点 */}
-            {(group.proxies || []).map((proxy, idx) => (
-              proxy && (
-                <SortableProxy
-                  key={`${group.name}-${proxy}-${idx}`}
-                  proxy={proxy}
-                  groupName={group.name}
-                  index={idx}
-                  isMmwProvider={mmwProviderNames.has(proxy)}
-                  isActiveDragging={!!activeDragItem}
-                  onRemove={wrappedRemoveNodeFromGroup}
-                />
-              )
-            ))}
-
-            {/* 代理集合（use）显示 */}
-            {(group.use || []).map((providerName, idx) => (
-              <SortableUseItem
-                key={`use-${group.name}-${providerName}`}
-                providerName={providerName}
-                groupName={group.name}
-                index={idx}
-                isActiveDragging={!!activeDragItem}
-                onRemove={() => {
-                  const updatedGroups = proxyGroups.map(g => {
-                    if (g.name === group.name) {
-                      const newUse = (g.use || []).filter((_, i) => i !== idx)
-                      return { ...g, use: newUse.length > 0 ? newUse : undefined }
-                    }
-                    return g
-                  })
-                  onProxyGroupsChange(updatedGroups)
-                }}
-              />
-            ))}
-          </SortableContext>
-
-          {(group.proxies || []).filter(p => p).length === 0 && (group.use || []).length === 0 && (
-            <div className={`text-sm text-center py-8 transition-colors ${
-              isOver ? 'text-primary font-medium' : 'text-muted-foreground'
-            }`}>
-              将节点拖拽到这里
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
+  // Context 值 - 使用 useMemo 避免不必要的重渲染
+  const dragStateValue = useMemo(() => ({
+    isActiveDragging: !!activeDragItem
+  }), [activeDragItem])
 
   // ================== 渲染 ==================
 
@@ -1442,6 +1503,7 @@ export function EditNodesDialog({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
+            <DragStateContext.Provider value={dragStateValue}>
             <DialogHeader>
               <div className='flex items-start justify-between gap-4'>
                 <div className='flex-1'>
@@ -1469,7 +1531,21 @@ export function EditNodesDialog({
                 >
                   <div className='grid gap-4 pt-1' style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
                     {proxyGroups.map((group) => (
-                      <SortableCard key={group.name} group={group} />
+                      <SortableCard
+                        key={group.name}
+                        group={group}
+                        isEditing={editingGroupName === group.name}
+                        editingValue={editingGroupValue}
+                        onEditingValueChange={setEditingGroupValue}
+                        onSubmitEdit={submitEditingGroup}
+                        onCancelEdit={cancelEditingGroup}
+                        onStartEdit={startEditingGroup}
+                        onGroupTypeChange={handleGroupTypeChange}
+                        onRemoveGroup={wrappedRemoveGroup}
+                        onRemoveNodeFromGroup={wrappedRemoveNodeFromGroup}
+                        onRemoveUseItem={handleRemoveUseItem}
+                        mmwProviderNames={mmwProviderNames}
+                      />
                     ))}
                   </div>
                 </SortableContext>
@@ -1707,6 +1783,7 @@ export function EditNodesDialog({
                 )
               })()}
             </DragOverlay>
+            </DragStateContext.Provider>
           </DndContext>
         </DialogContent>
       </Dialog>
