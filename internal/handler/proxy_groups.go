@@ -6,22 +6,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	proxygroups "miaomiaowu/proxy_groups"
+	"miaomiaowu/internal/proxygroups"
+	"miaomiaowu/internal/storage"
 )
 
-// ProxyGroupsHandler handles GET requests for proxy groups configuration
+// ProxyGroupsHandler 提供代理组配置的读取接口
+// 从内存 Store 中获取当前配置快照
 type proxyGroupsHandler struct {
-	configPath string
+	store *proxygroups.Store
 }
 
-// NewProxyGroupsHandler creates a new handler for retrieving proxy groups config
-func NewProxyGroupsHandler(configPath string) http.Handler {
-	if configPath == "" {
-		panic("proxy groups handler requires config path")
+// NewProxyGroupsHandler 创建代理组配置处理器
+func NewProxyGroupsHandler(store *proxygroups.Store) http.Handler {
+	if store == nil {
+		panic("proxy groups handler requires store")
 	}
-	return &proxyGroupsHandler{configPath: configPath}
+	return &proxyGroupsHandler{store: store}
 }
 
 func (h *proxyGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,19 +34,26 @@ func (h *proxyGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data any
-	if err := proxygroups.Load(h.configPath, &data); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	// 获取配置快照及元数据
+	data, sourceURL, syncedAt := h.store.Snapshot()
+
+	// 设置响应头,提供配置来源和同步时间信息
+	w.Header().Set("Content-Type", "application/json")
+	if sourceURL != "" {
+		w.Header().Set("X-Proxy-Groups-Source", sourceURL)
+	}
+	if !syncedAt.IsZero() {
+		w.Header().Set("X-Proxy-Groups-Synced-At", syncedAt.Format(time.RFC3339))
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(data)
+	// 直接返回 JSON 数据(已验证)
+	_, _ = w.Write(data)
 }
 
-// ProxyGroupsSyncHandler handles POST requests to sync proxy groups config from remote
+// ProxyGroupsSyncHandler 处理代理组配置的远程同步请求
 type proxyGroupsSyncHandler struct {
-	configPath string
+	repo  *storage.TrafficRepository
+	store *proxygroups.Store
 }
 
 type proxyGroupsSyncRequest struct {
@@ -56,13 +66,15 @@ type proxyGroupsSyncResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// NewProxyGroupsSyncHandler creates a new handler for syncing proxy groups config
-func NewProxyGroupsSyncHandler(configPath string) http.Handler {
-	if configPath == "" {
-		panic("proxy groups sync handler requires config path")
+// NewProxyGroupsSyncHandler 创建同步处理器
+// 需要 repository 来获取持久化的远程地址配置
+func NewProxyGroupsSyncHandler(repo *storage.TrafficRepository, store *proxygroups.Store) http.Handler {
+	if repo == nil || store == nil {
+		panic("proxy groups sync handler requires repository and store")
 	}
 	return &proxyGroupsSyncHandler{
-		configPath: configPath,
+		repo:  repo,
+		store: store,
 	}
 }
 
@@ -79,13 +91,20 @@ func (h *proxyGroupsSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Resolve the actual source URL (request > env > default)
-	sourceURL := payload.SourceURL
-	resolvedURL := proxygroups.ResolveSourceURL(sourceURL)
+	// 优先使用请求中的 URL,如果为空则从系统配置中获取
+	sourceURL := strings.TrimSpace(payload.SourceURL)
+	if sourceURL == "" {
+		systemConfig, err := h.repo.GetSystemConfig(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Errorf("get system config: %w", err))
+			return
+		}
+		sourceURL = strings.TrimSpace(systemConfig.ProxyGroupsSourceURL)
+	}
 
-	// Sync configuration from the resolved URL
-	if err := proxygroups.SyncFromSource(h.configPath, sourceURL); err != nil {
-		// Return appropriate HTTP status based on error type
+	// 从远程下载并验证配置
+	data, resolvedURL, err := proxygroups.FetchConfig(sourceURL)
+	if err != nil {
 		switch {
 		case errors.Is(err, proxygroups.ErrInvalidConfig):
 			writeError(w, http.StatusBadRequest, err)
@@ -97,7 +116,13 @@ func (h *proxyGroupsSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Return success response with source URL
+	// 更新内存中的配置
+	if err := h.store.Update(data, resolvedURL, time.Now()); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("update store: %w", err))
+		return
+	}
+
+	// 返回同步成功响应
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(proxyGroupsSyncResponse{
 		Message:   fmt.Sprintf("代理组配置同步成功 (来源: %s)", resolvedURL),

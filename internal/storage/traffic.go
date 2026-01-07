@@ -253,6 +253,11 @@ type UserSettings struct {
 	UpdatedAt            time.Time
 }
 
+// SystemConfig represents global system configuration shared across all users.
+type SystemConfig struct {
+	ProxyGroupsSourceURL string // Remote URL for proxy groups configuration
+}
+
 // ExternalSubscription represents an external subscription URL imported by user.
 type ExternalSubscription struct {
 	ID          int64
@@ -781,6 +786,29 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 	// Generate file short codes for existing subscribe_files that don't have one
 	if err := r.generateMissingFileShortCodes(); err != nil {
 		return fmt.Errorf("generate missing file short codes: %w", err)
+	}
+
+	// Create system_config table for global settings
+	const systemConfigSchema = `
+CREATE TABLE IF NOT EXISTS system_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    proxy_groups_source_url TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`
+	if _, err := r.db.Exec(systemConfigSchema); err != nil {
+		return fmt.Errorf("migrate system_config: %w", err)
+	}
+
+	// Ensure system_config has exactly one row (singleton pattern)
+	const ensureSystemConfigRow = `
+INSERT INTO system_config (id, proxy_groups_source_url)
+SELECT 1, ''
+WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
+`
+	if _, err := r.db.Exec(ensureSystemConfigRow); err != nil {
+		return fmt.Errorf("seed system_config: %w", err)
 	}
 
 	const customRulesSchema = `
@@ -4071,3 +4099,59 @@ func (r *TrafficRepository) DeleteProxyProviderConfig(ctx context.Context, id in
 	return nil
 }
 
+
+// GetSystemConfig retrieves the global system configuration.
+// Returns an empty SystemConfig if the row doesn't exist (should not happen after migration).
+func (r *TrafficRepository) GetSystemConfig(ctx context.Context) (SystemConfig, error) {
+	const query = `
+SELECT proxy_groups_source_url
+FROM system_config
+WHERE id = 1
+`
+
+	var cfg SystemConfig
+	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.ProxyGroupsSourceURL)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Return empty config if row doesn't exist (defensive)
+			return SystemConfig{}, nil
+		}
+		return SystemConfig{}, fmt.Errorf("query system config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// UpdateSystemConfig updates the global system configuration.
+// Creates the singleton row if it doesn't exist (defensive).
+func (r *TrafficRepository) UpdateSystemConfig(ctx context.Context, cfg SystemConfig) error {
+	const updateStmt = `
+UPDATE system_config
+SET proxy_groups_source_url = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 1
+`
+
+	result, err := r.db.ExecContext(ctx, updateStmt, cfg.ProxyGroupsSourceURL)
+	if err != nil {
+		return fmt.Errorf("update system config: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	// If no rows were updated, insert the singleton row (defensive fallback)
+	if rowsAffected == 0 {
+		const insertStmt = `
+INSERT INTO system_config (id, proxy_groups_source_url)
+VALUES (1, ?)
+`
+		if _, err := r.db.ExecContext(ctx, insertStmt, cfg.ProxyGroupsSourceURL); err != nil {
+			return fmt.Errorf("insert system config: %w", err)
+		}
+	}
+
+	return nil
+}

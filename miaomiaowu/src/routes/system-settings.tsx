@@ -45,6 +45,7 @@ function SystemSettingsPage() {
   const [enableShortLink, setEnableShortLink] = useState(false)
   const [useNewTemplateSystem, setUseNewTemplateSystem] = useState(true)
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
+  const [proxyGroupsSourceUrl, setProxyGroupsSourceUrl] = useState('')
 
   // Sync proxy group categories mutation
   const syncProxyGroupsMutation = useSyncProxyGroupCategories()
@@ -64,6 +65,7 @@ function SystemSettingsPage() {
         enable_short_link: boolean
         use_new_template_system: boolean
         enable_proxy_provider: boolean
+        proxy_groups_source_url: string
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -82,6 +84,7 @@ function SystemSettingsPage() {
       setEnableShortLink(userConfig.enable_short_link || false)
       setUseNewTemplateSystem(userConfig.use_new_template_system !== false) // 默认为 true
       setEnableProxyProvider(userConfig.enable_proxy_provider || false)
+      setProxyGroupsSourceUrl(userConfig.proxy_groups_source_url || '')
     }
   }, [userConfig])
 
@@ -97,6 +100,7 @@ function SystemSettingsPage() {
       enable_short_link: boolean
       use_new_template_system: boolean
       enable_proxy_provider: boolean
+      proxy_groups_source_url: string
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -116,6 +120,7 @@ function SystemSettingsPage() {
       setEnableShortLink(variables.enable_short_link)
       setUseNewTemplateSystem(variables.use_new_template_system)
       setEnableProxyProvider(variables.enable_proxy_provider)
+      setProxyGroupsSourceUrl(variables.proxy_groups_source_url || '')
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -136,6 +141,7 @@ function SystemSettingsPage() {
     enable_short_link: boolean
     use_new_template_system: boolean
     enable_proxy_provider: boolean
+    proxy_groups_source_url: string
   }>) => {
     updateConfigMutation.mutate({
       force_sync_external: forceSyncExternal,
@@ -148,6 +154,7 @@ function SystemSettingsPage() {
       enable_short_link: enableShortLink,
       use_new_template_system: useNewTemplateSystem,
       enable_proxy_provider: enableProxyProvider,
+      proxy_groups_source_url: proxyGroupsSourceUrl,
       ...updates,
     })
   }
@@ -433,16 +440,33 @@ function SystemSettingsPage() {
           <Card>
             <CardHeader className='pb-4'>
               <CardTitle>代理组配置同步</CardTitle>
-              <CardDescription>从GitHub同步最新的预设代理组配置</CardDescription>
+              <CardDescription>从远程同步最新的预设代理组配置</CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='flex flex-col gap-3'>
                 <p className='text-sm text-muted-foreground'>
                   代理组配置包含常用规则分类和对应的 rule-providers 设置。同步后将更新生成订阅页面的规则选择器和预置代理组。
                 </p>
+                <div className='space-y-2'>
+                  <Label htmlFor='proxy-groups-source-url'>远程配置地址</Label>
+                  <Input
+                    id='proxy-groups-source-url'
+                    value={proxyGroupsSourceUrl}
+                    placeholder='https://example.com/proxy-groups.json'
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                    onChange={(e) => setProxyGroupsSourceUrl(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = proxyGroupsSourceUrl.trim()
+                      setProxyGroupsSourceUrl(trimmed)
+                      updateConfig({ proxy_groups_source_url: trimmed })
+                    }}
+                  />
+                  <p className='text-xs text-muted-foreground'>留空使用系统默认地址或环境变量配置</p>
+                </div>
                 <Button
                   onClick={() => {
-                    syncProxyGroupsMutation.mutate(undefined, {
+                    const override = proxyGroupsSourceUrl.trim() || undefined
+                    syncProxyGroupsMutation.mutate(override, {
                       onSuccess: (data) => {
                         toast.success(data.message || '代理组配置同步成功')
                       },

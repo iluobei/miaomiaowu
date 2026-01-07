@@ -3,7 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"miaomiaowu/internal/auth"
@@ -23,6 +25,7 @@ type userConfigRequest struct {
 	UseNewTemplateSystem *bool   `json:"use_new_template_system"` // nil means not provided, default true
 	EnableProxyProvider  bool    `json:"enable_proxy_provider"`
 	NodeOrder            []int64 `json:"node_order"` // Node display order (array of node IDs)
+	ProxyGroupsSourceURL string  `json:"proxy_groups_source_url"`
 }
 
 type userConfigResponse struct {
@@ -38,6 +41,7 @@ type userConfigResponse struct {
 	UseNewTemplateSystem bool    `json:"use_new_template_system"`
 	EnableProxyProvider  bool    `json:"enable_proxy_provider"`
 	NodeOrder            []int64 `json:"node_order"` // Node display order (array of node IDs)
+	ProxyGroupsSourceURL string  `json:"proxy_groups_source_url"`
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -64,6 +68,13 @@ func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
 }
 
 func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, username string) {
+	// 获取系统配置
+	systemConfig, err := repo.GetSystemConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("get system config: %w", err))
+		return
+	}
+
 	settings, err := repo.GetUserSettings(r.Context(), username)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserSettingsNotFound) {
@@ -81,6 +92,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				UseNewTemplateSystem: true,  // 默认使用新模板系统
 				EnableProxyProvider:  false,
 				NodeOrder:            []int64{},
+				ProxyGroupsSourceURL: systemConfig.ProxyGroupsSourceURL,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -104,6 +116,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		UseNewTemplateSystem: settings.UseNewTemplateSystem,
 		EnableProxyProvider:  settings.EnableProxyProvider,
 		NodeOrder:            settings.NodeOrder,
+		ProxyGroupsSourceURL: systemConfig.ProxyGroupsSourceURL,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -150,6 +163,13 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		useNewTemplateSystem = *payload.UseNewTemplateSystem
 	}
 
+	// Validate and sanitize proxy groups source URL
+	proxyGroupsSourceURL := strings.TrimSpace(payload.ProxyGroupsSourceURL)
+	if err := validateProxyGroupsSourceURL(proxyGroupsSourceURL); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
 	settings := storage.UserSettings{
 		Username:             username,
 		ForceSyncExternal:    payload.ForceSyncExternal,
@@ -171,6 +191,15 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		return
 	}
 
+	// Update system config with proxy groups source URL
+	systemConfig := storage.SystemConfig{
+		ProxyGroupsSourceURL: proxyGroupsSourceURL,
+	}
+	if err := repo.UpdateSystemConfig(r.Context(), systemConfig); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("update system config: %w", err))
+		return
+	}
+
 	resp := userConfigResponse{
 		ForceSyncExternal:    settings.ForceSyncExternal,
 		MatchRule:            settings.MatchRule,
@@ -184,9 +213,29 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		UseNewTemplateSystem: settings.UseNewTemplateSystem,
 		EnableProxyProvider:  settings.EnableProxyProvider,
 		NodeOrder:            settings.NodeOrder,
+		ProxyGroupsSourceURL: proxyGroupsSourceURL,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// validateProxyGroupsSourceURL 验证代理组远程地址的合法性
+// 空字符串是合法的(表示使用默认或环境变量配置)
+func validateProxyGroupsSourceURL(rawURL string) error {
+	if rawURL == "" {
+		return nil
+	}
+
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return fmt.Errorf("proxy_groups_source_url 格式无效: %w", err)
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return errors.New("proxy_groups_source_url 仅支持 http 或 https 协议")
+	}
+
+	return nil
 }

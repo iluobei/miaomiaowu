@@ -14,10 +14,10 @@ import (
 
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/handler"
+	"miaomiaowu/internal/proxygroups"
 	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/version"
 	"miaomiaowu/internal/web"
-	proxygroups "miaomiaowu/proxy_groups"
 	ruletemplates "miaomiaowu/rule_templates"
 	"miaomiaowu/subscribes"
 )
@@ -65,10 +65,33 @@ func main() {
 		log.Fatalf("failed to prepare rule template files: %v", err)
 	}
 
-	configDir := filepath.Join("configs")
-	proxyGroupsPath, err := proxygroups.Ensure(configDir)
+	// 初始化代理组配置 Store（纯内存存储）
+	// 优先从系统配置的远程地址拉取，失败时使用空配置
+	var proxyGroupsStore *proxygroups.Store
+
+	// 获取系统配置中的远程地址
+	systemConfig, err := repo.GetSystemConfig(ctx)
 	if err != nil {
-		log.Fatalf("failed to prepare proxy groups config: %v", err)
+		log.Printf("warning: failed to load system config: %v", err)
+	}
+
+	// 从远程拉取配置
+	data, resolvedURL, fetchErr := proxygroups.FetchConfig(systemConfig.ProxyGroupsSourceURL)
+	if fetchErr != nil {
+		log.Printf("warning: failed to fetch proxy groups config: %v", fetchErr)
+		// 远程拉取失败时使用空配置初始化
+		proxyGroupsStore, err = proxygroups.NewStore([]byte("[]"), "empty-fallback")
+		if err != nil {
+			log.Fatalf("failed to create proxy groups store: %v", err)
+		}
+		log.Printf("proxy groups store initialized with empty config (remote fetch failed)")
+	} else {
+		// 远程拉取成功
+		proxyGroupsStore, err = proxygroups.NewStore(data, resolvedURL)
+		if err != nil {
+			log.Fatalf("invalid proxy groups config from %s: %v", resolvedURL, err)
+		}
+		log.Printf("proxy groups config loaded from: %s", resolvedURL)
 	}
 
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
@@ -120,10 +143,10 @@ func main() {
 	mux.Handle("/api/admin/update/check", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateCheckHandler()))
 	mux.Handle("/api/admin/update/apply", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplyHandler()))
 	mux.Handle("/api/admin/update/apply-sse", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplySSEHandler()))
-	mux.Handle("/api/admin/proxy-groups/sync", auth.RequireAdmin(tokenStore, userRepo, handler.NewProxyGroupsSyncHandler(proxyGroupsPath)))
+	mux.Handle("/api/admin/proxy-groups/sync", auth.RequireAdmin(tokenStore, userRepo, handler.NewProxyGroupsSyncHandler(repo, proxyGroupsStore)))
 
 	// User endpoints (all authenticated users)
-	mux.Handle("/api/proxy-groups", auth.RequireToken(tokenStore, handler.NewProxyGroupsHandler(proxyGroupsPath)))
+	mux.Handle("/api/proxy-groups", auth.RequireToken(tokenStore, handler.NewProxyGroupsHandler(proxyGroupsStore)))
 	mux.Handle("/api/user/password", auth.RequireToken(tokenStore, handler.NewPasswordHandler(authManager)))
 	mux.Handle("/api/user/profile", auth.RequireToken(tokenStore, handler.NewProfileHandler(repo)))
 	mux.Handle("/api/user/settings", auth.RequireToken(tokenStore, handler.NewUserSettingsHandler(repo, tokenStore)))
