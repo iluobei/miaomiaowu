@@ -31,6 +31,8 @@ import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, Ch
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
+import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
+import { translateOutbound } from '@/lib/sublink/translations'
 
 export const Route = createFileRoute('/subscribe-files/')({
   beforeLoad: () => {
@@ -248,6 +250,9 @@ function SubscribeFilesPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 640px)')
+
+  // 获取代理组配置
+  const { data: proxyGroupCategories = [] } = useProxyGroupCategories()
 
   // 日期格式化器
   const dateFormatter = useMemo(
@@ -1669,6 +1674,113 @@ function SubscribeFilesPage() {
           }
           return groupConfig
         })
+      }
+
+      // 为预置代理组添加 rules 和 rule-providers
+      if (proxyGroupCategories.length > 0 && proxyGroups.length > 0) {
+        // 创建代理组名称到分类的映射
+        const categoryMap = new Map(
+          proxyGroupCategories.map(cat => [cat.group_label, cat])
+        )
+
+        // 收集需要添加的分类（只包含用户添加的预置代理组）
+        const selectedCategories: string[] = []
+        proxyGroups.forEach(group => {
+          const category = categoryMap.get(group.name)
+          if (category) {
+            selectedCategories.push(category.name)
+          }
+        })
+
+        if (selectedCategories.length > 0) {
+          // 构建 rule-providers
+          const ruleProviders: Record<string, any> = parsed['rule-providers'] || {}
+
+          for (const categoryName of selectedCategories) {
+            const category = proxyGroupCategories.find(c => c.name === categoryName)
+            if (!category) continue
+
+            // 添加 site rule providers
+            for (const provider of category.site_rules) {
+              if (!ruleProviders[provider.key]) {
+                ruleProviders[provider.key] = {
+                  type: provider.type,
+                  format: provider.format,
+                  behavior: provider.behavior,
+                  url: provider.url,
+                  path: provider.path,
+                  interval: provider.interval,
+                }
+              }
+            }
+
+            // 添加 IP rule providers
+            for (const provider of category.ip_rules) {
+              if (!ruleProviders[provider.key]) {
+                ruleProviders[provider.key] = {
+                  type: provider.type,
+                  format: provider.format,
+                  behavior: provider.behavior,
+                  url: provider.url,
+                  path: provider.path,
+                  interval: provider.interval,
+                }
+              }
+            }
+          }
+
+          parsed['rule-providers'] = ruleProviders
+
+          // 构建 rules（domain-based 规则在前，IP-based 规则在后）
+          const existingRules: string[] = parsed.rules || []
+          const newRules: string[] = []
+
+          // 先添加 site rules（domain-based）
+          for (const categoryName of selectedCategories) {
+            const category = proxyGroupCategories.find(c => c.name === categoryName)
+            if (!category || !category.rule_name) continue
+
+            const outbound = category.group_label || translateOutbound(category.rule_name)
+
+            // Site rules
+            for (const provider of category.site_rules) {
+              const ruleStr = `RULE-SET,${provider.key},${outbound}`
+              if (!existingRules.includes(ruleStr) && !newRules.includes(ruleStr)) {
+                newRules.push(ruleStr)
+              }
+            }
+          }
+
+          // 再添加 IP rules
+          for (const categoryName of selectedCategories) {
+            const category = proxyGroupCategories.find(c => c.name === categoryName)
+            if (!category || !category.rule_name) continue
+
+            const outbound = category.group_label || translateOutbound(category.rule_name)
+
+            // IP rules
+            for (const provider of category.ip_rules) {
+              const ruleStr = `RULE-SET,${provider.key},${outbound},no-resolve`
+              if (!existingRules.includes(ruleStr) && !newRules.includes(ruleStr)) {
+                newRules.push(ruleStr)
+              }
+            }
+          }
+
+          // 合并新规则到现有规则中（插入到 MATCH 规则之前）
+          const matchRuleIndex = existingRules.findIndex(r => r.startsWith('MATCH,'))
+          if (matchRuleIndex >= 0) {
+            // 在 MATCH 规则之前插入新规则
+            parsed.rules = [
+              ...existingRules.slice(0, matchRuleIndex),
+              ...newRules,
+              ...existingRules.slice(matchRuleIndex)
+            ]
+          } else {
+            // 如果没有 MATCH 规则，追加到末尾
+            parsed.rules = [...existingRules, ...newRules]
+          }
+        }
       }
 
       // 筛选非 MMW 模式的代理集合（MMW 相关数据已在函数开头获取）

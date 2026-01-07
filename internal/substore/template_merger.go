@@ -148,6 +148,8 @@ dns:
   nameserver:
     - "https://120.53.53.53/dns-query"
     - "https://223.5.5.5/dns-query"
+  default-nameserver:
+    - tls://223.5.5.5
   proxy-server-nameserver:
     - "https://120.53.53.53/dns-query"
     - "https://223.5.5.5/dns-query"

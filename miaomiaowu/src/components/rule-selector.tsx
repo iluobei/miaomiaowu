@@ -21,7 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { RULE_CATEGORIES, PREDEFINED_RULE_SETS } from '@/lib/sublink/predefined-rules'
+import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
 import type { PredefinedRuleSetType } from '@/lib/sublink/types'
 
 interface RuleSelectorProps {
@@ -38,24 +38,41 @@ export function RuleSelector({
   onCategoriesChange,
 }: RuleSelectorProps) {
   const [isOpen, setIsOpen] = useState(true)
+  const { data: categories = [], isLoading, isError } = useProxyGroupCategories()
 
   // Update selected categories when ruleset changes
   useEffect(() => {
     if (ruleSet !== 'custom') {
-      const presetCategories = PREDEFINED_RULE_SETS[ruleSet] || []
-      onCategoriesChange(presetCategories)
+      // Calculate preset categories directly to avoid dependency on predefinedRuleSets
+      let presetCategories: string[] = []
+      if (ruleSet === 'minimal') {
+        presetCategories = categories.filter((c) => c.presets.includes('minimal')).map((c) => c.name)
+      } else if (ruleSet === 'balanced') {
+        presetCategories = categories.filter((c) => c.presets.includes('balanced')).map((c) => c.name)
+      } else if (ruleSet === 'comprehensive') {
+        presetCategories = categories.map((c) => c.name)
+      }
+
+      // Only update if the categories are actually different
+      const categoriesChanged =
+        presetCategories.length !== selectedCategories.length ||
+        presetCategories.some((cat, idx) => cat !== selectedCategories[idx])
+
+      if (categoriesChanged) {
+        onCategoriesChange(presetCategories)
+      }
     }
-  }, [ruleSet, onCategoriesChange])
+  }, [ruleSet, categories, selectedCategories, onCategoriesChange])
 
   const handleCategoryToggle = (categoryName: string) => {
     if (selectedCategories.includes(categoryName)) {
       onCategoriesChange(selectedCategories.filter((c) => c !== categoryName))
     } else {
-      // 添加新类别后，按 RULE_CATEGORIES 中的顺序排序
+      // 添加新类别后，按 categories 中的顺序排序
       const newCategories = [...selectedCategories, categoryName]
-      const orderedCategories = RULE_CATEGORIES
-        .map(c => c.name)
-        .filter(name => newCategories.includes(name))
+      const orderedCategories = categories
+        .map((c) => c.name)
+        .filter((name) => newCategories.includes(name))
       onCategoriesChange(orderedCategories)
     }
   }
@@ -121,24 +138,37 @@ export function RuleSelector({
           </div>
 
           <CollapsibleContent>
-            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-              {RULE_CATEGORIES.map((category) => (
-                <div key={category.name} className='flex items-center space-x-2'>
-                  <Checkbox
-                    id={`category-${category.name}`}
-                    checked={selectedCategories.includes(category.name)}
-                    onCheckedChange={() => handleCategoryToggle(category.name)}
-                  />
-                  <label
-                    htmlFor={`category-${category.name}`}
-                    className='flex cursor-pointer items-center gap-1.5 text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
-                  >
-                    <span>{category.icon}</span>
-                    <span>{category.label}</span>
-                  </label>
-                </div>
-              ))}
-            </div>
+            {isLoading && (
+              <p className='text-sm text-muted-foreground'>正在加载规则分类...</p>
+            )}
+            {isError && (
+              <p className='text-sm text-destructive'>
+                无法加载规则分类，请稍后重试或联系管理员。
+              </p>
+            )}
+            {!isLoading && !isError && categories.length === 0 && (
+              <p className='text-sm text-muted-foreground'>暂无可用的规则分类</p>
+            )}
+            {!isLoading && !isError && categories.length > 0 && (
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+                {categories.map((category) => (
+                  <div key={category.name} className='flex items-center space-x-2'>
+                    <Checkbox
+                      id={`category-${category.name}`}
+                      checked={selectedCategories.includes(category.name)}
+                      onCheckedChange={() => handleCategoryToggle(category.name)}
+                    />
+                    <label
+                      htmlFor={`category-${category.name}`}
+                      className='flex cursor-pointer items-center gap-1.5 text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
+                    >
+                      <span>{category.icon}</span>
+                      <span>{category.label}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
           </CollapsibleContent>
         </div>
       </Collapsible>

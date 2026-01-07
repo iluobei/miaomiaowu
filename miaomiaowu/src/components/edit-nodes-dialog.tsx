@@ -24,42 +24,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { OUTBOUND_NAMES } from '@/lib/sublink/translations'
+import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
 
 // 预置的代理分流服务相关 emoji
+// 注意: 这个列表已废弃，改为从 proxy-groups.json 动态获取
+// 仅保留一些基础通用的 emoji 作为备选
 const PROXY_SERVICE_EMOJIS = [
-  // 搜索服务
-  { emoji: '🔍', label: '谷歌' },
-  { emoji: '🍏', label: '苹果' },
-  { emoji: 'Ⓜ️', label: '微软' },
-  // 社交媒体
-  { emoji: '📲', label: 'Telegram' },
-  { emoji: '🐦', label: 'Twitter/X' },
-  { emoji: '📘', label: 'Facebook' },
-  { emoji: '📷', label: 'Instagram' },
-  { emoji: '🎵', label: 'TikTok' },
-  // 流媒体
-  { emoji: '📺', label: 'Netflix' },
-  { emoji: '🏰', label: 'Disney+' },
-  { emoji: '📹', label: 'YouTube' },
-  { emoji: '🎬', label: 'Streaming' },
-  { emoji: '🎮', label: '游戏' },
-  // 开发工具
-  { emoji: '🐱', label: 'GitHub' },
-  { emoji: '☁️', label: '云服务' },
-  // AI 服务
-  { emoji: '💬', label: 'AI' },
-  { emoji: '🤖', label: 'ChatGPT' },
-  // 其他
+  // 基础代理组
   { emoji: '🚀', label: '节点选择' },
   { emoji: '♻️', label: '自动选择' },
   { emoji: '🐟', label: '漏网之鱼' },
-  { emoji: '🛑', label: '广告拦截' },
-  { emoji: '🌐', label: '国际' },
-  { emoji: '🔒', label: '国内' },
-  { emoji: '🏠', label: '私有网络' },
-  { emoji: '💰', label: '金融' },
-  { emoji: '📚', label: '教育' },
+  { emoji: '🎯', label: '直连' },
+  { emoji: '🚫', label: '拒绝' },
 ]
 
 interface ProxyGroup {
@@ -886,6 +862,21 @@ export function EditNodesDialog({
   onRemoveGroup,
   onRenameGroup
 }: EditNodesDialogProps) {
+  // 获取代理组配置
+  const { data: proxyGroupCategories = [] } = useProxyGroupCategories()
+
+  // 合并基础 emoji 和从 proxy-groups.json 获取的 emoji
+  const allServiceEmojis = useMemo(() => {
+    // 从 proxy-groups.json 提取 emoji 列表
+    const dynamicEmojis = proxyGroupCategories.map(category => ({
+      emoji: category.emoji,
+      label: category.label,
+    }))
+
+    // 合并基础 emoji 和动态 emoji
+    return [...PROXY_SERVICE_EMOJIS, ...dynamicEmojis]
+  }, [proxyGroupCategories])
+
   // 添加代理组对话框状态
   const [addGroupDialogOpen, setAddGroupDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
@@ -1876,7 +1867,7 @@ export function EditNodesDialog({
                   </PopoverTrigger>
                   <PopoverContent className='w-72 p-2' align='start'>
                     <div className='grid grid-cols-6 gap-1'>
-                      {PROXY_SERVICE_EMOJIS.map(({ emoji, label }) => (
+                      {allServiceEmojis.map(({ emoji, label }) => (
                         <Button
                           key={emoji}
                           variant={selectedEmoji === emoji ? 'secondary' : 'ghost'}
@@ -1919,18 +1910,19 @@ export function EditNodesDialog({
             <div>
               <p className='text-sm text-muted-foreground mb-2'>快速选择：</p>
               <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
-                {Object.entries(OUTBOUND_NAMES).map(([key, value]) => {
-                  const isDuplicate = proxyGroups.some(g => g.name === value)
+                {proxyGroupCategories.map((category) => {
+                  const groupLabel = category.group_label
+                  const isDuplicate = proxyGroups.some(g => g.name === groupLabel)
                   return (
                     <Button
-                      key={key}
+                      key={category.name}
                       variant='outline'
                       size='sm'
                       className={`justify-start text-left h-auto py-2 px-3 ${isDuplicate ? 'opacity-50' : ''}`}
-                      onClick={() => handleQuickSelect(value)}
+                      onClick={() => handleQuickSelect(groupLabel)}
                       disabled={isDuplicate}
                     >
-                      <Twemoji className='truncate'>{value}</Twemoji>
+                      <Twemoji className='truncate'>{groupLabel}</Twemoji>
                     </Button>
                   )
                 })}

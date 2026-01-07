@@ -57,6 +57,7 @@ import { Twemoji } from '@/components/twemoji'
 import { ClashConfigBuilder } from '@/lib/sublink/clash-builder'
 import { CustomRulesEditor } from '@/components/custom-rules-editor'
 import { RuleSelector } from '@/components/rule-selector'
+import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
 import type { PredefinedRuleSetType, CustomRule } from '@/lib/sublink/types'
 import type { ProxyConfig } from '@/lib/sublink/types'
 import { extractRegionFromNodeName, findRegionGroupName } from '@/lib/country-flag'
@@ -239,6 +240,9 @@ function SubscriptionGeneratorPage() {
   const [clashConfig, setClashConfig] = useState('')
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
   const [selectedProtocols, setSelectedProtocols] = useState<Set<string>>(new Set())
+
+  // Fetch proxy group categories for ClashConfigBuilder
+  const { data: proxyGroupCategories } = useProxyGroupCategories()
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
 
   // 规则模式状态
@@ -978,11 +982,12 @@ function SubscriptionGeneratorPage() {
         toast.info(`应用 ${selectedCategories.length} 个规则类别`)
       }
 
-      // Build Clash config using new builder
+      // Build Clash config using new builder with dynamic categories
       const clashBuilder = new ClashConfigBuilder(
         proxies,
         selectedCategories,
-        validCustomRules
+        validCustomRules,
+        proxyGroupCategories
       )
       let generatedConfig = clashBuilder.build()
 

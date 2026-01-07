@@ -98,3 +98,27 @@ export interface GeneratedLinks {
   xray: string
   surge: string
 }
+
+// Rule provider configuration for Clash Meta
+export interface RuleProviderConfig {
+  key: string          // Unique key for this rule provider
+  behavior: string     // Rule behavior: domain, ipcidr, classical
+  type: string         // Provider type: http, file
+  format: string       // Format: yaml, mrs, text
+  url: string          // Remote URL for downloading rules
+  path: string         // Local cache path
+  interval: number     // Update interval in seconds
+}
+
+// Proxy group category with rule providers
+export interface ProxyGroupCategory {
+  name: string              // Internal identifier (e.g., "ai", "youtube")
+  label: string             // Display label (e.g., "AI 服务", "油管视频")
+  emoji: string             // Emoji for UI display
+  icon: string              // Icon identifier
+  rule_name: string         // Rule name for Clash config
+  group_label: string       // Label for proxy group (e.g., "💬 AI 服务")
+  presets: string[]         // Which presets include this category
+  site_rules: RuleProviderConfig[]  // Domain-based rule providers
+  ip_rules: RuleProviderConfig[]    // IP-based rule providers
+}

@@ -1,4 +1,4 @@
-import type { ProxyConfig, CustomRule } from './types'
+import type { ProxyConfig, CustomRule, ProxyGroupCategory } from './types'
 import { deepCopy } from './utils'
 import { DEFAULT_CLASH_CONFIG, CLASH_SITE_RULE_SET_BASE_URL, CLASH_IP_RULE_SET_BASE_URL } from './clash-config'
 import { RULE_CATEGORIES } from './predefined-rules'
@@ -8,13 +8,53 @@ import { translateOutbound, CATEGORY_TO_RULE_NAME } from './translations'
 export class ClashConfigBuilder {
   private proxies: ProxyConfig[] = []
   private config: Record<string, unknown>
+  private categoryMap: Map<string, ProxyGroupCategory>
 
   constructor(
     private proxyConfigs: ProxyConfig[],
     private selectedCategories: string[] = [],
-    private customRules: CustomRule[] = []
+    private customRules: CustomRule[] = [],
+    ruleCategories?: ProxyGroupCategory[]
   ) {
     this.config = deepCopy(DEFAULT_CLASH_CONFIG)
+
+    // Use provided categories or fall back to static RULE_CATEGORIES
+    const categories = ruleCategories || this.convertLegacyCategories()
+    this.categoryMap = new Map(categories.map((c) => [c.name, c]))
+  }
+
+  /**
+   * Convert legacy RULE_CATEGORIES to new ProxyGroupCategory format
+   * Used as fallback when ruleCategories is not provided
+   */
+  private convertLegacyCategories(): ProxyGroupCategory[] {
+    return RULE_CATEGORIES.map((category) => ({
+      name: category.name,
+      label: category.label,
+      emoji: category.icon,
+      icon: category.icon,
+      rule_name: CATEGORY_TO_RULE_NAME[category.name] || category.name,
+      group_label: translateOutbound(CATEGORY_TO_RULE_NAME[category.name] || category.name),
+      presets: [], // Legacy doesn't have preset info
+      site_rules: category.site_rules.map((rule) => ({
+        key: rule,
+        behavior: 'domain',
+        type: 'http',
+        format: 'mrs',
+        url: `${CLASH_SITE_RULE_SET_BASE_URL}${rule}.mrs`,
+        path: `./ruleset/${rule}.mrs`,
+        interval: 86400,
+      })),
+      ip_rules: category.ip_rules.map((rule) => ({
+        key: rule,
+        behavior: 'ipcidr',
+        type: 'http',
+        format: 'mrs',
+        url: `${CLASH_IP_RULE_SET_BASE_URL}${rule}.mrs`,
+        path: `./ruleset/${rule}.mrs`,
+        interval: 86400,
+      })),
+    }))
   }
 
   build(): string {
@@ -72,41 +112,44 @@ export class ClashConfigBuilder {
   }
   private buildRuleProviders(): void {
     const ruleProviders: Record<string, unknown> = {}
-    const siteRules = new Set<string>()
-    const ipRules = new Set<string>()
 
-    // Collect rules from selected categories
+    // Collect providers from selected categories
     for (const categoryName of this.selectedCategories) {
-      const category = RULE_CATEGORIES.find((c) => c.name === categoryName)
+      const category = this.categoryMap.get(categoryName)
       if (!category) continue
 
-      category.site_rules.forEach((rule) => siteRules.add(rule))
-      category.ip_rules.forEach((rule) => ipRules.add(rule))
+      // Add site rule providers
+      for (const provider of category.site_rules) {
+        if (ruleProviders[provider.key]) {
+          console.warn(`Duplicate rule provider key: ${provider.key}`)
+          continue
+        }
+        ruleProviders[provider.key] = {
+          type: provider.type,
+          format: provider.format,
+          behavior: provider.behavior,
+          url: provider.url,
+          path: provider.path,
+          interval: provider.interval,
+        }
+      }
+
+      // Add IP rule providers
+      for (const provider of category.ip_rules) {
+        if (ruleProviders[provider.key]) {
+          console.warn(`Duplicate rule provider key: ${provider.key}`)
+          continue
+        }
+        ruleProviders[provider.key] = {
+          type: provider.type,
+          format: provider.format,
+          behavior: provider.behavior,
+          url: provider.url,
+          path: provider.path,
+          interval: provider.interval,
+        }
+      }
     }
-
-    // Build site rule providers
-    siteRules.forEach((rule) => {
-      ruleProviders[rule] = {
-        type: 'http',
-        format: 'mrs',
-        behavior: 'domain',
-        url: `${CLASH_SITE_RULE_SET_BASE_URL}${rule}.mrs`,
-        path: `./ruleset/${rule}.mrs`,
-        interval: 86400,
-      }
-    })
-
-    // Build IP rule providers
-    ipRules.forEach((rule) => {
-      ruleProviders[rule] = {
-        type: 'http',
-        format: 'mrs',
-        behavior: 'ipcidr',
-        url: `${CLASH_IP_RULE_SET_BASE_URL}${rule}.mrs`,
-        path: `./ruleset/${rule}.mrs`,
-        interval: 86400,
-      }
-    })
 
     this.config['rule-providers'] = ruleProviders
   }
@@ -134,11 +177,17 @@ export class ClashConfigBuilder {
 
     // 3. Category-specific groups
     for (const categoryName of this.selectedCategories) {
-      const ruleName = CATEGORY_TO_RULE_NAME[categoryName]
-      if (!ruleName) continue
+      const category = this.categoryMap.get(categoryName)
+      if (!category) continue
+
+      // Skip categories without rule_name (they won't have corresponding proxy groups)
+      if (!category.rule_name) continue
+
+      // Use group_label from category, fallback to translated rule_name
+      const groupName = category.group_label || translateOutbound(category.rule_name)
 
       groups.push({
-        name: translateOutbound(ruleName),
+        name: groupName,
         type: 'select',
         proxies: [
           translateOutbound('Node Select'),
@@ -209,17 +258,18 @@ export class ClashConfigBuilder {
 
     // Category rules (RULE-SET format)
     for (const categoryName of this.selectedCategories) {
-      const category = RULE_CATEGORIES.find((c) => c.name === categoryName)
+      const category = this.categoryMap.get(categoryName)
       if (!category) continue
 
-      const ruleName = CATEGORY_TO_RULE_NAME[categoryName]
-      if (!ruleName) continue
+      // Skip categories without rule_name
+      if (!category.rule_name) continue
 
-      const outbound = translateOutbound(ruleName)
+      // Use group_label for outbound, fallback to translated rule_name
+      const outbound = category.group_label || translateOutbound(category.rule_name)
 
-      // Site rules
-      for (const siteRule of category.site_rules) {
-        rules.push(`RULE-SET,${siteRule},${outbound}`)
+      // Site rules - use provider key from configuration
+      for (const provider of category.site_rules) {
+        rules.push(`RULE-SET,${provider.key},${outbound}`)
       }
     }
 
@@ -239,17 +289,18 @@ export class ClashConfigBuilder {
 
     // Category IP rules
     for (const categoryName of this.selectedCategories) {
-      const category = RULE_CATEGORIES.find((c) => c.name === categoryName)
+      const category = this.categoryMap.get(categoryName)
       if (!category) continue
 
-      const ruleName = CATEGORY_TO_RULE_NAME[categoryName]
-      if (!ruleName) continue
+      // Skip categories without rule_name
+      if (!category.rule_name) continue
 
-      const outbound = translateOutbound(ruleName)
+      // Use group_label for outbound, fallback to translated rule_name
+      const outbound = category.group_label || translateOutbound(category.rule_name)
 
-      // IP rules
-      for (const ipRule of category.ip_rules) {
-        rules.push(`RULE-SET,${ipRule},${outbound},no-resolve`)
+      // IP rules - use provider key from configuration
+      for (const provider of category.ip_rules) {
+        rules.push(`RULE-SET,${provider.key},${outbound},no-resolve`)
       }
     }
 

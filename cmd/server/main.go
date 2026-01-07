@@ -17,6 +17,7 @@ import (
 	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/version"
 	"miaomiaowu/internal/web"
+	proxygroups "miaomiaowu/proxy_groups"
 	ruletemplates "miaomiaowu/rule_templates"
 	"miaomiaowu/subscribes"
 )
@@ -62,6 +63,12 @@ func main() {
 	ruleTemplatesDir := filepath.Join("rule_templates")
 	if err := ruletemplates.Ensure(ruleTemplatesDir); err != nil {
 		log.Fatalf("failed to prepare rule template files: %v", err)
+	}
+
+	configDir := filepath.Join("configs")
+	proxyGroupsPath, err := proxygroups.Ensure(configDir)
+	if err != nil {
+		log.Fatalf("failed to prepare proxy groups config: %v", err)
 	}
 
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
@@ -113,8 +120,10 @@ func main() {
 	mux.Handle("/api/admin/update/check", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateCheckHandler()))
 	mux.Handle("/api/admin/update/apply", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplyHandler()))
 	mux.Handle("/api/admin/update/apply-sse", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplySSEHandler()))
+	mux.Handle("/api/admin/proxy-groups/sync", auth.RequireAdmin(tokenStore, userRepo, handler.NewProxyGroupsSyncHandler(proxyGroupsPath)))
 
 	// User endpoints (all authenticated users)
+	mux.Handle("/api/proxy-groups", auth.RequireToken(tokenStore, handler.NewProxyGroupsHandler(proxyGroupsPath)))
 	mux.Handle("/api/user/password", auth.RequireToken(tokenStore, handler.NewPasswordHandler(authManager)))
 	mux.Handle("/api/user/profile", auth.RequireToken(tokenStore, handler.NewProfileHandler(repo)))
 	mux.Handle("/api/user/settings", auth.RequireToken(tokenStore, handler.NewUserSettingsHandler(repo, tokenStore)))

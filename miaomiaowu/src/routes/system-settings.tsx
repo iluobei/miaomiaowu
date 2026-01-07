@@ -10,15 +10,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { CircleHelp } from 'lucide-react'
+import { CircleHelp, RefreshCw } from 'lucide-react'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { useAuthStore } from '@/stores/auth-store'
+import { useSyncProxyGroupCategories } from '@/hooks/use-proxy-groups'
 
 export const Route = createFileRoute('/system-settings')({
   beforeLoad: () => {
@@ -43,6 +45,9 @@ function SystemSettingsPage() {
   const [enableShortLink, setEnableShortLink] = useState(false)
   const [useNewTemplateSystem, setUseNewTemplateSystem] = useState(true)
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
+
+  // Sync proxy group categories mutation
+  const syncProxyGroupsMutation = useSyncProxyGroupCategories()
 
   const { data: userConfig, isLoading: loadingConfig } = useQuery({
     queryKey: ['user-config'],
@@ -420,6 +425,52 @@ function SystemSettingsPage() {
                   onCheckedChange={(checked) => updateConfig({ enable_proxy_provider: checked })}
                   disabled={loadingConfig || updateConfigMutation.isPending}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 代理组配置同步 */}
+          <Card>
+            <CardHeader className='pb-4'>
+              <CardTitle>代理组配置同步</CardTitle>
+              <CardDescription>从GitHub同步最新的预设代理组配置</CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <div className='flex flex-col gap-3'>
+                <p className='text-sm text-muted-foreground'>
+                  代理组配置包含常用规则分类和对应的 rule-providers 设置。同步后将更新生成订阅页面的规则选择器和预置代理组。
+                </p>
+                <Button
+                  onClick={() => {
+                    syncProxyGroupsMutation.mutate(undefined, {
+                      onSuccess: (data) => {
+                        toast.success(data.message || '代理组配置同步成功')
+                      },
+                      onError: (error) => {
+                        handleServerError(error)
+                      },
+                    })
+                  }}
+                  disabled={syncProxyGroupsMutation.isPending}
+                  className='w-full sm:w-auto'
+                >
+                  {syncProxyGroupsMutation.isPending ? (
+                    <>
+                      <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
+                      同步中...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className='mr-2 h-4 w-4' />
+                      同步代理组配置
+                    </>
+                  )}
+                </Button>
+                {syncProxyGroupsMutation.isSuccess && (
+                  <p className='text-sm text-green-600 dark:text-green-400'>
+                    ✓ 同步成功，配置已更新
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
