@@ -75,37 +75,41 @@ func GenerateClashProxyGroups(groups []ACLProxyGroup, allProxyNames []string) st
 		// Determine which proxies to include
 		var proxiesToOutput []string
 
-		// For select type with policy references (normalProxies), .* wildcard should NOT add actual nodes
-		// because the nodes are accessed through the referenced policy groups
-		// Only url-test/fallback/load-balance types need actual nodes
+		// By default, select groups that already reference other policies skip injecting actual nodes.
+		// url-test/fallback/load-balance always need nodes, and the .* wildcard forces inclusion
+		// of all available nodes regardless of existing policy references.
 		shouldAddActualNodes := len(normalProxies) == 0 || g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance"
 
-		if len(allProxyNames) > 0 && shouldAddActualNodes {
-			// Explicit mode: use provided proxy names with regex filtering
-			if len(regexFilters) > 0 {
+		if len(allProxyNames) > 0 {
+			// Explicit mode: use provided proxy names
+			if g.HasWildcard {
+				// Has .* wildcard: include all provided proxies
+				// This takes precedence to ensure all nodes are included when user explicitly specifies .*
+				proxiesToOutput = allProxyNames
+			} else if shouldAddActualNodes && len(regexFilters) > 0 {
 				// Apply regex filter to get matching proxies
 				proxiesToOutput = filterProxyNamesByRegex(allProxyNames, regexFilters)
 				// If no proxies matched the regex, add DIRECT as fallback
 				if len(proxiesToOutput) == 0 {
 					proxiesToOutput = []string{"DIRECT"}
 				}
-			} else if g.HasWildcard {
-				// Has .* wildcard: include all provided proxies
-				proxiesToOutput = allProxyNames
 			}
 		} else if len(allProxyNames) == 0 {
 			// Legacy mode: use include-all and filter fields
-			if len(regexFilters) > 0 {
+			if g.HasWildcard {
+				// Wildcard present: emit include-all for legacy mode
+				// This takes precedence over regex filters to ensure all nodes are included
+				lines = append(lines, "    include-all: true")
+			} else if len(regexFilters) > 0 {
 				lines = append(lines, "    include-all: true")
 				lines = append(lines, fmt.Sprintf("    filter: %s", MergeRegexFilters(regexFilters)))
-			} else if g.HasWildcard && shouldAddActualNodes {
-				lines = append(lines, "    include-all: true")
 			}
 		}
 
 		// Output proxies list
-		// Combine: explicit proxies from filter + normal policy references (DIRECT, other groups)
-		allProxiesToOutput := append(proxiesToOutput, normalProxies...)
+		// Combine: keep policy references first (DIRECT, other groups), then append explicit nodes (regex/wildcard results)
+		// This preserves the order from ACL config where .* typically appears at the end
+		allProxiesToOutput := append(normalProxies, proxiesToOutput...)
 		if len(allProxiesToOutput) > 0 {
 			lines = append(lines, "    proxies:")
 			for _, proxy := range allProxiesToOutput {
