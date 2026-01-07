@@ -1138,12 +1138,10 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
   }
 
   // 需要排除的中间参数（不输出到 Clash）
-  const excludeKeys = new Set([
+  const baseExcludeKeys = new Set([
     'name', 'type', 'server', 'port',
     // 原始缩写参数（已转换为标准格式）
     'pbk', 'sid', 'spx', 'fp',
-    // Reality 参数（已转换为 reality-opts）
-    'public-key', 'short-id', 'spider-x', '_spider-x',
     // 中间状态参数
     'allowInsecure', 'skipCertVerify',
     'sni', // 已转换为 servername
@@ -1158,6 +1156,12 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     'fingerprint', // 已转换为 client-fingerprint
     'client-fingerprint', // SS plugin 中的 client-fingerprint，已单独处理
     '_original-network' // xhttp 原始网络类型，用于 URI 生成，不输出到 Clash
+  ])
+
+  // Reality 特定参数（仅当 security === 'reality' 时排除，已转换为 reality-opts）
+  // 其他协议（如 WireGuard）可能需要这些字段，不应全局排除
+  const realityExcludeKeys = new Set([
+    'public-key', 'short-id', 'spider-x', '_spider-x'
   ])
 
   const clash: ClashProxy = {
@@ -1292,10 +1296,20 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     }
   }
 
+  // 根据协议类型动态构建排除列表
+  // VLESS Reality 节点需要排除 Reality 特定字段（已转换为 reality-opts）
+  // 其他协议（如 WireGuard）保留它们需要的字段
+  const effectiveExcludeKeys = new Set(baseExcludeKeys)
+  if (node.security === 'reality') {
+    for (const key of realityExcludeKeys) {
+      effectiveExcludeKeys.add(key)
+    }
+  }
+
   // 复制其他属性（传输层配置等）
   for (const [key, value] of Object.entries(node)) {
     if (value !== undefined &&
-        !excludeKeys.has(key) &&
+        !effectiveExcludeKeys.has(key) &&
         !Object.prototype.hasOwnProperty.call(clash, key) &&
         key !== 'tls' && // tls 已经被处理过了
         key !== 'security' && // security 已经被处理过了
