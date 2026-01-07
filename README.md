@@ -250,6 +250,27 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.4.0 (2026-01-07)
+- 🌈 节点管理支持本地缓存记忆状态
+- 🌈 外部订阅地址支持修改
+- 🌈 使用虚拟dom减少页面卡顿
+- 🌈 合并生成订阅与添加代理组的预置代理组数据，代理组模板支持从github拉取 [proxy-groups.json](https://raw.githubusercontent.com/Jimleerx/miaomiaowu/refs/heads/main/proxy_groups/proxy-groups.default.json)
+- 🌈 添加代理组时支持选择emoji
+- 🌈 生成订阅页面节点支持排序
+- 🌈 优化代理组节点拖动性能
+- 🛠️ fix:wireguard协议public-key参数丢失
+- 🛠️ fix:模板里的.*没有处理
+- 🛠️ 更新代理组模板
+- 🛠️ fix:增加xhttp的mode显示
+- 🛠️ fix:深色主题按钮悬停效果不明显
+- 🛠️ fix:vless splithttp改回xhttp
+- 🛠️ 优化性能
+- 🛠️ fix:导入的节点sni未转义
+- 🛠️ fix:代理集合引入的已删除节点未从配置移除BUG
+- 🛠️ fix:缓存导致节点集合重复添加前缀
+- 🛠️ fix:yaml节点的值前导零丢失
+- 🛠️ fix:服务器地址为ipv6时emoji添加失败
+- 🛠️ fix:外部订阅流量带小数点导致同步失败
 ### v0.3.9 (2026-01-03)
 - 🌈 更新应用时增加使用代理重试更新
 - 🌈 优化批量修改节点时的订阅刷新性能

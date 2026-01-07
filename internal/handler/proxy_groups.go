@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	proxygroups "miaomiaowu/proxy_groups"
@@ -46,7 +44,6 @@ func (h *proxyGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ProxyGroupsSyncHandler handles POST requests to sync proxy groups config from remote
 type proxyGroupsSyncHandler struct {
 	configPath string
-	client     *http.Client
 }
 
 type proxyGroupsSyncRequest struct {
@@ -55,6 +52,7 @@ type proxyGroupsSyncRequest struct {
 
 type proxyGroupsSyncResponse struct {
 	Message   string `json:"message"`
+	SourceURL string `json:"source_url,omitempty"`
 	Timestamp string `json:"timestamp"`
 }
 
@@ -65,9 +63,6 @@ func NewProxyGroupsSyncHandler(configPath string) http.Handler {
 	}
 	return &proxyGroupsSyncHandler{
 		configPath: configPath,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
 }
 
@@ -84,69 +79,29 @@ func (h *proxyGroupsSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Determine source URL: request payload > environment variable
+	// Resolve the actual source URL (request > env > default)
 	sourceURL := payload.SourceURL
-	if sourceURL == "" {
-		sourceURL = os.Getenv("PROXY_GROUPS_SOURCE_URL")
-	}
-	if sourceURL == "" {
-		// Default GitHub URL
-		sourceURL = "https://raw.githubusercontent.com/你的用户名/你的仓库/main/configs/proxy-groups.json"
-	}
+	resolvedURL := proxygroups.ResolveSourceURL(sourceURL)
 
-	// Download config from remote
-	resp, err := h.client.Get(sourceURL)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Errorf("failed to download config: %w", err))
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		writeError(w, http.StatusBadGateway, fmt.Errorf("remote returned status %d", resp.StatusCode))
+	// Sync configuration from the resolved URL
+	if err := proxygroups.SyncFromSource(h.configPath, sourceURL); err != nil {
+		// Return appropriate HTTP status based on error type
+		switch {
+		case errors.Is(err, proxygroups.ErrInvalidConfig):
+			writeError(w, http.StatusBadRequest, err)
+		case errors.Is(err, proxygroups.ErrDownloadFailed):
+			writeError(w, http.StatusBadGateway, err)
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
 		return
 	}
 
-	// Read response body
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Errorf("failed to read response: %w", err))
-		return
-	}
-
-	// Validate JSON structure
-	var parsed any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON config: %w", err))
-		return
-	}
-
-	// Ensure target directory exists
-	dir := filepath.Dir(h.configPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to create config dir: %w", err))
-		return
-	}
-
-	// Write to temporary file first (atomic write)
-	tmpPath := h.configPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to write temp file: %w", err))
-		return
-	}
-
-	// Rename to final destination
-	if err := os.Rename(tmpPath, h.configPath); err != nil {
-		// Cleanup temp file on error
-		_ = os.Remove(tmpPath)
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to replace config file: %w", err))
-		return
-	}
-
-	// Return success response
+	// Return success response with source URL
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(proxyGroupsSyncResponse{
-		Message:   "代理组配置同步成功",
+		Message:   fmt.Sprintf("代理组配置同步成功 (来源: %s)", resolvedURL),
+		SourceURL: resolvedURL,
 		Timestamp: time.Now().Format(time.RFC3339),
 	})
 }
