@@ -2877,7 +2877,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             <TableHead style={{ width: '90px' }}>协议</TableHead>
                             <TableHead>节点名称</TableHead>
                             <TableHead style={{ width: '120px' }}>标签</TableHead>
-                            <TableHead>服务器地址</TableHead>
+                            <TableHead style={{ width: '280px', maxWidth: '280px' }}>服务器地址</TableHead>
                             <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
                             <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
                           </TableRow>
@@ -3026,7 +3026,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell style={{ maxWidth: '280px' }}>
                               <div className='text-sm text-muted-foreground'>
                                 {node.parsed ? (
                                   <div className='flex items-center gap-2 min-w-0'>
