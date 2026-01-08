@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -506,6 +507,16 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// 使用订阅名称
 	attachmentName := url.PathEscape(displayName)
 
+	// 获取用户的节点排序配置
+	var nodeOrder []int64
+	if username != "" && h.repo != nil {
+		settings, err := h.repo.GetUserSettings(r.Context(), username)
+		if err == nil {
+			nodeOrder = settings.NodeOrder
+			log.Printf("[Subscription] User %s has %d nodes in node order", username, len(nodeOrder))
+		}
+	}
+
 	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
 	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
 		// 使用 yaml.Node 来保持原始类型信息（避免 563905e2 被解析为科学计数法）
@@ -515,6 +526,21 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			// yamlNode.Content[0] 是文档节点，yamlNode.Content[0].Content 是根映射的键值对
 			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
 				rootMap := yamlNode.Content[0]
+
+				// 根据用户配置的节点顺序对 proxies 进行排序
+				if len(nodeOrder) > 0 && username != "" && h.repo != nil {
+					for i := 0; i < len(rootMap.Content); i += 2 {
+						if rootMap.Content[i].Value == "proxies" {
+							proxiesNode := rootMap.Content[i+1]
+							if proxiesNode.Kind == yaml.SequenceNode {
+								if err := sortProxiesByNodeOrder(r.Context(), h.repo, username, proxiesNode, nodeOrder); err != nil {
+									log.Printf("[Subscription] Failed to sort proxies by node order: %v", err)
+								}
+							}
+							break
+						}
+					}
+				}
 
 				// 重新排序 proxies 中每个节点的字段
 				for i := 0; i < len(rootMap.Content); i += 2 {
@@ -1067,4 +1093,115 @@ func reorderProxyGroupFields(groupNode *yaml.Node) {
 
 	// Replace the original content
 	groupNode.Content = newContent
+}
+
+// sortProxiesByNodeOrder 根据用户配置的节点顺序对 proxies 进行排序
+// nodeOrder 是节点 ID 的数组，proxiesNode 是 YAML 中的 proxies 序列节点
+func sortProxiesByNodeOrder(ctx context.Context, repo *storage.TrafficRepository, username string, proxiesNode *yaml.Node, nodeOrder []int64) error {
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return errors.New("invalid proxies node")
+	}
+	
+	if len(nodeOrder) == 0 || len(proxiesNode.Content) == 0 {
+		return nil
+	}
+
+	// 获取用户的所有节点信息
+	nodes, err := repo.ListNodes(ctx, username)
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	// 创建节点名称 -> 节点ID 的映射
+	nodeNameToID := make(map[string]int64)
+	for _, node := range nodes {
+		nodeNameToID[node.NodeName] = node.ID
+	}
+
+	// 创建节点 ID -> 排序位置的映射
+	nodeIDToPosition := make(map[int64]int)
+	for pos, nodeID := range nodeOrder {
+		nodeIDToPosition[nodeID] = pos
+	}
+
+	// 创建 proxy 节点的排序信息
+	type proxyWithOrder struct {
+		node     *yaml.Node
+		position int  // 在 nodeOrder 中的位置，-1 表示不在 nodeOrder 中
+		name     string
+	}
+
+	proxiesWithOrder := make([]proxyWithOrder, 0, len(proxiesNode.Content))
+
+	// 解析每个 proxy 节点，获取其名称和排序位置
+	for _, proxyNode := range proxiesNode.Content {
+		if proxyNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// 查找 proxy 的 name 字段
+		var proxyName string
+		for i := 0; i < len(proxyNode.Content); i += 2 {
+			if proxyNode.Content[i].Value == "name" {
+				if i+1 < len(proxyNode.Content) {
+					proxyName = proxyNode.Content[i+1].Value
+				}
+				break
+			}
+		}
+
+		if proxyName == "" {
+			// 如果没有 name 字段，保持原位置（放在最后）
+			proxiesWithOrder = append(proxiesWithOrder, proxyWithOrder{
+				node:     proxyNode,
+				position: -1,
+				name:     "",
+			})
+			continue
+		}
+
+		// 查找该节点名称对应的节点 ID
+		nodeID, exists := nodeNameToID[proxyName]
+		position := -1
+		if exists {
+			// 查找该节点 ID 在 nodeOrder 中的位置
+			if pos, found := nodeIDToPosition[nodeID]; found {
+				position = pos
+			}
+		}
+
+		proxiesWithOrder = append(proxiesWithOrder, proxyWithOrder{
+			node:     proxyNode,
+			position: position,
+			name:     proxyName,
+		})
+	}
+
+	// 排序：按 position 升序排序，-1 的放在最后
+	// 对于 position 相同的节点，保持原有顺序（稳定排序）
+	sort.SliceStable(proxiesWithOrder, func(i, j int) bool {
+		posI := proxiesWithOrder[i].position
+		posJ := proxiesWithOrder[j].position
+
+		// 如果 i 不在 nodeOrder 中，i 应该在 j 之后
+		if posI == -1 {
+			return false
+		}
+		// 如果 j 不在 nodeOrder 中，i 应该在 j 之前
+		if posJ == -1 {
+			return true
+		}
+		// 都在 nodeOrder 中，按 position 排序
+		return posI < posJ
+	})
+
+	// 更新 proxiesNode 的内容
+	newContent := make([]*yaml.Node, 0, len(proxiesWithOrder))
+	for _, p := range proxiesWithOrder {
+		newContent = append(newContent, p.node)
+	}
+	proxiesNode.Content = newContent
+
+	log.Printf("[Subscription] Sorted %d proxies according to node order (user: %s)", len(proxiesWithOrder), username)
+	return nil
 }

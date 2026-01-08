@@ -1224,7 +1224,7 @@ function SubscribeFilesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
-      toast.success('自动同步设置已更新')
+      toast.success('规则同步设置已更新')
     },
     onError: (error) => {
       handleServerError(error)
@@ -2326,7 +2326,7 @@ function SubscribeFilesPage() {
                     width: '160px'
                   },
                   {
-                    header: '自动同步',
+                    header: '规则同步',
                     cell: (file) => (
                       <Switch
                         checked={file.auto_sync_custom_rules || false}
@@ -2453,7 +2453,7 @@ function SubscribeFilesPage() {
                       )
                     },
                     {
-                      label: '自动同步',
+                      label: '规则同步',
                       value: (file) => (
                         <div className='flex items-center gap-2'>
                           <Switch
