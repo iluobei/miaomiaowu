@@ -221,6 +221,38 @@ func (p *ClashMetaProducer) Produce(proxies []Proxy, outputType string, opts *Pr
 			}
 			transformed["pre-shared-key"] = GetString(transformed, "preshared-key")
 
+			// allowed-ips: 确保是数组类型
+			if IsPresent(transformed, "allowed-ips") {
+				allowedIPs := transformed["allowed-ips"]
+				switch v := allowedIPs.(type) {
+				case string:
+					// 如果是字符串，尝试解析为数组
+					if v != "" {
+						// 尝试 JSON 解析
+						var arr []string
+						if err := json.Unmarshal([]byte(v), &arr); err == nil {
+							transformed["allowed-ips"] = arr
+						} else {
+							// 如果 JSON 解析失败，按逗号分割
+							parts := strings.Split(v, ",")
+							arr := make([]string, 0, len(parts))
+							for _, part := range parts {
+								if trimmed := strings.TrimSpace(part); trimmed != "" {
+									arr = append(arr, trimmed)
+								}
+							}
+							if len(arr) > 0 {
+								transformed["allowed-ips"] = arr
+							}
+						}
+					}
+				case []interface{}:
+					// 已经是数组，保持不变
+				case []string:
+					// 已经是字符串数组，保持不变
+				}
+			}
+
 		case "snell":
 			version := GetInt(transformed, "version")
 			if version < 3 {

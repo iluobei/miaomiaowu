@@ -555,6 +555,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					if rootMap.Content[i].Value == "proxies" {
 						proxiesNode := rootMap.Content[i+1]
 						if proxiesNode.Kind == yaml.SequenceNode {
+							// 先修复 WireGuard 节点的 allowed-ips 字段
+							fixWireGuardAllowedIPs(proxiesNode)
 							reorderProxies(proxiesNode)
 						}
 						break
@@ -951,6 +953,65 @@ func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType st
 	}
 }
 
+// fixWireGuardAllowedIPs fixes allowed-ips field type for WireGuard nodes
+func fixWireGuardAllowedIPs(proxiesNode *yaml.Node) {
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return
+	}
+
+	for _, proxyNode := range proxiesNode.Content {
+		if proxyNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// Check if this is a WireGuard node
+		isWireGuard := false
+		for i := 0; i < len(proxyNode.Content); i += 2 {
+			if i+1 >= len(proxyNode.Content) {
+				break
+			}
+			if proxyNode.Content[i].Value == "type" && proxyNode.Content[i+1].Value == "wireguard" {
+				isWireGuard = true
+				break
+			}
+		}
+
+		if !isWireGuard {
+			continue
+		}
+
+		// Fix allowed-ips field
+		for i := 0; i < len(proxyNode.Content); i += 2 {
+			if i+1 >= len(proxyNode.Content) {
+				break
+			}
+			keyNode := proxyNode.Content[i]
+			valueNode := proxyNode.Content[i+1]
+
+			if keyNode.Value == "allowed-ips" {
+				// If it's already a sequence node, just clear any string tags
+				if valueNode.Kind == yaml.SequenceNode {
+					valueNode.Tag = ""
+					valueNode.Style = 0
+					// Also clear tags from child nodes
+					for _, childNode := range valueNode.Content {
+						if childNode.Tag == "!!str" {
+							childNode.Tag = ""
+						}
+					}
+				} else if valueNode.Kind == yaml.ScalarNode {
+					// If it's a scalar with !!str tag or looks like a JSON array, clear the tag
+					if valueNode.Tag == "!!str" || valueNode.Tag == "tag:yaml.org,2002:str" {
+						valueNode.Tag = ""
+						valueNode.Style = 0
+					}
+				}
+				break
+			}
+		}
+	}
+}
+
 // reorderProxies reorders each proxy's fields in the sequence node
 func reorderProxies(seqNode *yaml.Node) {
 	if seqNode == nil || seqNode.Kind != yaml.SequenceNode {
@@ -987,6 +1048,17 @@ func reorderProxyNode(proxyNode *yaml.Node) {
 		}
 		keyNode := proxyNode.Content[i]
 		valueNode := proxyNode.Content[i+1]
+
+		// Special handling for allowed-ips field to ensure it's treated as an array
+		if keyNode.Value == "allowed-ips" && valueNode.Kind == yaml.ScalarNode {
+			// If it's a scalar string that looks like a JSON array, mark it explicitly
+			if valueNode.Tag == "!!str" || (valueNode.Style == yaml.DoubleQuotedStyle &&
+				len(valueNode.Value) > 0 && valueNode.Value[0] == '[') {
+				// Remove the !!str tag and let YAML infer the type
+				valueNode.Tag = ""
+				valueNode.Style = 0
+			}
+		}
 
 		// Check if this is a priority field
 		isPriority := false
