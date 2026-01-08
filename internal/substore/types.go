@@ -7,6 +7,7 @@ type Proxy map[string]interface{}
 // ProduceOptions contains options for proxy production
 type ProduceOptions struct {
 	IncludeUnsupportedProxy bool
+	ClientCompatibilityMode bool // Auto-filter incompatible nodes for clients
 	UseMihomoExternal       bool
 	LocalPort               int
 	DefaultNameserver       []string

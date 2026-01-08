@@ -46,6 +46,7 @@ function SystemSettingsPage() {
   const [useNewTemplateSystem, setUseNewTemplateSystem] = useState(true)
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
   const [proxyGroupsSourceUrl, setProxyGroupsSourceUrl] = useState('')
+  const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
 
   // Sync proxy group categories mutation
   const syncProxyGroupsMutation = useSyncProxyGroupCategories()
@@ -66,6 +67,7 @@ function SystemSettingsPage() {
         use_new_template_system: boolean
         enable_proxy_provider: boolean
         proxy_groups_source_url: string
+        client_compatibility_mode: boolean
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -85,6 +87,7 @@ function SystemSettingsPage() {
       setUseNewTemplateSystem(userConfig.use_new_template_system !== false) // 默认为 true
       setEnableProxyProvider(userConfig.enable_proxy_provider || false)
       setProxyGroupsSourceUrl(userConfig.proxy_groups_source_url || '')
+      setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
     }
   }, [userConfig])
 
@@ -101,6 +104,7 @@ function SystemSettingsPage() {
       use_new_template_system: boolean
       enable_proxy_provider: boolean
       proxy_groups_source_url: string
+      client_compatibility_mode: boolean
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -121,6 +125,7 @@ function SystemSettingsPage() {
       setUseNewTemplateSystem(variables.use_new_template_system)
       setEnableProxyProvider(variables.enable_proxy_provider)
       setProxyGroupsSourceUrl(variables.proxy_groups_source_url || '')
+      setClientCompatibilityMode(variables.client_compatibility_mode)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -142,6 +147,7 @@ function SystemSettingsPage() {
     use_new_template_system: boolean
     enable_proxy_provider: boolean
     proxy_groups_source_url: string
+    client_compatibility_mode: boolean
   }>) => {
     updateConfigMutation.mutate({
       force_sync_external: forceSyncExternal,
@@ -155,6 +161,7 @@ function SystemSettingsPage() {
       use_new_template_system: useNewTemplateSystem,
       enable_proxy_provider: enableProxyProvider,
       proxy_groups_source_url: proxyGroupsSourceUrl,
+      client_compatibility_mode: clientCompatibilityMode,
       ...updates,
     })
   }
@@ -462,6 +469,25 @@ function SystemSettingsPage() {
                     }}
                   />
                   <p className='text-xs text-muted-foreground'>留空使用系统默认地址或环境变量配置</p>
+                </div>
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex-1 space-y-0.5'>
+                    <Label htmlFor='client-compatibility-mode' className='font-medium'>
+                      客户端兼容模式
+                    </Label>
+                    <p className='text-sm text-muted-foreground'>
+                      自动过滤不兼容的节点 (如 WireGuard),仅记录日志
+                    </p>
+                  </div>
+                  <Switch
+                    id='client-compatibility-mode'
+                    checked={clientCompatibilityMode}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                    onCheckedChange={(checked) => {
+                      setClientCompatibilityMode(checked)
+                      updateConfig({ client_compatibility_mode: checked })
+                    }}
+                  />
                 </div>
                 <Button
                   onClick={() => {

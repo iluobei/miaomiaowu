@@ -255,7 +255,8 @@ type UserSettings struct {
 
 // SystemConfig represents global system configuration shared across all users.
 type SystemConfig struct {
-	ProxyGroupsSourceURL string // Remote URL for proxy groups configuration
+	ProxyGroupsSourceURL     string // Remote URL for proxy groups configuration
+	ClientCompatibilityMode  bool   // Auto-filter incompatible nodes for clients
 }
 
 // ExternalSubscription represents an external subscription URL imported by user.
@@ -809,6 +810,11 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 `
 	if _, err := r.db.Exec(ensureSystemConfigRow); err != nil {
 		return fmt.Errorf("seed system_config: %w", err)
+	}
+
+	// Add client_compatibility_mode column to system_config table
+	if err := r.ensureSystemConfigColumn("client_compatibility_mode", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
 	}
 
 	const customRulesSchema = `
@@ -1691,6 +1697,38 @@ func (r *TrafficRepository) ensureProxyProviderConfigColumn(name, definition str
 	}
 
 	alter := fmt.Sprintf("ALTER TABLE proxy_provider_configs ADD COLUMN %s %s", name, definition)
+	if _, err := r.db.Exec(alter); err != nil {
+		return fmt.Errorf("add column %s: %w", name, err)
+	}
+
+	return nil
+}
+
+func (r *TrafficRepository) ensureSystemConfigColumn(name, definition string) error {
+	rows, err := r.db.Query(`PRAGMA table_info(system_config)`)
+	if err != nil {
+		return fmt.Errorf("system_config table info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			colName    string
+			colType    string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &defaultVal, &pk); err != nil {
+			return fmt.Errorf("scan table info: %w", err)
+		}
+		if strings.EqualFold(colName, name) {
+			return nil
+		}
+	}
+
+	alter := fmt.Sprintf("ALTER TABLE system_config ADD COLUMN %s %s", name, definition)
 	if _, err := r.db.Exec(alter); err != nil {
 		return fmt.Errorf("add column %s: %w", name, err)
 	}
@@ -4104,13 +4142,14 @@ func (r *TrafficRepository) DeleteProxyProviderConfig(ctx context.Context, id in
 // Returns an empty SystemConfig if the row doesn't exist (should not happen after migration).
 func (r *TrafficRepository) GetSystemConfig(ctx context.Context) (SystemConfig, error) {
 	const query = `
-SELECT proxy_groups_source_url
+SELECT proxy_groups_source_url, client_compatibility_mode
 FROM system_config
 WHERE id = 1
 `
 
 	var cfg SystemConfig
-	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.ProxyGroupsSourceURL)
+	var compatibilityMode int
+	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.ProxyGroupsSourceURL, &compatibilityMode)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Return empty config if row doesn't exist (defensive)
@@ -4119,6 +4158,7 @@ WHERE id = 1
 		return SystemConfig{}, fmt.Errorf("query system config: %w", err)
 	}
 
+	cfg.ClientCompatibilityMode = compatibilityMode != 0
 	return cfg, nil
 }
 
@@ -4128,11 +4168,17 @@ func (r *TrafficRepository) UpdateSystemConfig(ctx context.Context, cfg SystemCo
 	const updateStmt = `
 UPDATE system_config
 SET proxy_groups_source_url = ?,
+    client_compatibility_mode = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 1
 `
 
-	result, err := r.db.ExecContext(ctx, updateStmt, cfg.ProxyGroupsSourceURL)
+	compatibilityMode := 0
+	if cfg.ClientCompatibilityMode {
+		compatibilityMode = 1
+	}
+
+	result, err := r.db.ExecContext(ctx, updateStmt, cfg.ProxyGroupsSourceURL, compatibilityMode)
 	if err != nil {
 		return fmt.Errorf("update system config: %w", err)
 	}
@@ -4145,10 +4191,10 @@ WHERE id = 1
 	// If no rows were updated, insert the singleton row (defensive fallback)
 	if rowsAffected == 0 {
 		const insertStmt = `
-INSERT INTO system_config (id, proxy_groups_source_url)
-VALUES (1, ?)
+INSERT INTO system_config (id, proxy_groups_source_url, client_compatibility_mode)
+VALUES (1, ?, ?)
 `
-		if _, err := r.db.ExecContext(ctx, insertStmt, cfg.ProxyGroupsSourceURL); err != nil {
+		if _, err := r.db.ExecContext(ctx, insertStmt, cfg.ProxyGroupsSourceURL, compatibilityMode); err != nil {
 			return fmt.Errorf("insert system config: %w", err)
 		}
 	}

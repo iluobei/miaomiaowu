@@ -13,35 +13,37 @@ import (
 )
 
 type userConfigRequest struct {
-	ForceSyncExternal    bool    `json:"force_sync_external"`
-	MatchRule            string  `json:"match_rule"`
-	SyncScope            string  `json:"sync_scope"`
-	KeepNodeName         bool    `json:"keep_node_name"`
-	CacheExpireMinutes   int     `json:"cache_expire_minutes"`
-	SyncTraffic          bool    `json:"sync_traffic"`
-	EnableProbeBinding   bool    `json:"enable_probe_binding"`
-	CustomRulesEnabled   bool    `json:"custom_rules_enabled"`
-	EnableShortLink      bool    `json:"enable_short_link"`
-	UseNewTemplateSystem *bool   `json:"use_new_template_system"` // nil means not provided, default true
-	EnableProxyProvider  bool    `json:"enable_proxy_provider"`
-	NodeOrder            []int64 `json:"node_order"` // Node display order (array of node IDs)
-	ProxyGroupsSourceURL string  `json:"proxy_groups_source_url"`
+	ForceSyncExternal       bool    `json:"force_sync_external"`
+	MatchRule               string  `json:"match_rule"`
+	SyncScope               string  `json:"sync_scope"`
+	KeepNodeName            bool    `json:"keep_node_name"`
+	CacheExpireMinutes      int     `json:"cache_expire_minutes"`
+	SyncTraffic             bool    `json:"sync_traffic"`
+	EnableProbeBinding      bool    `json:"enable_probe_binding"`
+	CustomRulesEnabled      bool    `json:"custom_rules_enabled"`
+	EnableShortLink         bool    `json:"enable_short_link"`
+	UseNewTemplateSystem    *bool   `json:"use_new_template_system"` // nil means not provided, default true
+	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
+	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
+	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
+	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
 }
 
 type userConfigResponse struct {
-	ForceSyncExternal    bool    `json:"force_sync_external"`
-	MatchRule            string  `json:"match_rule"`
-	SyncScope            string  `json:"sync_scope"`
-	KeepNodeName         bool    `json:"keep_node_name"`
-	CacheExpireMinutes   int     `json:"cache_expire_minutes"`
-	SyncTraffic          bool    `json:"sync_traffic"`
-	EnableProbeBinding   bool    `json:"enable_probe_binding"`
-	CustomRulesEnabled   bool    `json:"custom_rules_enabled"`
-	EnableShortLink      bool    `json:"enable_short_link"`
-	UseNewTemplateSystem bool    `json:"use_new_template_system"`
-	EnableProxyProvider  bool    `json:"enable_proxy_provider"`
-	NodeOrder            []int64 `json:"node_order"` // Node display order (array of node IDs)
-	ProxyGroupsSourceURL string  `json:"proxy_groups_source_url"`
+	ForceSyncExternal       bool    `json:"force_sync_external"`
+	MatchRule               string  `json:"match_rule"`
+	SyncScope               string  `json:"sync_scope"`
+	KeepNodeName            bool    `json:"keep_node_name"`
+	CacheExpireMinutes      int     `json:"cache_expire_minutes"`
+	SyncTraffic             bool    `json:"sync_traffic"`
+	EnableProbeBinding      bool    `json:"enable_probe_binding"`
+	CustomRulesEnabled      bool    `json:"custom_rules_enabled"`
+	EnableShortLink         bool    `json:"enable_short_link"`
+	UseNewTemplateSystem    bool    `json:"use_new_template_system"`
+	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
+	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
+	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
+	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -80,19 +82,20 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		if errors.Is(err, storage.ErrUserSettingsNotFound) {
 			// Return default settings if not found
 			resp := userConfigResponse{
-				ForceSyncExternal:    false,
-				MatchRule:            "node_name",
-				SyncScope:            "saved_only",
-				KeepNodeName:         true,
-				CacheExpireMinutes:   0,
-				SyncTraffic:          false,
-				EnableProbeBinding:   false,
-				CustomRulesEnabled:   true,  // 自定义规则始终启用
-				EnableShortLink:      false,
-				UseNewTemplateSystem: true,  // 默认使用新模板系统
-				EnableProxyProvider:  false,
-				NodeOrder:            []int64{},
-				ProxyGroupsSourceURL: systemConfig.ProxyGroupsSourceURL,
+				ForceSyncExternal:       false,
+				MatchRule:               "node_name",
+				SyncScope:               "saved_only",
+				KeepNodeName:            true,
+				CacheExpireMinutes:      0,
+				SyncTraffic:             false,
+				EnableProbeBinding:      false,
+				CustomRulesEnabled:      true,  // 自定义规则始终启用
+				EnableShortLink:         false,
+				UseNewTemplateSystem:    true,  // 默认使用新模板系统
+				EnableProxyProvider:     false,
+				NodeOrder:               []int64{},
+				ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
+				ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -104,19 +107,20 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 	}
 
 	resp := userConfigResponse{
-		ForceSyncExternal:    settings.ForceSyncExternal,
-		MatchRule:            settings.MatchRule,
-		SyncScope:            settings.SyncScope,
-		KeepNodeName:         settings.KeepNodeName,
-		CacheExpireMinutes:   settings.CacheExpireMinutes,
-		SyncTraffic:          settings.SyncTraffic,
-		EnableProbeBinding:   settings.EnableProbeBinding,
-		CustomRulesEnabled:   true, // 自定义规则始终启用
-		EnableShortLink:      settings.EnableShortLink,
-		UseNewTemplateSystem: settings.UseNewTemplateSystem,
-		EnableProxyProvider:  settings.EnableProxyProvider,
-		NodeOrder:            settings.NodeOrder,
-		ProxyGroupsSourceURL: systemConfig.ProxyGroupsSourceURL,
+		ForceSyncExternal:       settings.ForceSyncExternal,
+		MatchRule:               settings.MatchRule,
+		SyncScope:               settings.SyncScope,
+		KeepNodeName:            settings.KeepNodeName,
+		CacheExpireMinutes:      settings.CacheExpireMinutes,
+		SyncTraffic:             settings.SyncTraffic,
+		EnableProbeBinding:      settings.EnableProbeBinding,
+		CustomRulesEnabled:      true, // 自定义规则始终启用
+		EnableShortLink:         settings.EnableShortLink,
+		UseNewTemplateSystem:    settings.UseNewTemplateSystem,
+		EnableProxyProvider:     settings.EnableProxyProvider,
+		NodeOrder:               settings.NodeOrder,
+		ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
+		ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -193,7 +197,8 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 
 	// Update system config with proxy groups source URL
 	systemConfig := storage.SystemConfig{
-		ProxyGroupsSourceURL: proxyGroupsSourceURL,
+		ProxyGroupsSourceURL:    proxyGroupsSourceURL,
+		ClientCompatibilityMode: payload.ClientCompatibilityMode,
 	}
 	if err := repo.UpdateSystemConfig(r.Context(), systemConfig); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("update system config: %w", err))
@@ -201,19 +206,20 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	}
 
 	resp := userConfigResponse{
-		ForceSyncExternal:    settings.ForceSyncExternal,
-		MatchRule:            settings.MatchRule,
-		SyncScope:            settings.SyncScope,
-		KeepNodeName:         settings.KeepNodeName,
-		CacheExpireMinutes:   settings.CacheExpireMinutes,
-		SyncTraffic:          settings.SyncTraffic,
-		EnableProbeBinding:   settings.EnableProbeBinding,
-		CustomRulesEnabled:   true, // 自定义规则始终启用
-		EnableShortLink:      settings.EnableShortLink,
-		UseNewTemplateSystem: settings.UseNewTemplateSystem,
-		EnableProxyProvider:  settings.EnableProxyProvider,
-		NodeOrder:            settings.NodeOrder,
-		ProxyGroupsSourceURL: proxyGroupsSourceURL,
+		ForceSyncExternal:       settings.ForceSyncExternal,
+		MatchRule:               settings.MatchRule,
+		SyncScope:               settings.SyncScope,
+		KeepNodeName:            settings.KeepNodeName,
+		CacheExpireMinutes:      settings.CacheExpireMinutes,
+		SyncTraffic:             settings.SyncTraffic,
+		EnableProbeBinding:      settings.EnableProbeBinding,
+		CustomRulesEnabled:      true, // 自定义规则始终启用
+		EnableShortLink:         settings.EnableShortLink,
+		UseNewTemplateSystem:    settings.UseNewTemplateSystem,
+		EnableProxyProvider:     settings.EnableProxyProvider,
+		NodeOrder:               settings.NodeOrder,
+		ProxyGroupsSourceURL:    proxyGroupsSourceURL,
+		ClientCompatibilityMode: payload.ClientCompatibilityMode,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
