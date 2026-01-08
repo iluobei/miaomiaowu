@@ -1055,6 +1055,16 @@ function parseWireGuard(url: string): ProxyNode | null {
         } else if (['udp'].includes(key)) {
           // UDP 参数：支持 true/1 或 false/0
           node.udp = /(true)|1/i.test(value)
+        } else if (key === 'allowed-ips') {
+          // allowed-ips 参数特殊处理：如果是 "[x.x.x.x/x, y.y.y.y/y]" 格式，转换为数组 ["x.x.x.x/x", "y.y.y.y/y"]
+          if (value.startsWith('[') && value.endsWith(']')) {
+            // 去掉方括号，按逗号分割并去除空白
+            const innerValue = value.slice(1, -1)
+            node[key] = innerValue.split(',').map(v => v.trim()).filter(v => v)
+          } else {
+            // 其他格式保持原样
+            node[key] = value
+          }
         } else if (!['name', 'type', 'server', 'port', 'private-key', 'flag'].includes(key)) {
           // 其他未知参数直接添加
           node[key] = value
