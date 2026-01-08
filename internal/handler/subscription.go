@@ -408,12 +408,14 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	externalTrafficLimit, externalTrafficUsed := int64(0), int64(0)
 	usesProbeNodes := false      // 是否使用了探针节点
 	probeBindingEnabled := false // 是否开启了探针服务器绑定
+
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
 		if err == nil {
 			probeBindingEnabled = settings.EnableProbeBinding
-			if settings.SyncTraffic {
-				log.Printf("[Subscription] User %s has SyncTraffic enabled, checking for external subscription nodes", username)
+
+			// 如果开启了探针绑定或流量同步，需要解析 YAML 获取节点信息
+			if probeBindingEnabled || settings.SyncTraffic {
 				// 解析 YAML 文件，获取其中使用的节点名称
 				var yamlConfig map[string]any
 				if err := yaml.Unmarshal(data, &yamlConfig); err == nil {
@@ -429,31 +431,37 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 							}
 						}
 
-						// 如果有节点名称，从数据库查询这些节点的 tag
+						// 如果有节点名称，从数据库查询这些节点
 						if len(usedNodeNames) > 0 {
 							log.Printf("[Subscription] Querying database for %d nodes", len(usedNodeNames))
 							nodes, err := h.repo.ListNodes(r.Context(), username)
 							if err == nil {
 								// 收集使用到的外部订阅名称（通过 tag 识别）
 								usedExternalSubs := make(map[string]bool)
+
 								for _, node := range nodes {
 									// 检查节点是否在订阅文件中
 									if usedNodeNames[node.NodeName] {
 										// 检测是否为探针节点（有绑定探针服务器）
-										if node.ProbeServer != "" {
+										if probeBindingEnabled && node.ProbeServer != "" {
 											usesProbeNodes = true
+											log.Printf("[Subscription] Detected probe node '%s' bound to server '%s'", node.NodeName, node.ProbeServer)
 										}
-										// 如果 tag 不是默认值，说明是外部订阅节点
-										if node.Tag != "" && node.Tag != "手动输入" {
-											usedExternalSubs[node.Tag] = true
-											log.Printf("[Subscription] Node '%s' is from external subscription '%s'", node.NodeName, node.Tag)
+
+										// 如果开启了流量同步，收集外部订阅节点
+										if settings.SyncTraffic {
+											// 如果 tag 不是默认值，说明是外部订阅节点
+											if node.Tag != "" && node.Tag != "手动输入" {
+												usedExternalSubs[node.Tag] = true
+												log.Printf("[Subscription] Node '%s' is from external subscription '%s'", node.NodeName, node.Tag)
+											}
 										}
 									}
 								}
 
-								// 如果有使用到外部订阅的节点，汇总这些订阅的流量
-								if len(usedExternalSubs) > 0 {
-									log.Printf("[Subscription] Found %d external subscriptions in use: %v", len(usedExternalSubs), getKeys(usedExternalSubs))
+								// 如果开启了流量同步且有使用到外部订阅的节点，汇总这些订阅的流量
+								if settings.SyncTraffic && len(usedExternalSubs) > 0 {
+									log.Printf("[Subscription] User %s has SyncTraffic enabled, found %d external subscriptions in use: %v", username, len(usedExternalSubs), getKeys(usedExternalSubs))
 									externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
 									if err == nil {
 										now := time.Now()
@@ -491,8 +499,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 									} else {
 										log.Printf("[Subscription] Failed to list external subscriptions: %v", err)
 									}
-								} else {
-									log.Printf("[Subscription] No external subscription nodes found in use")
+								} else if settings.SyncTraffic {
+									log.Printf("[Subscription] User %s has SyncTraffic enabled, but no external subscription nodes found in use", username)
 								}
 							} else {
 								log.Printf("[Subscription] Failed to list nodes: %v", err)
