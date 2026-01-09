@@ -1159,6 +1159,23 @@ function SubscribeFilesPage() {
     refetchOnWindowFocus: false,
   })
 
+  // 获取用户配置（包含节点排序）
+  const userConfigQuery = useQuery({
+    queryKey: ['user-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/config')
+      return response.data as {
+        force_sync_external: boolean
+        match_rule: string
+        cache_expire_minutes: number
+        sync_traffic: boolean
+        enable_probe_binding: boolean
+        node_order: number[]
+      }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+
   // 查询配置文件内容（编辑节点用）
   const nodesConfigQuery = useQuery({
     queryKey: ['nodes-config-content', editingNodesFile?.filename],
@@ -1585,6 +1602,9 @@ function SubscribeFilesPage() {
       if (usedNodeNames.size > 0 && nodesQuery.data?.nodes) {
         // 获取使用的节点的Clash配置
         const nodeConfigs: any[] = []
+        // 创建节点名称到节点ID的映射（用于后续排序）
+        const nodeNameToIdMap = new Map<string, number>()
+
         nodesQuery.data.nodes.forEach((node: any) => {
           if (usedNodeNames.has(node.node_name) && node.clash_config) {
             try {
@@ -1594,11 +1614,32 @@ function SubscribeFilesPage() {
               // 重新排序属性，确保 name, type, server, port 在前4位
               const orderedConfig = reorderProxyProperties(clashConfig)
               nodeConfigs.push(orderedConfig)
+              // 记录节点名称到ID的映射
+              nodeNameToIdMap.set(node.node_name, node.id)
             } catch (e) {
               console.error(`解析节点 ${node.node_name} 的配置失败:`, e)
             }
           }
         })
+
+        // 应用节点排序：根据用户配置的 node_order 对节点进行排序
+        if (nodeConfigs.length > 0 && userConfigQuery.data?.node_order) {
+          const nodeOrder = userConfigQuery.data.node_order
+          // 创建节点ID到排序位置的映射
+          const orderMap = new Map<number, number>()
+          nodeOrder.forEach((id, index) => orderMap.set(id, index))
+
+          // 按照 node_order 排序节点配置
+          nodeConfigs.sort((a, b) => {
+            const aId = nodeNameToIdMap.get(a.name)
+            const bId = nodeNameToIdMap.get(b.name)
+
+            const aOrder = aId !== undefined ? (orderMap.get(aId) ?? Infinity) : Infinity
+            const bOrder = bId !== undefined ? (orderMap.get(bId) ?? Infinity) : Infinity
+
+            return aOrder - bOrder
+          })
+        }
 
         // 更新proxies部分
         if (nodeConfigs.length > 0) {

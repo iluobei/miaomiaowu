@@ -472,6 +472,51 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// 获取用户的节点排序配置，需要在转换之前使用
+	var nodeOrder []int64
+	if username != "" && h.repo != nil {
+		settings, err := h.repo.GetUserSettings(r.Context(), username)
+		if err == nil {
+			nodeOrder = settings.NodeOrder
+			log.Printf("[Subscription] User %s has %d nodes in node order", username, len(nodeOrder))
+		}
+	}
+
+	// 在转换之前根据节点排序配置调整原始 YAML
+	// 这样转换后的任何格式都会保持正确的节点顺序
+	if len(nodeOrder) > 0 && username != "" && h.repo != nil {
+		var yamlNode yaml.Node
+		if err := yaml.Unmarshal(data, &yamlNode); err == nil {
+			shouldRewrite := false
+			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
+				rootMap := yamlNode.Content[0]
+				for i := 0; i < len(rootMap.Content); i += 2 {
+					if rootMap.Content[i].Value == "proxies" {
+						proxiesNode := rootMap.Content[i+1]
+						if proxiesNode.Kind == yaml.SequenceNode {
+							if err := sortProxiesByNodeOrder(r.Context(), h.repo, username, proxiesNode, nodeOrder); err != nil {
+								log.Printf("[Subscription] Failed to sort proxies by node order before conversion: %v", err)
+							} else {
+								shouldRewrite = true
+								log.Printf("[Subscription] Successfully sorted proxies by node order before conversion")
+							}
+						}
+						break
+					}
+				}
+			}
+
+			// 如果排序成功，重新序列化YAML并替换data
+			if shouldRewrite {
+				if reorderedData, err := MarshalYAMLWithIndent(&yamlNode); err == nil {
+					fixed := RemoveUnicodeEscapeQuotes(string(reorderedData))
+					data = []byte(fixed)
+					log.Printf("[Subscription] Rewrote YAML data with sorted proxies")
+				}
+			}
+		}
+	}
+
 	// 根据参数t的类型调用substore的转换代码
 	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
 	// 默认浏览器打开时直接输入文本, 不再下载问卷
@@ -524,17 +569,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// 使用订阅名称
 	attachmentName := url.PathEscape(displayName)
 
-	// 获取用户的节点排序配置
-	var nodeOrder []int64
-	if username != "" && h.repo != nil {
-		settings, err := h.repo.GetUserSettings(r.Context(), username)
-		if err == nil {
-			nodeOrder = settings.NodeOrder
-			log.Printf("[Subscription] User %s has %d nodes in node order", username, len(nodeOrder))
-		}
-	}
-
 	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
+	// 注意：节点排序已经在转换之前完成，这里只处理其他的YAML重排需求
 	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
 		// 使用 yaml.Node 来保持原始类型信息（避免 563905e2 被解析为科学计数法）
 		var yamlNode yaml.Node
@@ -544,20 +580,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if len(yamlNode.Content) > 0 && yamlNode.Content[0].Kind == yaml.MappingNode {
 				rootMap := yamlNode.Content[0]
 
-				// 根据用户配置的节点顺序对 proxies 进行排序
-				if len(nodeOrder) > 0 && username != "" && h.repo != nil {
-					for i := 0; i < len(rootMap.Content); i += 2 {
-						if rootMap.Content[i].Value == "proxies" {
-							proxiesNode := rootMap.Content[i+1]
-							if proxiesNode.Kind == yaml.SequenceNode {
-								if err := sortProxiesByNodeOrder(r.Context(), h.repo, username, proxiesNode, nodeOrder); err != nil {
-									log.Printf("[Subscription] Failed to sort proxies by node order: %v", err)
-								}
-							}
-							break
-						}
-					}
-				}
+				// 注意：节点排序已经在转换之前完成，这里不再重复排序
+				// 只处理 WireGuard 修复和字段重排
 
 				// 重新排序 proxies 中每个节点的字段
 				for i := 0; i < len(rootMap.Content); i += 2 {

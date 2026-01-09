@@ -857,8 +857,8 @@ function SubscriptionGeneratorPage() {
 
     setLoading(true)
     try {
-      // 获取选中的节点并转换为ProxyConfig
-      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      // 获取选中的节点并转换为ProxyConfig（使用排序后的节点列表）
+      const selectedNodes = sortedEnabledNodes.filter(n => selectedNodeIds.has(n.id))
       const proxies: ProxyConfig[] = selectedNodes.map(node => {
         try {
           return JSON.parse(node.clash_config) as ProxyConfig
@@ -953,8 +953,8 @@ function SubscriptionGeneratorPage() {
 
     setLoading(true)
     try {
-      // 获取选中的节点并转换为ProxyConfig
-      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      // 获取选中的节点并转换为ProxyConfig（使用排序后的节点列表）
+      const selectedNodes = sortedEnabledNodes.filter(n => selectedNodeIds.has(n.id))
       const proxies: ProxyConfig[] = selectedNodes.map(node => {
         try {
           return JSON.parse(node.clash_config) as ProxyConfig
@@ -1103,8 +1103,8 @@ function SubscriptionGeneratorPage() {
         proxies: group.proxies || []
       })) as ProxyGroup[]
 
-      // 获取用户选中的节点，添加默认的特殊节点
-      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      // 获取用户选中的节点，添加默认的特殊节点（使用排序后的节点列表）
+      const selectedNodes = sortedEnabledNodes.filter(n => selectedNodeIds.has(n.id))
       const nodeNames = selectedNodes.map(n => n.node_name)
       const specialNodes = ['♻️ 自动选择', '🚀 节点选择', 'DIRECT', 'REJECT']
       const availableNodes = [...specialNodes, ...nodeNames]
@@ -1713,8 +1713,8 @@ function SubscriptionGeneratorPage() {
         return
       }
 
-      // 获取选中的节点名称
-      const selectedNodes = savedNodes.filter(n => selectedNodeIds.has(n.id))
+      // 获取选中的节点名称（使用排序后的节点列表）
+      const selectedNodes = sortedEnabledNodes.filter(n => selectedNodeIds.has(n.id))
       const nodeNames = selectedNodes.map(n => n.node_name)
 
       // 按地区分类节点
