@@ -250,6 +250,9 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.4.2 (2026-01-09)
+- 🛠️ fix:探针与节点绑定流量统计错误
+- 🛠️ 切回旧版shadowrocket.go
 ### v0.4.1 (2026-01-09)
 - 🌈 增加订阅配置节点排序
 - 🛠️ fix:v2ray客户端ss缺少混淆参数
