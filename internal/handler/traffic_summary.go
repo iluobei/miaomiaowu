@@ -86,7 +86,7 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	var totalLimit, totalRemaining, totalUsed int64
 	var probeErr error
 
-	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, username)
+	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, username, nil)
 	if probeErr != nil {
 		// Log the error but continue to try external subscription traffic
 		if errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
@@ -145,7 +145,7 @@ func (h *TrafficSummaryHandler) RecordDailyUsage(ctx context.Context) error {
 	var totalLimit, totalRemaining, totalUsed int64
 	var probeErr error
 
-	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, "")
+	totalLimit, totalRemaining, totalUsed, probeErr = h.fetchTotals(ctx, "", nil)
 	if probeErr != nil {
 		if errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
 			log.Printf("[Traffic Record] Probe not configured, will use external subscription traffic only")
@@ -321,9 +321,53 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTrafficInfo(ctx context
 	return sub, nil
 }
 
-func (h *TrafficSummaryHandler) fetchTotals(ctx context.Context, username string) (int64, int64, int64, error) {
+func (h *TrafficSummaryHandler) fetchTotals(ctx context.Context, username string, allowedProbeServers map[string]struct{}) (int64, int64, int64, error) {
 	if h.repo == nil {
 		return 0, 0, 0, errors.New("traffic repository not configured")
+	}
+
+	// Determine which probe servers to include
+	var probeFilter map[string]struct{}
+
+	// If allowedProbeServers is explicitly provided, use it as the filter
+	if allowedProbeServers != nil {
+		probeFilter = make(map[string]struct{}, len(allowedProbeServers))
+		for name := range allowedProbeServers {
+			trimmed := strings.TrimSpace(name)
+			if trimmed != "" {
+				probeFilter[trimmed] = struct{}{}
+			}
+		}
+
+		// If filter is provided but empty after trimming, return zero traffic
+		if len(probeFilter) == 0 {
+			log.Printf("[Traffic Fetch] Probe filter provided but no valid servers referenced, returning zero traffic")
+			return 0, 0, 0, nil
+		}
+	} else if username != "" {
+		// No explicit filter provided, check if probe binding is enabled for this user
+		userSettings, err := h.repo.GetUserSettings(ctx, username)
+		if err == nil && userSettings.EnableProbeBinding {
+			// Get all nodes for this user
+			nodes, err := h.repo.ListNodes(ctx, username)
+			if err == nil {
+				// Collect unique probe server names that are bound to nodes
+				boundProbeServers := make(map[string]struct{})
+				for _, node := range nodes {
+					name := strings.TrimSpace(node.ProbeServer)
+					if name != "" {
+						boundProbeServers[name] = struct{}{}
+					}
+				}
+
+				if len(boundProbeServers) > 0 {
+					probeFilter = boundProbeServers
+				} else {
+					log.Printf("[Traffic Fetch] Probe binding enabled but no nodes have bound servers, returning zero traffic")
+					return 0, 0, 0, nil
+				}
+			}
+		}
 	}
 
 	cfg, err := h.repo.GetProbeConfig(ctx)
@@ -335,38 +379,26 @@ func (h *TrafficSummaryHandler) fetchTotals(ctx context.Context, username string
 		return 0, 0, 0, errors.New("no probe servers configured")
 	}
 
-	// Get user settings to check if probe binding is enabled
-	if username != "" {
-		userSettings, err := h.repo.GetUserSettings(ctx, username)
-		if err == nil && userSettings.EnableProbeBinding {
-			// Get all nodes for this user
-			nodes, err := h.repo.ListNodes(ctx, username)
-			if err == nil {
-				// Collect unique probe server names that are bound to nodes
-				boundProbeServers := make(map[string]bool)
-				for _, node := range nodes {
-					if node.ProbeServer != "" {
-						boundProbeServers[node.ProbeServer] = true
-					}
-				}
-
-				if len(boundProbeServers) > 0 {
-					// Filter servers to only include bound ones
-					filteredServers := make([]storage.ProbeServer, 0)
-					for _, srv := range cfg.Servers {
-						name := strings.TrimSpace(srv.Name)
-						if boundProbeServers[name] {
-							filteredServers = append(filteredServers, srv)
-						}
-					}
-					cfg.Servers = filteredServers
-					log.Printf("[Traffic Fetch] Probe binding enabled, filtered to %d bound servers", len(cfg.Servers))
-				} else {
-					log.Printf("[Traffic Fetch] Probe binding enabled but no nodes have bound servers, returning zero traffic")
-					return 0, 0, 0, nil
-				}
+	// Apply probe filter if one was determined
+	if probeFilter != nil {
+		filteredServers := make([]storage.ProbeServer, 0, len(cfg.Servers))
+		for _, srv := range cfg.Servers {
+			name := strings.TrimSpace(srv.Name)
+			if name == "" {
+				continue
+			}
+			if _, ok := probeFilter[name]; ok {
+				filteredServers = append(filteredServers, srv)
 			}
 		}
+
+		if len(filteredServers) == 0 {
+			log.Printf("[Traffic Fetch] Probe filter applied but no matching servers found, returning zero traffic")
+			return 0, 0, 0, nil
+		}
+
+		cfg.Servers = filteredServers
+		log.Printf("[Traffic Fetch] Filtered to %d probe servers based on bindings", len(cfg.Servers))
 	}
 
 	serverIDs := make([]string, 0, len(cfg.Servers))

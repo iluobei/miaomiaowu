@@ -218,13 +218,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// Get username from context
 	username := auth.UsernameFromContext(r.Context())
 
-	// 尝试获取流量信息，如果探针报错则跳过流量统计，不影响订阅输出
-	totalLimit, _, totalUsed, err := h.summary.fetchTotals(r.Context(), username)
-	hasTrafficInfo := err == nil
-
 	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
 	var subscribeFile storage.SubscribeFile
 	var displayName string
+	var err error
 
 	if filename != "" {
 		subscribeFile, err = h.repo.GetSubscribeFileByFilename(r.Context(), filename)
@@ -360,54 +357,12 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// 根据参数t的类型调用substore的转换代码
-	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
-	// 默认浏览器打开时直接输入文本, 不再下载问卷
-	contentType := "text/yaml; charset=utf-8; charset=UTF-8"
-	ext := filepath.Ext(filename)
-	if ext == "" {
-		ext = ".yaml"
-	}
-
-	// clash 和 clashmeta 类型直接输出源文件, 不需要转换
-	if clientType != "" && clientType != "clash" && clientType != "clashmeta" {
-		// Convert subscription using substore producers
-		convertedData, err := h.convertSubscription(data, clientType)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("failed to convert subscription for client %s: %w", clientType, err))
-			return
-		}
-		data = convertedData
-
-		// Set content type and extension based on client type
-		switch clientType {
-		case "surge", "surgemac", "loon", "qx", "surfboard", "shadowrocket":
-			// Text-based formats
-			contentType = "text/plain; charset=utf-8"
-			ext = ".txt"
-		case "sing-box":
-			// JSON format
-			contentType = "application/json; charset=utf-8"
-			ext = ".json"
-		case "v2ray":
-			// Base64 format
-			contentType = "text/plain; charset=utf-8"
-			ext = ".txt"
-		case "uri":
-			// URI format
-			contentType = "text/plain; charset=utf-8"
-			ext = ".txt"
-		default:
-			// YAML-based formats (clash, clashmeta, stash, shadowrocket, egern)
-			contentType = "text/yaml; charset=utf-8"
-			ext = ".yaml"
-		}
-	}
-
-	// 检查是否需要汇总外部订阅的流量信息
+	// 在转换订阅格式之前，先收集探针服务器和外部订阅流量信息
+	// 这样可以确保无论订阅被转换成什么格式，都能正确收集信息
 	externalTrafficLimit, externalTrafficUsed := int64(0), int64(0)
-	usesProbeNodes := false      // 是否使用了探针节点
-	probeBindingEnabled := false // 是否开启了探针服务器绑定
+	usesProbeNodes := false                      // 是否使用了探针节点
+	probeBindingEnabled := false                 // 是否开启了探针服务器绑定
+	var usedProbeServers map[string]struct{}     // 订阅文件中使用的探针服务器列表
 
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
@@ -445,6 +400,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 										// 检测是否为探针节点（有绑定探针服务器）
 										if probeBindingEnabled && node.ProbeServer != "" {
 											usesProbeNodes = true
+											// 收集订阅文件中使用的探针服务器
+											if usedProbeServers == nil {
+												usedProbeServers = make(map[string]struct{})
+											}
+											usedProbeServers[node.ProbeServer] = struct{}{}
 											log.Printf("[Subscription] Detected probe node '%s' bound to server '%s'", node.NodeName, node.ProbeServer)
 										}
 
@@ -511,6 +471,55 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+
+	// 根据参数t的类型调用substore的转换代码
+	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
+	// 默认浏览器打开时直接输入文本, 不再下载问卷
+	contentType := "text/yaml; charset=utf-8; charset=UTF-8"
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		ext = ".yaml"
+	}
+
+	// clash 和 clashmeta 类型直接输出源文件, 不需要转换
+	if clientType != "" && clientType != "clash" && clientType != "clashmeta" {
+		// Convert subscription using substore producers
+		convertedData, err := h.convertSubscription(data, clientType)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("failed to convert subscription for client %s: %w", clientType, err))
+			return
+		}
+		data = convertedData
+
+		// Set content type and extension based on client type
+		switch clientType {
+		case "surge", "surgemac", "loon", "qx", "surfboard", "shadowrocket":
+			// Text-based formats
+			contentType = "text/plain; charset=utf-8"
+			ext = ".txt"
+		case "sing-box":
+			// JSON format
+			contentType = "application/json; charset=utf-8"
+			ext = ".json"
+		case "v2ray":
+			// Base64 format
+			contentType = "text/plain; charset=utf-8"
+			ext = ".txt"
+		case "uri":
+			// URI format
+			contentType = "text/plain; charset=utf-8"
+			ext = ".txt"
+		default:
+			// YAML-based formats (clash, clashmeta, stash, shadowrocket, egern)
+			contentType = "text/yaml; charset=utf-8"
+			ext = ".yaml"
+		}
+	}
+
+	// 尝试获取流量信息，如果探针报错则跳过流量统计，不影响订阅输出
+	// 如果开启了探针绑定，只统计订阅文件中使用的节点绑定的探针服务器流量
+	totalLimit, _, totalUsed, err := h.summary.fetchTotals(r.Context(), username, usedProbeServers)
+	hasTrafficInfo := err == nil
 
 	// 使用订阅名称
 	attachmentName := url.PathEscape(displayName)
