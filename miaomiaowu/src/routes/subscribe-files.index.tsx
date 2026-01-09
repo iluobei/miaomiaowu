@@ -33,6 +33,7 @@ import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
 import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
 import { translateOutbound } from '@/lib/sublink/translations'
+import { validateClashConfig, formatValidationIssues } from '@/lib/clash-validator'
 
 export const Route = createFileRoute('/subscribe-files/')({
   beforeLoad: () => {
@@ -1538,7 +1539,7 @@ function SubscribeFilesPage() {
     }
 
     try {
-      const parsed = parseYAML(currentContent) as any
+      let parsed = parseYAML(currentContent) as any
 
       // 获取所有 MMW 模式代理集合的名称（用于后续检查）
       const allMmwProviderNames = proxyProviderConfigs
@@ -1984,6 +1985,34 @@ function SubscribeFilesPage() {
         })
         if (Object.keys(providers).length > 0) {
           parsed['proxy-providers'] = providers
+        }
+      }
+
+      // 校验配置有效性
+      const clashValidationResult = validateClashConfig(parsed)
+
+      if (!clashValidationResult.valid) {
+        // 有错误级别的问题，阻止保存
+        const errorMessage = formatValidationIssues(clashValidationResult.issues)
+        toast.error('配置校验失败', {
+          description: errorMessage,
+          duration: 10000
+        })
+        console.error('Clash配置校验失败:', clashValidationResult.issues)
+        return
+      }
+
+      // 如果有自动修复的内容，使用修复后的配置
+      if (clashValidationResult.fixedConfig) {
+        parsed = clashValidationResult.fixedConfig
+
+        // 显示修复提示
+        const warningIssues = clashValidationResult.issues.filter(i => i.level === 'warning')
+        if (warningIssues.length > 0) {
+          toast.warning('配置已自动修复', {
+            description: formatValidationIssues(warningIssues),
+            duration: 8000
+          })
         }
       }
 

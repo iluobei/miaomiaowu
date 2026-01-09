@@ -62,6 +62,7 @@ import type { PredefinedRuleSetType, CustomRule } from '@/lib/sublink/types'
 import type { ProxyConfig } from '@/lib/sublink/types'
 import { extractRegionFromNodeName, findRegionGroupName } from '@/lib/country-flag'
 import { ACL4SSR_PRESETS, Aethersailor_PRESETS, ALL_TEMPLATE_PRESETS, type ACL4SSRPreset } from '@/lib/template-presets'
+import { validateClashConfig, formatValidationIssues } from '@/lib/clash-validator'
 import yaml from 'js-yaml'
 
 // 代理集合配置类型
@@ -934,6 +935,45 @@ function SubscriptionGeneratorPage() {
         // 应用规则失败不影响主流程，继续使用原配置
       }
 
+      // 校验配置有效性
+      try {
+        const parsedConfig = yaml.load(finalConfig) as any
+        const validationResult = validateClashConfig(parsedConfig)
+
+        if (!validationResult.valid) {
+          // 有错误级别的问题，阻止保存
+          const errorMessage = formatValidationIssues(validationResult.issues)
+          toast.error('配置校验失败', {
+            description: errorMessage,
+            duration: 10000
+          })
+          console.error('Clash配置校验失败:', validationResult.issues)
+          return
+        }
+
+        // 如果有自动修复的内容，使用修复后的配置
+        if (validationResult.fixedConfig) {
+          finalConfig = yaml.dump(validationResult.fixedConfig, {
+            indent: 2,
+            lineWidth: -1,
+            noRefs: true
+          })
+
+          // 显示修复提示
+          const warningIssues = validationResult.issues.filter(i => i.level === 'warning')
+          if (warningIssues.length > 0) {
+            toast.warning('配置已自动修复', {
+              description: formatValidationIssues(warningIssues),
+              duration: 8000
+            })
+          }
+        }
+      } catch (error) {
+        console.error('配置校验异常:', error)
+        toast.error('配置校验时发生错误: ' + (error instanceof Error ? error.message : '未知错误'))
+        return
+      }
+
       setClashConfig(finalConfig)
       setHasManuallyGrouped(false) // 加载模板后重置手动分组状态
       toast.success(`成功加载模板并插入 ${proxies.length} 个节点`)
@@ -1002,6 +1042,45 @@ function SubscriptionGeneratorPage() {
       } catch (error) {
         console.error('Apply custom rules error:', error)
         // 应用规则失败不影响主流程，继续使用原配置
+      }
+
+      // 校验配置有效性
+      try {
+        const parsedConfig = yaml.load(generatedConfig) as any
+        const validationResult = validateClashConfig(parsedConfig)
+
+        if (!validationResult.valid) {
+          // 有错误级别的问题，阻止保存
+          const errorMessage = formatValidationIssues(validationResult.issues)
+          toast.error('配置校验失败', {
+            description: errorMessage,
+            duration: 10000
+          })
+          console.error('Clash配置校验失败:', validationResult.issues)
+          return
+        }
+
+        // 如果有自动修复的内容，使用修复后的配置
+        if (validationResult.fixedConfig) {
+          generatedConfig = yaml.dump(validationResult.fixedConfig, {
+            indent: 2,
+            lineWidth: -1,
+            noRefs: true
+          })
+
+          // 显示修复提示
+          const warningIssues = validationResult.issues.filter(i => i.level === 'warning')
+          if (warningIssues.length > 0) {
+            toast.warning('配置已自动修复', {
+              description: formatValidationIssues(warningIssues),
+              duration: 8000
+            })
+          }
+        }
+      } catch (error) {
+        console.error('配置校验异常:', error)
+        toast.error('配置校验时发生错误: ' + (error instanceof Error ? error.message : '未知错误'))
+        return
       }
 
       setClashConfig(generatedConfig)
