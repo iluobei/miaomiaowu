@@ -16,6 +16,7 @@ import (
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/util"
+	"miaomiaowu/internal/validator"
 
 	"gopkg.in/yaml.v3"
 )
@@ -687,6 +688,53 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 
 		if !modified {
 			continue
+		}
+
+		// 校验生成的配置
+		var configMap map[string]interface{}
+		var tempBuf bytes.Buffer
+		tempEncoder := yaml.NewEncoder(&tempBuf)
+		tempEncoder.SetIndent(2)
+		if err := tempEncoder.Encode(&rootNode); err != nil {
+			log.Printf("[代理集合模式切换] [配置校验] 编码配置失败: %v", err)
+			continue
+		}
+		if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
+			log.Printf("[代理集合模式切换] [配置校验] 解析配置失败: %v", err)
+			continue
+		}
+
+		validationResult := validator.ValidateClashConfig(configMap)
+		if !validationResult.Valid {
+			log.Printf("[代理集合模式切换] [配置校验] 文件 %s 校验失败，跳过保存", file.Filename)
+			for _, issue := range validationResult.Issues {
+				if issue.Level == validator.ErrorLevel {
+					log.Printf("[代理集合模式切换] [配置校验] 错误: %s - 位置: %s", issue.Message, issue.Location)
+				}
+			}
+			continue
+		}
+
+		// 如果有自动修复，使用修复后的配置
+		if validationResult.FixedConfig != nil {
+			var fixedNode yaml.Node
+			fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+			if err != nil {
+				log.Printf("[代理集合模式切换] [配置校验] 序列化修复配置失败: %v", err)
+				continue
+			}
+			if err := yaml.Unmarshal(fixedYAML, &fixedNode); err != nil {
+				log.Printf("[代理集合模式切换] [配置校验] 解析修复配置失败: %v", err)
+				continue
+			}
+			rootNode = fixedNode
+
+			// 记录自动修复的警告
+			for _, issue := range validationResult.Issues {
+				if issue.Level == validator.WarningLevel && issue.AutoFixed {
+					log.Printf("[代理集合模式切换] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+				}
+			}
 		}
 
 		// 保存文件

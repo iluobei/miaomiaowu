@@ -197,6 +197,45 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 校验节点名称不为空
+	if strings.TrimSpace(req.NodeName) == "" {
+		log.Printf("[节点创建] 节点名称为空")
+		writeBadRequest(w, "节点名称不能为空")
+		return
+	}
+
+	// 校验节点名称是否重复（数据库层面）
+	exists, err := h.repo.CheckNodeNameExists(r.Context(), req.NodeName, username, 0)
+	if err != nil {
+		log.Printf("[节点创建] 检查节点名称重复失败: %v", err)
+		writeError(w, http.StatusInternalServerError, errors.New("服务器错误"))
+		return
+	}
+	if exists {
+		log.Printf("[节点创建] 节点名称重复: %s", req.NodeName)
+		writeBadRequest(w, fmt.Sprintf("节点名称 \"%s\" 已存在，请使用其他名称", req.NodeName))
+		return
+	}
+
+	// 校验Clash配置格式
+	if req.ClashConfig != "" {
+		var clashConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(req.ClashConfig), &clashConfig); err != nil {
+			log.Printf("[节点创建] Clash配置格式错误: %v", err)
+			writeBadRequest(w, "Clash配置格式错误")
+			return
+		}
+
+		// 确保配置中的name与节点名称一致
+		if configName, ok := clashConfig["name"].(string); !ok || configName != req.NodeName {
+			log.Printf("[节点创建] 配置name不匹配: 节点名=%s, 配置名=%v", req.NodeName, clashConfig["name"])
+			writeBadRequest(w, "Clash配置中的name字段必须与节点名称一致")
+			return
+		}
+	}
+
+	log.Printf("[节点创建] 校验通过 - 节点名称: %s, 用户: %s", req.NodeName, username)
+
 	node := storage.Node{
 		Username:     username,
 		RawURL:       req.RawURL,
@@ -210,9 +249,12 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.repo.CreateNode(r.Context(), node)
 	if err != nil {
+		log.Printf("[节点创建] 数据库创建失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+
+	log.Printf("[节点创建] 成功 - ID: %d, 节点名称: %s", created.ID, created.NodeName)
 
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"node": convertNode(created),
@@ -306,6 +348,52 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 		return
 	}
 
+	// 如果节点名称被修改，需要校验新名称
+	if req.NodeName != "" && req.NodeName != oldNodeName {
+		// 校验节点名称不为空
+		if strings.TrimSpace(req.NodeName) == "" {
+			log.Printf("[节点更新] 节点名称为空")
+			writeBadRequest(w, "节点名称不能为空")
+			return
+		}
+
+		// 校验节点名称是否重复（数据库层面）
+		exists, err := h.repo.CheckNodeNameExists(r.Context(), req.NodeName, username, id)
+		if err != nil {
+			log.Printf("[节点更新] 检查节点名称重复失败: %v", err)
+			writeError(w, http.StatusInternalServerError, errors.New("服务器错误"))
+			return
+		}
+		if exists {
+			log.Printf("[节点更新] 节点名称重复: %s", req.NodeName)
+			writeBadRequest(w, fmt.Sprintf("节点名称 \"%s\" 已存在，请使用其他名称", req.NodeName))
+			return
+		}
+	}
+
+	// 如果Clash配置被修改，需要校验格式
+	if req.ClashConfig != "" {
+		var clashConfig map[string]interface{}
+		if err := json.Unmarshal([]byte(req.ClashConfig), &clashConfig); err != nil {
+			log.Printf("[节点更新] Clash配置格式错误: %v", err)
+			writeBadRequest(w, "Clash配置格式错误")
+			return
+		}
+
+		// 确保配置中的name与节点名称一致
+		newNodeName := req.NodeName
+		if newNodeName == "" {
+			newNodeName = oldNodeName
+		}
+		if configName, ok := clashConfig["name"].(string); !ok || configName != newNodeName {
+			log.Printf("[节点更新] 配置name不匹配: 节点名=%s, 配置名=%v", newNodeName, clashConfig["name"])
+			writeBadRequest(w, "Clash配置中的name字段必须与节点名称一致")
+			return
+		}
+	}
+
+	log.Printf("[节点更新] 校验通过 - 节点ID: %d, 旧名称: %s, 新名称: %s", id, oldNodeName, req.NodeName)
+
 	// Update fields
 	if req.RawURL != "" {
 		existing.RawURL = req.RawURL
@@ -329,6 +417,7 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 
 	updated, err := h.repo.UpdateNode(r.Context(), existing)
 	if err != nil {
+		log.Printf("[节点更新] 数据库更新失败: %v", err)
 		status := http.StatusBadRequest
 		if errors.Is(err, storage.ErrNodeNotFound) {
 			status = http.StatusNotFound
@@ -336,6 +425,8 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 		writeError(w, status, err)
 		return
 	}
+
+	log.Printf("[节点更新] 数据库更新成功 - 节点ID: %d, 节点名称: %s", updated.ID, updated.NodeName)
 
 	// Sync node changes to YAML files using the sync manager
 	if updated.ClashConfig != "" {

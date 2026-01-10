@@ -8,6 +8,35 @@ import (
 	"strings"
 )
 
+// CheckNodeNameExists checks if a node name already exists for a user (excluding a specific node ID if provided).
+func (r *TrafficRepository) CheckNodeNameExists(ctx context.Context, nodeName, username string, excludeID int64) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("traffic repository not initialized")
+	}
+
+	nodeName = strings.TrimSpace(nodeName)
+	username = strings.TrimSpace(username)
+	if nodeName == "" || username == "" {
+		return false, errors.New("node name and username are required")
+	}
+
+	var count int
+	query := `SELECT COUNT(*) FROM nodes WHERE node_name = ? AND username = ?`
+	args := []interface{}{nodeName, username}
+
+	if excludeID > 0 {
+		query += ` AND id != ?`
+		args = append(args, excludeID)
+	}
+
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("check node name exists: %w", err)
+	}
+
+	return count > 0, nil
+}
+
 // ListNodes returns all nodes for a specific username.
 func (r *TrafficRepository) ListNodes(ctx context.Context, username string) ([]Node, error) {
 	if r == nil || r.db == nil {

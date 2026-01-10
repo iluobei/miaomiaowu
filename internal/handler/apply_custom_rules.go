@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
+	"miaomiaowu/internal/validator"
 
 	"gopkg.in/yaml.v3"
 )
@@ -134,6 +136,53 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 
 	// Auto-add missing proxy groups referenced in rules
 	addedGroups := autoAddMissingProxyGroups(docNode)
+
+	// 校验应用规则后的配置
+	var configMap map[string]interface{}
+	var tempBuf bytes.Buffer
+	tempEncoder := yaml.NewEncoder(&tempBuf)
+	tempEncoder.SetIndent(2)
+	if err := tempEncoder.Encode(&rootNode); err != nil {
+		return nil, nil, fmt.Errorf("编码配置用于校验失败: %w", err)
+	}
+	if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
+		return nil, nil, fmt.Errorf("解析配置用于校验失败: %w", err)
+	}
+
+	validationResult := validator.ValidateClashConfig(configMap)
+	if !validationResult.Valid {
+		log.Printf("[应用自定义规则] [配置校验] 校验失败")
+		var errorMessages []string
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.ErrorLevel {
+				errorMsg := issue.Message
+				if issue.Location != "" {
+					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+				}
+				errorMessages = append(errorMessages, errorMsg)
+				log.Printf("[应用自定义规则] [配置校验] 错误: %s", errorMsg)
+			}
+		}
+		return nil, nil, fmt.Errorf("配置校验失败: %s", strings.Join(errorMessages, "; "))
+	}
+
+	// 如果有自动修复，使用修复后的配置
+	if validationResult.FixedConfig != nil {
+		fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+		if err != nil {
+			return nil, nil, fmt.Errorf("序列化修复配置失败: %w", err)
+		}
+		if err := yaml.Unmarshal(fixedYAML, &rootNode); err != nil {
+			return nil, nil, fmt.Errorf("解析修复配置失败: %w", err)
+		}
+
+		// 记录自动修复的警告
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.WarningLevel && issue.AutoFixed {
+				log.Printf("[应用自定义规则] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+			}
+		}
+	}
 
 	// Fix short-id fields to use double quotes before marshaling
 	fixShortIdStyleInNode(&rootNode)

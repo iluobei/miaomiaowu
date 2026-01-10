@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"miaomiaowu/internal/storage"
+	"miaomiaowu/internal/validator"
 
 	"gopkg.in/yaml.v3"
 )
@@ -620,6 +622,58 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		return
 	}
 
+	// 校验配置内容
+	var configMap map[string]interface{}
+	var tempBuf bytes.Buffer
+	tempEncoder := yaml.NewEncoder(&tempBuf)
+	tempEncoder.SetIndent(2)
+	if err := tempEncoder.Encode(&rootNode); err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("编码配置用于校验失败"))
+		return
+	}
+	if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("解析配置用于校验失败"))
+		return
+	}
+
+	validationResult := validator.ValidateClashConfig(configMap)
+	if !validationResult.Valid {
+		log.Printf("[创建订阅文件] [配置校验] 校验失败 - 文件名: %s", filename)
+		var errorMessages []string
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.ErrorLevel {
+				errorMsg := issue.Message
+				if issue.Location != "" {
+					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+				}
+				errorMessages = append(errorMessages, errorMsg)
+				log.Printf("[创建订阅文件] [配置校验] 错误: %s", errorMsg)
+			}
+		}
+		writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
+		return
+	}
+
+	// 如果有自动修复，使用修复后的配置
+	if validationResult.FixedConfig != nil {
+		fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
+			return
+		}
+		if err := yaml.Unmarshal(fixedYAML, &rootNode); err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("解析修复配置失败"))
+			return
+		}
+
+		// 记录自动修复的警告
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.WarningLevel && issue.AutoFixed {
+				log.Printf("[创建订阅文件] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+			}
+		}
+	}
+
 	// 修复short-id字段，确保使用双引号
 	// fixShortIdStyleInNode(&rootNode)
 
@@ -767,9 +821,46 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// 校验配置内容
+	validationResult := validator.ValidateClashConfig(yamlCheck)
+	if !validationResult.Valid {
+		log.Printf("[更新订阅文件] [配置校验] 校验失败 - 文件名: %s", filename)
+		var errorMessages []string
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.ErrorLevel {
+				errorMsg := issue.Message
+				if issue.Location != "" {
+					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+				}
+				errorMessages = append(errorMessages, errorMsg)
+				log.Printf("[更新订阅文件] [配置校验] 错误: %s", errorMsg)
+			}
+		}
+		writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
+		return
+	}
+
+	// 如果有自动修复，使用修复后的配置
+	contentToSave := req.Content
+	if validationResult.FixedConfig != nil {
+		fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
+			return
+		}
+		contentToSave = string(fixedYAML)
+
+		// 记录自动修复的警告
+		for _, issue := range validationResult.Issues {
+			if issue.Level == validator.WarningLevel && issue.AutoFixed {
+				log.Printf("[更新订阅文件] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+			}
+		}
+	}
+
 	// 保存文件
 	filePath := filepath.Join("subscribes", filename)
-	if err := os.WriteFile(filePath, []byte(req.Content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(contentToSave), 0644); err != nil {
 		writeError(w, http.StatusInternalServerError, errors.New("保存文件失败"))
 		return
 	}
