@@ -247,8 +247,11 @@ type UserSettings struct {
 	CustomRulesEnabled   bool   // Enable custom rules feature
 	EnableShortLink      bool   // Enable short link feature for subscriptions
 	UseNewTemplateSystem bool   // Use new template system (database-based), default true
-	EnableProxyProvider  bool   // Enable proxy provider feature
-	NodeOrder            []int64 // Node display order (array of node IDs)
+	EnableProxyProvider  bool      // Enable proxy provider feature
+	NodeOrder            []int64   // Node display order (array of node IDs)
+	DebugEnabled         bool      // Enable debug logging to file
+	DebugLogPath         string    // Path to current debug log file
+	DebugStartedAt       *time.Time // When debug logging was started
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -771,6 +774,17 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 
 	// Add node_order to user_settings table (JSON array of node IDs for display order)
 	if err := r.ensureUserSettingsColumn("node_order", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+
+	// Add debug logging fields to user_settings table
+	if err := r.ensureUserSettingsColumn("debug_enabled", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := r.ensureUserSettingsColumn("debug_log_path", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := r.ensureUserSettingsColumn("debug_started_at", "TIMESTAMP"); err != nil {
 		return err
 	}
 
@@ -3061,10 +3075,11 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
-	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt int
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, debugEnabledInt int
 	var nodeOrderJSON string
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &nodeOrderJSON, &settings.CreatedAt, &settings.UpdatedAt)
+	var debugStartedAt sql.NullTime
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &nodeOrderJSON, &debugEnabledInt, &settings.DebugLogPath, &debugStartedAt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -3080,6 +3095,7 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	settings.EnableShortLink = enableShortLinkInt == 1
 	settings.UseNewTemplateSystem = useNewTemplateSystemInt == 1
 	settings.EnableProxyProvider = enableProxyProviderInt == 1
+	settings.DebugEnabled = debugEnabledInt == 1
 
 	// Parse node_order JSON
 	if nodeOrderJSON != "" && nodeOrderJSON != "[]" {
@@ -3089,6 +3105,11 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		}
 	} else {
 		settings.NodeOrder = []int64{}
+	}
+
+	// Handle nullable debug_started_at
+	if debugStartedAt.Valid {
+		settings.DebugStartedAt = &debugStartedAt.Time
 	}
 
 	return settings, nil
@@ -3145,6 +3166,11 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		enableProxyProviderInt = 1
 	}
 
+	debugEnabledInt := 0
+	if settings.DebugEnabled {
+		debugEnabledInt = 1
+	}
+
 	matchRule := strings.TrimSpace(settings.MatchRule)
 	if matchRule == "" {
 		matchRule = "node_name"
@@ -3170,8 +3196,8 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, node_order, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, node_order, debug_enabled, debug_log_path, debug_started_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
@@ -3185,10 +3211,13 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			use_new_template_system = excluded.use_new_template_system,
 			enable_proxy_provider = excluded.enable_proxy_provider,
 			node_order = excluded.node_order,
+			debug_enabled = excluded.debug_enabled,
+			debug_log_path = excluded.debug_log_path,
+			debug_started_at = excluded.debug_started_at,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, nodeOrderJSON); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, nodeOrderJSON, debugEnabledInt, settings.DebugLogPath, settings.DebugStartedAt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 
