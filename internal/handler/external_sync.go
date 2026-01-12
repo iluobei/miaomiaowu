@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"miaomiaowu/internal/logger"
 	"net/http"
 	"os"
 	"strconv"
@@ -26,12 +26,12 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 		return fmt.Errorf("invalid parameters")
 	}
 
-	log.Printf("[外部订阅同步-手动] 用户 %s 开始手动同步外部订阅", username)
+	logger.Info("[外部订阅同步-手动] 用户 %s 开始手动同步外部订阅", username)
 
 	// Get user settings to check match rule (but ignore ForceSyncExternal for manual sync)
 	userSettings, err := repo.GetUserSettings(ctx, username)
 	if err != nil {
-		log.Printf("[外部订阅同步-手动] 获取用户设置失败，使用默认设置: %v", err)
+		logger.Info("[外部订阅同步-手动] 获取用户设置失败，使用默认设置: %v", err)
 		userSettings.MatchRule = "node_name"
 		userSettings.SyncScope = "saved_only"
 		userSettings.KeepNodeName = true
@@ -47,7 +47,7 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 		"all":        "同步所有节点",
 	}
 
-	log.Printf("[外部订阅同步-手动] 同步配置: 匹配规则=%s(%s), 同步范围=%s(%s), 保留节点名称=%v",
+	logger.Info("[外部订阅同步-手动] 同步配置: 匹配规则=%s(%s), 同步范围=%s(%s), 保留节点名称=%v",
 		userSettings.MatchRule, matchRuleDesc[userSettings.MatchRule],
 		userSettings.SyncScope, syncScopeDesc[userSettings.SyncScope],
 		userSettings.KeepNodeName)
@@ -55,16 +55,16 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 	// Get user's external subscriptions
 	externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
 	if err != nil {
-		log.Printf("[外部订阅同步-手动] 获取外部订阅列表失败: %v", err)
+		logger.Info("[外部订阅同步-手动] 获取外部订阅列表失败: %v", err)
 		return fmt.Errorf("list external subscriptions: %w", err)
 	}
 
 	if len(externalSubs) == 0 {
-		log.Printf("[外部订阅同步-手动] 用户 %s 没有配置外部订阅，跳过同步", username)
+		logger.Info("[外部订阅同步-手动] 用户 %s 没有配置外部订阅，跳过同步", username)
 		return nil
 	}
 
-	log.Printf("[外部订阅同步-手动] 用户 %s 共有 %d 个外部订阅需要同步", username, len(externalSubs))
+	logger.Info("[外部订阅同步-手动] 用户 %s 共有 %d 个外部订阅需要同步", username, len(externalSubs))
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -74,10 +74,10 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 	totalNodesSynced := 0
 
 	for i, sub := range externalSubs {
-		log.Printf("[外部订阅同步-手动] [%d/%d] 开始同步订阅: %s", i+1, len(externalSubs), sub.Name)
+		logger.Info("[外部订阅同步-手动] [%d/%d] 开始同步订阅: %s", i+1, len(externalSubs), sub.Name)
 		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings)
 		if err != nil {
-			log.Printf("[外部订阅同步-手动] [%d/%d] 同步订阅 %s 失败: %v", i+1, len(externalSubs), sub.Name, err)
+			logger.Info("[外部订阅同步-手动] [%d/%d] 同步订阅 %s 失败: %v", i+1, len(externalSubs), sub.Name, err)
 			continue
 		}
 
@@ -88,12 +88,12 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 		updatedSub.LastSyncAt = &now
 		updatedSub.NodeCount = nodeCount
 		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
-			log.Printf("[外部订阅同步-手动] 更新订阅 %s 的同步时间失败: %v", sub.Name, err)
+			logger.Info("[外部订阅同步-手动] 更新订阅 %s 的同步时间失败: %v", sub.Name, err)
 		}
-		log.Printf("[外部订阅同步-手动] [%d/%d] 订阅 %s 同步完成，同步了 %d 个节点", i+1, len(externalSubs), sub.Name, nodeCount)
+		logger.Info("[外部订阅同步-手动] [%d/%d] 订阅 %s 同步完成，同步了 %d 个节点", i+1, len(externalSubs), sub.Name, nodeCount)
 	}
 
-	log.Printf("[外部订阅同步-手动] 用户 %s 同步完成: 共从 %d 个订阅同步了 %d 个节点", username, len(externalSubs), totalNodesSynced)
+	logger.Info("[外部订阅同步-手动] 用户 %s 同步完成: 共从 %d 个订阅同步了 %d 个节点", username, len(externalSubs), totalNodesSynced)
 
 	return nil
 }
@@ -104,12 +104,12 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		return fmt.Errorf("invalid parameters")
 	}
 
-	log.Printf("[外部订阅同步-自动] 用户 %s 开始自动同步外部订阅", username)
+	logger.Info("[外部订阅同步-自动] 用户 %s 开始自动同步外部订阅", username)
 
 	// Get user settings to check match rule and ForceSyncExternal
 	userSettings, err := repo.GetUserSettings(ctx, username)
 	if err != nil {
-		log.Printf("[外部订阅同步-自动] 获取用户设置失败，使用默认设置: %v", err)
+		logger.Info("[外部订阅同步-自动] 获取用户设置失败，使用默认设置: %v", err)
 		userSettings.MatchRule = "node_name"
 		userSettings.SyncScope = "saved_only"
 		userSettings.KeepNodeName = true
@@ -126,7 +126,7 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		"all":        "同步所有节点",
 	}
 
-	log.Printf("[外部订阅同步-自动] 同步配置: 匹配规则=%s(%s), 同步范围=%s(%s), 保留节点名称=%v",
+	logger.Info("[外部订阅同步-自动] 同步配置: 匹配规则=%s(%s), 同步范围=%s(%s), 保留节点名称=%v",
 		userSettings.MatchRule, matchRuleDesc[userSettings.MatchRule],
 		userSettings.SyncScope, syncScopeDesc[userSettings.SyncScope],
 		userSettings.KeepNodeName)
@@ -134,45 +134,45 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 	// Get user's external subscriptions
 	externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
 	if err != nil {
-		log.Printf("[外部订阅同步-自动] 获取外部订阅列表失败: %v", err)
+		logger.Info("[外部订阅同步-自动] 获取外部订阅列表失败: %v", err)
 		return fmt.Errorf("list external subscriptions: %w", err)
 	}
 
 	if len(externalSubs) == 0 {
-		log.Printf("[外部订阅同步-自动] 用户 %s 没有配置外部订阅，跳过同步", username)
+		logger.Info("[外部订阅同步-自动] 用户 %s 没有配置外部订阅，跳过同步", username)
 		return nil
 	}
 
 	// If ForceSyncExternal is enabled, only sync subscriptions used in config files
 	var subsToSync []storage.ExternalSubscription
 	if userSettings.ForceSyncExternal {
-		log.Printf("[外部订阅同步-自动] 强制同步已开启，正在筛选配置文件中使用的订阅...")
+		logger.Info("[外部订阅同步-自动] 强制同步已开启，正在筛选配置文件中使用的订阅...")
 		usedURLs, err := getUsedExternalSubscriptionURLs(ctx, repo, subscribeDir, username)
 		if err != nil {
-			log.Printf("[外部订阅同步-自动] 获取配置文件中使用的订阅URL失败: %v，将同步所有订阅", err)
+			logger.Info("[外部订阅同步-自动] 获取配置文件中使用的订阅URL失败: %v，将同步所有订阅", err)
 			subsToSync = externalSubs
 		} else {
 			// Filter subscriptions to only those used in config files
 			for _, sub := range externalSubs {
 				if _, used := usedURLs[sub.URL]; used {
 					subsToSync = append(subsToSync, sub)
-					log.Printf("[外部订阅同步-自动] 订阅 %s 在配置文件中被使用，将进行同步", sub.Name)
+					logger.Info("[外部订阅同步-自动] 订阅 %s 在配置文件中被使用，将进行同步", sub.Name)
 				} else {
-					log.Printf("[外部订阅同步-自动] 订阅 %s 未在配置文件中使用，跳过同步", sub.Name)
+					logger.Info("[外部订阅同步-自动] 订阅 %s 未在配置文件中使用，跳过同步", sub.Name)
 				}
 			}
-			log.Printf("[外部订阅同步-自动] 筛选完成: %d/%d 个订阅需要同步", len(subsToSync), len(externalSubs))
+			logger.Info("[外部订阅同步-自动] 筛选完成: %d/%d 个订阅需要同步", len(subsToSync), len(externalSubs))
 		}
 	} else {
 		subsToSync = externalSubs
 	}
 
 	if len(subsToSync) == 0 {
-		log.Printf("[外部订阅同步-自动] 用户 %s 没有需要同步的订阅", username)
+		logger.Info("[外部订阅同步-自动] 用户 %s 没有需要同步的订阅", username)
 		return nil
 	}
 
-	log.Printf("[外部订阅同步-自动] 用户 %s 共有 %d 个外部订阅需要同步", username, len(subsToSync))
+	logger.Info("[外部订阅同步-自动] 用户 %s 共有 %d 个外部订阅需要同步", username, len(subsToSync))
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -182,10 +182,10 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 	totalNodesSynced := 0
 
 	for i, sub := range subsToSync {
-		log.Printf("[外部订阅同步-自动] [%d/%d] 开始同步订阅: %s", i+1, len(subsToSync), sub.Name)
+		logger.Info("[外部订阅同步-自动] [%d/%d] 开始同步订阅: %s", i+1, len(subsToSync), sub.Name)
 		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings)
 		if err != nil {
-			log.Printf("[外部订阅同步-自动] [%d/%d] 同步订阅 %s 失败: %v", i+1, len(subsToSync), sub.Name, err)
+			logger.Info("[外部订阅同步-自动] [%d/%d] 同步订阅 %s 失败: %v", i+1, len(subsToSync), sub.Name, err)
 			continue
 		}
 
@@ -197,12 +197,12 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 		updatedSub.LastSyncAt = &now
 		updatedSub.NodeCount = nodeCount
 		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
-			log.Printf("[外部订阅同步-自动] 更新订阅 %s 的同步时间失败: %v", sub.Name, err)
+			logger.Info("[外部订阅同步-自动] 更新订阅 %s 的同步时间失败: %v", sub.Name, err)
 		}
-		log.Printf("[外部订阅同步-自动] [%d/%d] 订阅 %s 同步完成，同步了 %d 个节点", i+1, len(subsToSync), sub.Name, nodeCount)
+		logger.Info("[外部订阅同步-自动] [%d/%d] 订阅 %s 同步完成，同步了 %d 个节点", i+1, len(subsToSync), sub.Name, nodeCount)
 	}
 
-	log.Printf("[外部订阅同步-自动] 用户 %s 同步完成: 共从 %d 个订阅同步了 %d 个节点", username, len(subsToSync), totalNodesSynced)
+	logger.Info("[外部订阅同步-自动] 用户 %s 同步完成: 共从 %d 个订阅同步了 %d 个节点", username, len(subsToSync), totalNodesSynced)
 
 	return nil
 }
@@ -227,14 +227,14 @@ func getUsedExternalSubscriptionURLs(ctx context.Context, repo *storage.TrafficR
 		filePath := fmt.Sprintf("%s/%s", subscribeDir, file.Filename)
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("[External Sync] Failed to read file %s: %v", filePath, err)
+			logger.Info("[External Sync] Failed to read file %s: %v", filePath, err)
 			continue
 		}
 
 		// Parse YAML content
 		var yamlContent map[string]any
 		if err := yaml.Unmarshal(content, &yamlContent); err != nil {
-			log.Printf("[External Sync] Failed to parse YAML for file %s: %v", file.Name, err)
+			logger.Info("[External Sync] Failed to parse YAML for file %s: %v", file.Name, err)
 			continue
 		}
 
@@ -244,7 +244,7 @@ func getUsedExternalSubscriptionURLs(ctx context.Context, repo *storage.TrafficR
 				if providerMap, ok := provider.(map[string]any); ok {
 					if url, ok := providerMap["url"].(string); ok && url != "" {
 						usedURLs[url] = true
-						log.Printf("[External Sync] Found used subscription URL in file %s: %s", file.Name, url)
+						logger.Info("[External Sync] Found used subscription URL in file %s: %s", file.Name, url)
 					}
 				}
 			}
@@ -261,12 +261,12 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	syncScope := settings.SyncScope
 	keepNodeName := settings.KeepNodeName
 
-	log.Printf("[外部订阅同步] 开始获取订阅 %s 的内容, URL: %s", sub.Name, sub.URL)
+	logger.Info("[外部订阅同步] 开始获取订阅 %s 的内容, URL: %s", sub.Name, sub.URL)
 
 	// Fetch subscription content
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sub.URL, nil)
 	if err != nil {
-		log.Printf("[外部订阅同步] 创建HTTP请求失败: %v", err)
+		logger.Info("[外部订阅同步] 创建HTTP请求失败: %v", err)
 		return 0, sub, fmt.Errorf("create request: %w", err)
 	}
 
@@ -276,53 +276,53 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 		userAgent = "clash-meta/2.4.0"
 	}
 	req.Header.Set("User-Agent", userAgent)
-	log.Printf("[外部订阅同步] 使用 User-Agent: %s", userAgent)
+	logger.Info("[外部订阅同步] 使用 User-Agent: %s", userAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[外部订阅同步] 请求订阅URL失败: %v", err)
+		logger.Info("[外部订阅同步] 请求订阅URL失败: %v", err)
 		return 0, sub, fmt.Errorf("fetch subscription: %w", err)
 	}
 	defer resp.Body.Close()
 
-	log.Printf("[外部订阅同步] HTTP响应状态码: %d", resp.StatusCode)
+	logger.Info("[外部订阅同步] HTTP响应状态码: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[外部订阅同步] 订阅返回非200状态码: %d", resp.StatusCode)
+		logger.Info("[外部订阅同步] 订阅返回非200状态码: %d", resp.StatusCode)
 		return 0, sub, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	// Parse subscription-userinfo header if sync_traffic is enabled
 	if settings.SyncTraffic {
 		if userInfo := resp.Header.Get("subscription-userinfo"); userInfo != "" {
-			log.Printf("[外部订阅同步] 发现流量信息头，开始解析...")
+			logger.Info("[外部订阅同步] 发现流量信息头，开始解析...")
 			parseAndUpdateTrafficInfo(ctx, repo, &sub, userInfo)
 		}
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("[外部订阅同步] 读取响应内容失败: %v", err)
+		logger.Info("[外部订阅同步] 读取响应内容失败: %v", err)
 		return 0, sub, fmt.Errorf("read response body: %w", err)
 	}
 
-	log.Printf("[外部订阅同步] 成功获取订阅内容，大小: %d 字节", len(body))
+	logger.Info("[外部订阅同步] 成功获取订阅内容，大小: %d 字节", len(body))
 
 	// Parse YAML content
 	var yamlContent map[string]any
 	if err := yaml.Unmarshal(body, &yamlContent); err != nil {
-		log.Printf("[外部订阅同步] 解析YAML内容失败: %v", err)
+		logger.Info("[外部订阅同步] 解析YAML内容失败: %v", err)
 		return 0, sub, fmt.Errorf("parse yaml: %w", err)
 	}
 
 	// Extract proxies
 	proxies, ok := yamlContent["proxies"].([]any)
 	if !ok || len(proxies) == 0 {
-		log.Printf("[外部订阅同步] 订阅中未找到节点(proxies)数据")
+		logger.Info("[外部订阅同步] 订阅中未找到节点(proxies)数据")
 		return 0, sub, fmt.Errorf("no proxies found in subscription")
 	}
 
-	log.Printf("[外部订阅同步] 从订阅 %s 解析到 %d 个节点", sub.Name, len(proxies))
+	logger.Info("[外部订阅同步] 从订阅 %s 解析到 %d 个节点", sub.Name, len(proxies))
 
 	// Convert to storage.Node format
 	nodesToUpdate := make([]storage.Node, 0, len(proxies))
@@ -368,20 +368,20 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	}
 
 	if len(nodesToUpdate) == 0 {
-		log.Printf("[外部订阅同步] 没有有效的节点可以同步")
+		logger.Info("[外部订阅同步] 没有有效的节点可以同步")
 		return 0, sub, fmt.Errorf("no valid nodes to sync")
 	}
 
-	log.Printf("[外部订阅同步] 准备同步 %d 个节点", len(nodesToUpdate))
+	logger.Info("[外部订阅同步] 准备同步 %d 个节点", len(nodesToUpdate))
 
 	// Get existing nodes once
 	existingNodes, err := repo.ListNodes(ctx, username)
 	if err != nil {
-		log.Printf("[外部订阅同步] 获取已保存节点列表失败: %v", err)
+		logger.Info("[外部订阅同步] 获取已保存节点列表失败: %v", err)
 		return 0, sub, fmt.Errorf("list existing nodes: %w", err)
 	}
 
-	log.Printf("[外部订阅同步] 数据库中已有 %d 个节点", len(existingNodes))
+	logger.Info("[外部订阅同步] 数据库中已有 %d 个节点", len(existingNodes))
 
 	// Sync nodes to database (replace nodes based on match rule)
 	syncedCount := 0
@@ -418,13 +418,13 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 						// Compare type:server:port
 						if existingType == newType && existingServer == newServer && fmt.Sprintf("%v", existingPort) == fmt.Sprintf("%v", newPort) {
 							existingNode = &existingNodes[i]
-							log.Printf("[外部订阅同步] 节点 %s 按 type:server:port 匹配成功: %s -> 已有节点 %s", node.NodeName, matchKey, existingNode.NodeName)
+							logger.Info("[外部订阅同步] 节点 %s 按 type:server:port 匹配成功: %s -> 已有节点 %s", node.NodeName, matchKey, existingNode.NodeName)
 							break
 						}
 					}
 				}
 				if existingNode == nil {
-					log.Printf("[外部订阅同步] 节点 %s 按 type:server:port 未找到匹配: %s", node.NodeName, matchKey)
+					logger.Info("[外部订阅同步] 节点 %s 按 type:server:port 未找到匹配: %s", node.NodeName, matchKey)
 				}
 			}
 		case "server_port":
@@ -440,13 +440,13 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 						// Compare server:port
 						if existingServer == newServer && fmt.Sprintf("%v", existingPort) == fmt.Sprintf("%v", newPort) {
 							existingNode = &existingNodes[i]
-							log.Printf("[外部订阅同步] 节点 %s 按 server:port 匹配成功: %s -> 已有节点 %s", node.NodeName, matchKey, existingNode.NodeName)
+							logger.Info("[外部订阅同步] 节点 %s 按 server:port 匹配成功: %s -> 已有节点 %s", node.NodeName, matchKey, existingNode.NodeName)
 							break
 						}
 					}
 				}
 				if existingNode == nil {
-					log.Printf("[外部订阅同步] 节点 %s 按 server:port 未找到匹配: %s", node.NodeName, matchKey)
+					logger.Info("[外部订阅同步] 节点 %s 按 server:port 未找到匹配: %s", node.NodeName, matchKey)
 				}
 			}
 		default:
@@ -454,12 +454,12 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			for i := range existingNodes {
 				if existingNodes[i].NodeName == node.NodeName {
 					existingNode = &existingNodes[i]
-					log.Printf("[外部订阅同步] 节点 %s 按名称匹配成功", node.NodeName)
+					logger.Info("[外部订阅同步] 节点 %s 按名称匹配成功", node.NodeName)
 					break
 				}
 			}
 			if existingNode == nil {
-				log.Printf("[外部订阅同步] 节点 %s 按名称未找到匹配", node.NodeName)
+				logger.Info("[外部订阅同步] 节点 %s 按名称未找到匹配", node.NodeName)
 			}
 		}
 
@@ -479,10 +479,10 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			if !keepNodeName {
 				existingNode.NodeName = node.NodeName // Update to new name from external subscription
 				if oldNodeName != node.NodeName {
-					log.Printf("[外部订阅同步] 更新节点名称: %s -> %s", oldNodeName, node.NodeName)
+					logger.Info("[外部订阅同步] 更新节点名称: %s -> %s", oldNodeName, node.NodeName)
 				}
 			} else {
-				log.Printf("[外部订阅同步] 保留原节点名称: %s (外部订阅名称: %s)", oldNodeName, node.NodeName)
+				logger.Info("[外部订阅同步] 保留原节点名称: %s (外部订阅名称: %s)", oldNodeName, node.NodeName)
 				// 更新 ClashConfig 和 ParsedConfig 中的 name 字段为保留的节点名称
 				var clashConfig map[string]any
 				if err := json.Unmarshal([]byte(existingNode.ClashConfig), &clashConfig); err == nil {
@@ -502,16 +502,16 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 
 			_, err := repo.UpdateNode(ctx, *existingNode)
 			if err != nil {
-				log.Printf("[外部订阅同步] 更新节点 %s 失败: %v", existingNode.NodeName, err)
+				logger.Info("[外部订阅同步] 更新节点 %s 失败: %v", existingNode.NodeName, err)
 				continue
 			}
 
-			log.Printf("[外部订阅同步] 成功更新节点: %s (ID: %d)", existingNode.NodeName, existingNode.ID)
+			logger.Info("[外部订阅同步] 成功更新节点: %s (ID: %d)", existingNode.NodeName, existingNode.ID)
 
 			// Sync to YAML files (handle name change if needed)
 			if subscribeDir != "" {
 				if err := syncNodeToYAMLFiles(subscribeDir, oldNodeName, existingNode.NodeName, existingNode.ClashConfig); err != nil {
-					log.Printf("[外部订阅同步] 同步节点 %s 到YAML文件失败: %v", existingNode.NodeName, err)
+					logger.Info("[外部订阅同步] 同步节点 %s 到YAML文件失败: %v", existingNode.NodeName, err)
 				}
 			}
 
@@ -523,25 +523,25 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			if syncScope == "all" {
 				_, err := repo.CreateNode(ctx, node)
 				if err != nil {
-					log.Printf("[外部订阅同步] 创建新节点 %s 失败: %v", node.NodeName, err)
+					logger.Info("[外部订阅同步] 创建新节点 %s 失败: %v", node.NodeName, err)
 					continue
 				}
-				log.Printf("[外部订阅同步] 成功创建新节点: %s", node.NodeName)
+				logger.Info("[外部订阅同步] 成功创建新节点: %s", node.NodeName)
 				syncedCount++
 				createdCount++
 			} else {
-				log.Printf("[外部订阅同步] 跳过新节点 %s (同步范围: 仅已保存节点)", node.NodeName)
+				logger.Info("[外部订阅同步] 跳过新节点 %s (同步范围: 仅已保存节点)", node.NodeName)
 				skippedCount++
 			}
 		}
 	}
 
-	log.Printf("[外部订阅同步] 订阅 %s 同步完成: 总计 %d/%d 个节点 (更新: %d, 新增: %d, 跳过: %d)",
+	logger.Info("[外部订阅同步] 订阅 %s 同步完成: 总计 %d/%d 个节点 (更新: %d, 新增: %d, 跳过: %d)",
 		sub.Name, syncedCount, len(nodesToUpdate), updatedCount, createdCount, skippedCount)
 
 	// 同步代理集合节点到 YAML（仅处理 mmw 模式）
 	if err := syncProxyProviderNodesToYAML(ctx, repo, subscribeDir, username, sub); err != nil {
-		log.Printf("[外部订阅同步] 同步代理集合节点到YAML失败: %v", err)
+		logger.Info("[外部订阅同步] 同步代理集合节点到YAML失败: %v", err)
 		// 不影响主流程，仅记录日志
 	}
 
@@ -591,8 +591,8 @@ func ParseTrafficInfoHeader(userInfo string) (upload, download, total int64, exp
 // parseAndUpdateTrafficInfo parses subscription-userinfo header and updates traffic info
 // Format: upload=0; download=685404160; total=1073741824; expire=1705276800
 func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficRepository, sub *storage.ExternalSubscription, userInfo string) {
-	log.Printf("[External Sync] Parsing traffic info for subscription %s (%s)", sub.Name, sub.URL)
-	log.Printf("[External Sync] Raw subscription-userinfo: %s", userInfo)
+	logger.Info("[External Sync] Parsing traffic info for subscription %s (%s)", sub.Name, sub.URL)
+	logger.Info("[External Sync] Raw subscription-userinfo: %s", userInfo)
 
 	// Parse subscription-userinfo
 	// Example: upload=0; download=685404160; total=1073741824; expire=1705276800
@@ -612,63 +612,63 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 		case "upload":
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Upload = v
-				log.Printf("[External Sync] Parsed upload: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
+				logger.Info("[External Sync] Parsed upload: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
 			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
 				// 支持带小数点的值，取整
 				sub.Upload = int64(f)
-				log.Printf("[External Sync] Parsed upload (float): %d bytes (%.2f MB)", sub.Upload, f/(1024*1024))
+				logger.Info("[External Sync] Parsed upload (float): %d bytes (%.2f MB)", sub.Upload, f/(1024*1024))
 			} else {
-				log.Printf("[External Sync] Failed to parse upload value '%s': %v", value, err)
+				logger.Info("[External Sync] Failed to parse upload value '%s': %v", value, err)
 			}
 		case "download":
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Download = v
-				log.Printf("[External Sync] Parsed download: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
+				logger.Info("[External Sync] Parsed download: %d bytes (%.2f MB)", v, float64(v)/(1024*1024))
 			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
 				// 支持带小数点的值，取整
 				sub.Download = int64(f)
-				log.Printf("[External Sync] Parsed download (float): %d bytes (%.2f MB)", sub.Download, f/(1024*1024))
+				logger.Info("[External Sync] Parsed download (float): %d bytes (%.2f MB)", sub.Download, f/(1024*1024))
 			} else {
-				log.Printf("[External Sync] Failed to parse download value '%s': %v", value, err)
+				logger.Info("[External Sync] Failed to parse download value '%s': %v", value, err)
 			}
 		case "total":
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				sub.Total = v
-				log.Printf("[External Sync] Parsed total: %d bytes (%.2f GB)", v, float64(v)/(1024*1024*1024))
+				logger.Info("[External Sync] Parsed total: %d bytes (%.2f GB)", v, float64(v)/(1024*1024*1024))
 			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
 				// 支持带小数点的值，取整
 				sub.Total = int64(f)
-				log.Printf("[External Sync] Parsed total (float): %d bytes (%.2f GB)", sub.Total, f/(1024*1024*1024))
+				logger.Info("[External Sync] Parsed total (float): %d bytes (%.2f GB)", sub.Total, f/(1024*1024*1024))
 			} else {
-				log.Printf("[External Sync] Failed to parse total value '%s': %v", value, err)
+				logger.Info("[External Sync] Failed to parse total value '%s': %v", value, err)
 			}
 		case "expire":
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
 				expireTime := time.Unix(v, 0)
 				sub.Expire = &expireTime
-				log.Printf("[External Sync] Parsed expire: %s", expireTime.Format("2006-01-02 15:04:05"))
+				logger.Info("[External Sync] Parsed expire: %s", expireTime.Format("2006-01-02 15:04:05"))
 			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
 				// 支持带小数点的值，取整
 				expireTime := time.Unix(int64(f), 0)
 				sub.Expire = &expireTime
-				log.Printf("[External Sync] Parsed expire (float): %s", expireTime.Format("2006-01-02 15:04:05"))
+				logger.Info("[External Sync] Parsed expire (float): %s", expireTime.Format("2006-01-02 15:04:05"))
 			} else {
-				log.Printf("[External Sync] Failed to parse expire value '%s': %v", value, err)
+				logger.Info("[External Sync] Failed to parse expire value '%s': %v", value, err)
 			}
 		}
 	}
 
 	// Update subscription in database
 	if err := repo.UpdateExternalSubscription(ctx, *sub); err != nil {
-		log.Printf("[External Sync] Failed to update traffic info for subscription %s: %v", sub.Name, err)
+		logger.Info("[External Sync] Failed to update traffic info for subscription %s: %v", sub.Name, err)
 	} else {
-		log.Printf("[External Sync] Successfully updated traffic info for subscription %s", sub.Name)
-		log.Printf("[External Sync]   Upload: %d bytes (%.2f MB)", sub.Upload, float64(sub.Upload)/(1024*1024))
-		log.Printf("[External Sync]   Download: %d bytes (%.2f MB)", sub.Download, float64(sub.Download)/(1024*1024))
-		log.Printf("[External Sync]   Total: %d bytes (%.2f GB)", sub.Total, float64(sub.Total)/(1024*1024*1024))
-		log.Printf("[External Sync]   Used: %d bytes (%.2f GB)", sub.Upload+sub.Download, float64(sub.Upload+sub.Download)/(1024*1024*1024))
+		logger.Info("[External Sync] Successfully updated traffic info for subscription %s", sub.Name)
+		logger.Info("[External Sync]   Upload: %d bytes (%.2f MB)", sub.Upload, float64(sub.Upload)/(1024*1024))
+		logger.Info("[External Sync]   Download: %d bytes (%.2f MB)", sub.Download, float64(sub.Download)/(1024*1024))
+		logger.Info("[External Sync]   Total: %d bytes (%.2f GB)", sub.Total, float64(sub.Total)/(1024*1024*1024))
+		logger.Info("[External Sync]   Used: %d bytes (%.2f GB)", sub.Upload+sub.Download, float64(sub.Upload+sub.Download)/(1024*1024*1024))
 		if sub.Expire != nil {
-			log.Printf("[External Sync]   Expire: %s", sub.Expire.Format("2006-01-02 15:04:05"))
+			logger.Info("[External Sync]   Expire: %s", sub.Expire.Format("2006-01-02 15:04:05"))
 		}
 	}
 }
@@ -735,12 +735,12 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 		return
 	}
 
-	log.Printf("[Sync API] Single subscription sync triggered by user: %s, subscription ID: %d", username, subID)
+	logger.Info("[Sync API] Single subscription sync triggered by user: %s, subscription ID: %d", username, subID)
 
 	// Get user settings
 	userSettings, err := h.repo.GetUserSettings(r.Context(), username)
 	if err != nil {
-		log.Printf("[Sync API] 获取用户设置失败，使用默认设置: %v", err)
+		logger.Info("[Sync API] 获取用户设置失败，使用默认设置: %v", err)
 		userSettings.MatchRule = "node_name"
 		userSettings.SyncScope = "saved_only"
 		userSettings.KeepNodeName = true
@@ -749,7 +749,7 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 	// Get the specific subscription
 	externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
 	if err != nil {
-		log.Printf("[Sync API] Failed to list external subscriptions: %v", err)
+		logger.Info("[Sync API] Failed to list external subscriptions: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -776,7 +776,7 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 		return
 	}
 
-	log.Printf("[Sync API] 开始同步单个订阅: %s (ID: %d)", targetSub.Name, targetSub.ID)
+	logger.Info("[Sync API] 开始同步单个订阅: %s (ID: %d)", targetSub.Name, targetSub.ID)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -784,7 +784,7 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 
 	nodeCount, updatedSub, err := syncSingleExternalSubscription(r.Context(), client, h.repo, h.subscribeDir, username, *targetSub, userSettings)
 	if err != nil {
-		log.Printf("[Sync API] Failed to sync subscription %s: %v", targetSub.Name, err)
+		logger.Info("[Sync API] Failed to sync subscription %s: %v", targetSub.Name, err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -798,10 +798,10 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 	updatedSub.LastSyncAt = &now
 	updatedSub.NodeCount = nodeCount
 	if err := h.repo.UpdateExternalSubscription(r.Context(), updatedSub); err != nil {
-		log.Printf("[Sync API] 更新订阅 %s 的同步时间失败: %v", targetSub.Name, err)
+		logger.Info("[Sync API] 更新订阅 %s 的同步时间失败: %v", targetSub.Name, err)
 	}
 
-	log.Printf("[Sync API] Successfully synced subscription %s, synced %d nodes", targetSub.Name, nodeCount)
+	logger.Info("[Sync API] Successfully synced subscription %s, synced %d nodes", targetSub.Name, nodeCount)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
@@ -823,11 +823,11 @@ func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *h
 		return
 	}
 
-	log.Printf("[Sync API] Manual sync triggered by user: %s", username)
+	logger.Info("[Sync API] Manual sync triggered by user: %s", username)
 
 	// Use manual sync function which ignores ForceSyncExternal setting
 	if err := syncExternalSubscriptionsManual(r.Context(), h.repo, h.subscribeDir, username); err != nil {
-		log.Printf("[Sync API] Failed to sync external subscriptions for user %s: %v", username, err)
+		logger.Info("[Sync API] Failed to sync external subscriptions for user %s: %v", username, err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -836,7 +836,7 @@ func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *h
 		return
 	}
 
-	log.Printf("[Sync API] Successfully synced external subscriptions for user: %s", username)
+	logger.Info("[Sync API] Successfully synced external subscriptions for user: %s", username)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
@@ -867,11 +867,11 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 	}
 
 	if len(mmwConfigs) == 0 {
-		log.Printf("[代理集合同步] 外部订阅 %s 没有妙妙屋处理模式的代理集合配置", sub.Name)
+		logger.Info("[代理集合同步] 外部订阅 %s 没有妙妙屋处理模式的代理集合配置", sub.Name)
 		return nil
 	}
 
-	log.Printf("[代理集合同步] 外部订阅 %s 有 %d 个妙妙屋处理模式的代理集合配置", sub.Name, len(mmwConfigs))
+	logger.Info("[代理集合同步] 外部订阅 %s 有 %d 个妙妙屋处理模式的代理集合配置", sub.Name, len(mmwConfigs))
 
 	// 获取所有订阅文件
 	files, err := repo.ListSubscribeFiles(ctx)
@@ -882,30 +882,30 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 	// 处理每个代理集合配置
 	cache := GetProxyProviderCache()
 	for _, config := range mmwConfigs {
-		log.Printf("[代理集合同步] 处理代理集合: %s", config.Name)
+		logger.Info("[代理集合同步] 处理代理集合: %s", config.Name)
 
 		var proxiesRaw []any
 
 		// 优先使用缓存
 		if entry, ok := cache.Get(config.ID); ok && !cache.IsExpired(entry) {
-			log.Printf("[代理集合同步] 使用缓存 ID=%d, 节点数=%d", config.ID, entry.NodeCount)
+			logger.Info("[代理集合同步] 使用缓存 ID=%d, 节点数=%d", config.ID, entry.NodeCount)
 			proxiesRaw = entry.Nodes
 		} else {
 			// 缓存未命中或过期，刷新缓存
 			entry, err := RefreshProxyProviderCache(&sub, &config)
 			if err != nil {
-				log.Printf("[代理集合同步] 获取代理集合 %s 的节点失败: %v", config.Name, err)
+				logger.Info("[代理集合同步] 获取代理集合 %s 的节点失败: %v", config.Name, err)
 				continue
 			}
 			proxiesRaw = entry.Nodes
 		}
 
 		if len(proxiesRaw) == 0 {
-			log.Printf("[代理集合同步] 代理集合 %s 没有节点", config.Name)
+			logger.Info("[代理集合同步] 代理集合 %s 没有节点", config.Name)
 			continue
 		}
 
-		log.Printf("[代理集合同步] 代理集合 %s 获取到 %d 个节点", config.Name, len(proxiesRaw))
+		logger.Info("[代理集合同步] 代理集合 %s 获取到 %d 个节点", config.Name, len(proxiesRaw))
 
 		// 为节点添加前缀（只使用名称前缀，即第一个 - 之前的部分）
 		namePrefix := config.Name
@@ -933,7 +933,7 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 		// 更新每个订阅文件
 		for _, file := range files {
 			if err := updateYAMLFileWithProxyProviderNodes(subscribeDir, file.Filename, config.Name, prefix, proxiesRaw, nodeNames); err != nil {
-				log.Printf("[代理集合同步] 更新文件 %s 失败: %v", file.Filename, err)
+				logger.Info("[代理集合同步] 更新文件 %s 失败: %v", file.Filename, err)
 				continue
 			}
 		}
@@ -1050,7 +1050,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 
 		modified = true
 		needCreateNewGroup = true
-		log.Printf("[代理集合同步] 在文件 %s 的代理组 %s 中找到代理集合 %s 的引用", filename, groupName, providerName)
+		logger.Info("[代理集合同步] 在文件 %s 的代理组 %s 中找到代理集合 %s 的引用", filename, groupName, providerName)
 
 		// 确保 proxies 节点存在
 		if groupProxiesNode == nil {
@@ -1089,7 +1089,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 			useNode.Content = newUseContent
 		}
 
-		log.Printf("[代理集合同步] 代理组 %s 更新完成: 添加了代理组 %s 的引用", groupName, providerName)
+		logger.Info("[代理集合同步] 代理组 %s 更新完成: 添加了代理组 %s 的引用", groupName, providerName)
 	}
 
 	// 创建或更新以代理集合名称命名的新代理组
@@ -1138,7 +1138,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 				newContent = append(newContent, &yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
 			}
 			existingProxiesNode.Content = newContent
-			log.Printf("[代理集合同步] 更新已存在的代理组 %s: 添加了 %d 个节点", providerName, len(nodeNames))
+			logger.Info("[代理集合同步] 更新已存在的代理组 %s: 添加了 %d 个节点", providerName, len(nodeNames))
 		} else {
 			// 创建新代理组（类型为 url-test）
 			newGroupNode := &yaml.Node{Kind: yaml.MappingNode}
@@ -1168,7 +1168,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 
 			// 添加新代理组到 proxy-groups
 			proxyGroupsNode.Content = append(proxyGroupsNode.Content, newGroupNode)
-			log.Printf("[代理集合同步] 创建新代理组 %s: 包含 %d 个节点", providerName, len(nodeNames))
+			logger.Info("[代理集合同步] 创建新代理组 %s: 包含 %d 个节点", providerName, len(nodeNames))
 		}
 	}
 
@@ -1244,7 +1244,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		return fmt.Errorf("write file: %w", err)
 	}
 
-	log.Printf("[代理集合同步] 文件 %s 更新完成", filename)
+	logger.Info("[代理集合同步] 文件 %s 更新完成", filename)
 	return nil
 }
 

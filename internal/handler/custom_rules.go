@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"miaomiaowu/internal/logger"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -224,7 +224,7 @@ func handleCreateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 
 	// Trigger auto-sync for subscribe files with auto-sync enabled (synchronously to collect added groups)
 	addedGroups := triggerAutoSync(repo, rule.ID)
-	log.Printf("[CreateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
+	logger.Info("[CreateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
 
 	response := customRuleResponse{
 		ID:              rule.ID,
@@ -292,7 +292,7 @@ func handleUpdateCustomRule(w http.ResponseWriter, r *http.Request, repo *storag
 
 	// Trigger auto-sync for subscribe files with auto-sync enabled (synchronously to collect added groups)
 	addedGroups := triggerAutoSync(repo, rule.ID)
-	log.Printf("[UpdateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
+	logger.Info("[UpdateCustomRule] Added proxy groups for rule '%s': %v (count: %d)", rule.Name, addedGroups, len(addedGroups))
 
 	response := customRuleResponse{
 		ID:              rule.ID,
@@ -332,7 +332,7 @@ func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) []string {
 	// Get all subscribe files with auto-sync enabled
 	files, err := repo.GetSubscribeFilesWithAutoSync(ctx)
 	if err != nil {
-		log.Printf("[AutoSync] Failed to get subscribe files with auto-sync: %v", err)
+		logger.Info("[AutoSync] Failed to get subscribe files with auto-sync: %v", err)
 		return nil
 	}
 
@@ -340,7 +340,7 @@ func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) []string {
 		return nil
 	}
 
-	log.Printf("[AutoSync] Syncing custom rule %d to %d subscribe files", ruleID, len(files))
+	logger.Info("[AutoSync] Syncing custom rule %d to %d subscribe files", ruleID, len(files))
 
 	// Collect all added groups
 	allAddedGroups := make(map[string]bool)
@@ -349,9 +349,9 @@ func triggerAutoSync(repo *storage.TrafficRepository, ruleID int64) []string {
 	for _, file := range files {
 		addedGroups, err := syncCustomRulesToFile(ctx, repo, file)
 		if err != nil {
-			log.Printf("[AutoSync] Failed to sync to file %s (ID: %d): %v", file.Filename, file.ID, err)
+			logger.Info("[AutoSync] Failed to sync to file %s (ID: %d): %v", file.Filename, file.ID, err)
 		} else {
-			log.Printf("[AutoSync] Successfully synced to file %s (ID: %d)", file.Filename, file.ID)
+			logger.Info("[AutoSync] Successfully synced to file %s (ID: %d)", file.Filename, file.ID)
 			// Collect added groups
 			for _, group := range addedGroups {
 				allAddedGroups[group] = true
@@ -418,14 +418,14 @@ func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.Tra
 		filePath := filepath.Join("data", "subscriptions", file.FileShortCode+".yaml")
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("Warning: failed to read file %s: %v", filePath, err)
+			logger.Info("Warning: failed to read file %s: %v", filePath, err)
 			continue
 		}
 
 		// Parse YAML
 		var rootNode yaml.Node
 		if err := yaml.Unmarshal(data, &rootNode); err != nil {
-			log.Printf("Warning: failed to parse YAML for file %s: %v", filePath, err)
+			logger.Info("Warning: failed to parse YAML for file %s: %v", filePath, err)
 			continue
 		}
 
@@ -459,7 +459,7 @@ func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.Tra
 		needsUpdate := false
 		for _, groupName := range referencedGroups {
 			if !existingGroups[groupName] {
-				log.Printf("为订阅文件 %s 自动添加代理组: %s", file.Name, groupName)
+				logger.Info("为订阅文件 %s 自动添加代理组: %s", file.Name, groupName)
 				addedGroups[groupName] = true
 				needsUpdate = true
 
@@ -493,13 +493,13 @@ func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.Tra
 			// Marshal back to YAML
 			modifiedData, err := MarshalYAMLWithIndent(&rootNode)
 			if err != nil {
-				log.Printf("Warning: failed to marshal YAML for file %s: %v", filePath, err)
+				logger.Info("Warning: failed to marshal YAML for file %s: %v", filePath, err)
 				continue
 			}
 
 			result := RemoveUnicodeEscapeQuotes(string(modifiedData))
 			if err := os.WriteFile(filePath, []byte(result), 0644); err != nil {
-				log.Printf("Warning: failed to write file %s: %v", filePath, err)
+				logger.Info("Warning: failed to write file %s: %v", filePath, err)
 				continue
 			}
 		}

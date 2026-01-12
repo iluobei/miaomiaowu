@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"log"
+	"miaomiaowu/internal/logger"
 	"sync"
 	"time"
 
@@ -50,7 +50,7 @@ func (c *ProxyProviderCache) Set(configID int64, entry *CacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[configID] = entry
-	log.Printf("[代理集合缓存] 更新缓存 ID=%d, 节点数=%d", configID, entry.NodeCount)
+	logger.Info("[代理集合缓存] 更新缓存 ID=%d, 节点数=%d", configID, entry.NodeCount)
 }
 
 // Delete 删除缓存条目
@@ -58,7 +58,7 @@ func (c *ProxyProviderCache) Delete(configID int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.entries, configID)
-	log.Printf("[代理集合缓存] 删除缓存 ID=%d", configID)
+	logger.Info("[代理集合缓存] 删除缓存 ID=%d", configID)
 }
 
 // IsExpired 检查缓存是否过期
@@ -119,7 +119,7 @@ func (c *ProxyProviderCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries = make(map[int64]*CacheEntry)
-	log.Printf("[代理集合缓存] 清空所有缓存")
+	logger.Info("[代理集合缓存] 清空所有缓存")
 }
 
 // InitProxyProviderCacheOnStartup 服务启动时初始化所有 MMW 模式代理集合的缓存
@@ -133,7 +133,7 @@ func InitProxyProviderCacheOnStartup(repo *storage.TrafficRepository) {
 	// 获取所有用户
 	users, err := repo.ListUsers(ctx, 0) // 0 表示不限制数量
 	if err != nil {
-		log.Printf("[代理集合缓存] 启动时获取用户列表失败: %v", err)
+		logger.Info("[代理集合缓存] 启动时获取用户列表失败: %v", err)
 		return
 	}
 
@@ -144,7 +144,7 @@ func InitProxyProviderCacheOnStartup(repo *storage.TrafficRepository) {
 		// 获取用户的代理集合配置
 		configs, err := repo.ListProxyProviderConfigs(ctx, user.Username)
 		if err != nil {
-			log.Printf("[代理集合缓存] 获取用户 %s 的代理集合配置失败: %v", user.Username, err)
+			logger.Info("[代理集合缓存] 获取用户 %s 的代理集合配置失败: %v", user.Username, err)
 			continue
 		}
 
@@ -158,14 +158,14 @@ func InitProxyProviderCacheOnStartup(repo *storage.TrafficRepository) {
 			// 获取外部订阅信息
 			sub, err := repo.GetExternalSubscription(ctx, config.ExternalSubscriptionID, user.Username)
 			if err != nil || sub.ID == 0 {
-				log.Printf("[代理集合缓存] 获取代理集合 %s 的外部订阅失败: %v", config.Name, err)
+				logger.Info("[代理集合缓存] 获取代理集合 %s 的外部订阅失败: %v", config.Name, err)
 				continue
 			}
 
 			// 刷新缓存
 			_, err = RefreshProxyProviderCache(&sub, &config)
 			if err != nil {
-				log.Printf("[代理集合缓存] 刷新代理集合 %s 缓存失败: %v", config.Name, err)
+				logger.Info("[代理集合缓存] 刷新代理集合 %s 缓存失败: %v", config.Name, err)
 				continue
 			}
 
@@ -173,5 +173,5 @@ func InitProxyProviderCacheOnStartup(repo *storage.TrafficRepository) {
 		}
 	}
 
-	log.Printf("[代理集合缓存] 启动初始化完成: 共 %d 个 MMW 配置, 成功 %d 个", totalConfigs, successCount)
+	logger.Info("[代理集合缓存] 启动初始化完成", "total_configs", totalConfigs, "success_count", successCount)
 }

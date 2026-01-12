@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/handler"
+	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/proxygroups"
 	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/version"
@@ -23,17 +23,26 @@ import (
 )
 
 func main() {
+	// 初始化logger
+	logger.Init()
+	logger.Info("喵喵屋服务器启动中", "version", version.Version)
+
+	// 启动日志清理任务（每天凌晨3点清理7天前的日志）
+	go startLogCleanup()
+
 	addr := getAddr()
 
 	repo, err := storage.NewTrafficRepository(filepath.Join("data", "traffic.db"))
 	if err != nil {
-		log.Fatalf("failed to initialize traffic repository: %v", err)
+		logger.Error("流量数据库初始化失败", "error", err)
+		os.Exit(1)
 	}
 	defer repo.Close()
 
 	authManager, err := auth.NewManager(repo)
 	if err != nil {
-		log.Fatalf("failed to load auth manager: %v", err)
+		logger.Error("认证管理器加载失败", "error", err)
+		os.Exit(1)
 	}
 
 	tokenStore := auth.NewTokenStore(24 * time.Hour)
@@ -42,27 +51,29 @@ func main() {
 	ctx := context.Background()
 	sessions, err := repo.LoadSessions(ctx)
 	if err != nil {
-		log.Printf("warning: failed to load sessions from database: %v", err)
+		logger.Warn("从数据库加载会话失败", "error", err)
 	} else {
 		for _, session := range sessions {
 			tokenStore.LoadSession(session.Token, session.Username, session.ExpiresAt)
 		}
-		log.Printf("loaded %d persisted sessions from database", len(sessions))
+		logger.Info("会话加载完成", "count", len(sessions))
 	}
 
 	// Cleanup expired sessions from database
 	if err := repo.CleanupExpiredSessions(ctx); err != nil {
-		log.Printf("warning: failed to cleanup expired sessions: %v", err)
+		logger.Warn("清理过期会话失败", "error", err)
 	}
 
 	subscribeDir := filepath.Join("subscribes")
 	if err := subscribes.Ensure(subscribeDir); err != nil {
-		log.Fatalf("failed to prepare subscription files: %v", err)
+		logger.Error("订阅文件准备失败", "error", err)
+		os.Exit(1)
 	}
 
 	ruleTemplatesDir := filepath.Join("rule_templates")
 	if err := ruletemplates.Ensure(ruleTemplatesDir); err != nil {
-		log.Fatalf("failed to prepare rule template files: %v", err)
+		logger.Error("规则模板文件准备失败", "error", err)
+		os.Exit(1)
 	}
 
 	// 初始化代理组配置 Store（纯内存存储）
@@ -72,26 +83,28 @@ func main() {
 	// 获取系统配置中的远程地址
 	systemConfig, err := repo.GetSystemConfig(ctx)
 	if err != nil {
-		log.Printf("warning: failed to load system config: %v", err)
+		logger.Warn("加载系统配置失败", "error", err)
 	}
 
 	// 从远程拉取配置
 	data, resolvedURL, fetchErr := proxygroups.FetchConfig(systemConfig.ProxyGroupsSourceURL)
 	if fetchErr != nil {
-		log.Printf("warning: failed to fetch proxy groups config: %v", fetchErr)
+		logger.Warn("拉取代理组配置失败", "error", fetchErr)
 		// 远程拉取失败时使用空配置初始化
 		proxyGroupsStore, err = proxygroups.NewStore([]byte("[]"), "empty-fallback")
 		if err != nil {
-			log.Fatalf("failed to create proxy groups store: %v", err)
+			logger.Error("创建代理组存储失败", "error", err)
+			os.Exit(1)
 		}
-		log.Printf("proxy groups store initialized with empty config (remote fetch failed)")
+		logger.Info("代理组存储已使用空配置初始化", "reason", "远程拉取失败")
 	} else {
 		// 远程拉取成功
 		proxyGroupsStore, err = proxygroups.NewStore(data, resolvedURL)
 		if err != nil {
-			log.Fatalf("invalid proxy groups config from %s: %v", resolvedURL, err)
+			logger.Error("代理组配置无效", "source", resolvedURL, "error", err)
+			os.Exit(1)
 		}
-		log.Printf("proxy groups config loaded from: %s", resolvedURL)
+		logger.Info("代理组配置加载成功", "source", resolvedURL)
 	}
 
 	syncSubscribeFilesToDatabase(repo, subscribeDir)
@@ -160,6 +173,10 @@ func main() {
 	mux.Handle("/api/user/proxy-provider-cache/status", auth.RequireToken(tokenStore, handler.NewProxyProviderCacheStatusHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-nodes", auth.RequireToken(tokenStore, handler.NewProxyProviderNodesHandler(repo)))
 	mux.Handle("/api/proxy-provider/", handler.NewProxyProviderServeHandler(repo))
+
+	// Debug日志相关endpoint
+	mux.Handle("/api/user/debug/", auth.RequireToken(tokenStore, handler.NewDebugHandler(repo)))
+
 	mux.Handle("/api/traffic/summary", auth.RequireToken(tokenStore, trafficHandler))
 	mux.Handle("/api/subscriptions", auth.RequireToken(tokenStore, handler.NewSubscriptionListHandler(repo)))
 	mux.Handle("/api/dns/resolve", auth.RequireToken(tokenStore, handler.NewDNSHandler()))
@@ -210,9 +227,10 @@ func main() {
 	go startTrafficCollector(collectorCtx, trafficHandler)
 
 	go func() {
-		log.Printf("miaomiaowu Server v%s - HTTP server listening on %s", version.Version, addr)
+		logger.Info("HTTP服务器启动", "version", version.Version, "address", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http server failed: %v", err)
+			logger.Error("HTTP服务器运行失败", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -242,6 +260,7 @@ func waitForShutdown(srv *http.Server, stopCollector context.CancelFunc) {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	<-sigCh
+	logger.Info("收到关闭信号，开始优雅关闭")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -249,7 +268,9 @@ func waitForShutdown(srv *http.Server, stopCollector context.CancelFunc) {
 	stopCollector()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		logger.Error("优雅关闭失败", "error", err)
+	} else {
+		logger.Info("服务器已安全关闭")
 	}
 }
 
@@ -260,7 +281,7 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 
 	// 带重试的流量收集函数
 	runWithRetry := func() {
-		log.Printf("[Traffic Collector] Starting daily traffic collection at %s", time.Now().Format("2006-01-02 15:04:05"))
+		logger.Info("[流量收集器] 开始每日流量收集", "start_time", time.Now().Format("2006-01-02 15:04:05"))
 
 		maxRetries := 3
 		retryDelay := 30 * time.Second
@@ -271,23 +292,23 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 			cancel()
 
 			if err == nil {
-				log.Printf("[Traffic Collector] Daily traffic collection completed successfully")
+				logger.Info("[流量收集器] 每日流量收集成功")
 				return
 			}
 
-			log.Printf("[Traffic Collector] Daily traffic collection failed (attempt %d/%d): %v", attempt, maxRetries, err)
+			logger.Warn("[流量收集器] 每日流量收集失败", "attempt", attempt, "max_retries", maxRetries, "error", err)
 
 			// 如果是探针配置未找到错误，不需要重试
 			if errors.Is(err, storage.ErrProbeConfigNotFound) {
-				log.Printf("[Traffic Collector] Probe not configured, skipping retries")
+				logger.Info("[流量收集器] 探针未配置，跳过重试")
 				return
 			}
 
 			if attempt < maxRetries {
-				log.Printf("[Traffic Collector] Retrying in %v...", retryDelay)
+				logger.Info("[流量收集器] 准备重试", "delay", retryDelay)
 				select {
 				case <-ctx.Done():
-					log.Printf("[Traffic Collector] Retry cancelled due to shutdown")
+					logger.Info("[流量收集器] 重试已取消（服务器关闭）")
 					return
 				case <-time.After(retryDelay):
 					// 继续重试
@@ -295,7 +316,7 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 			}
 		}
 
-		log.Printf("[Traffic Collector] Daily traffic collection failed after %d attempts", maxRetries)
+		logger.Error("[流量收集器] 达到最大重试次数后仍失败", "max_retries", maxRetries)
 	}
 
 	runWithRetry()
@@ -303,12 +324,12 @@ func startTrafficCollector(ctx context.Context, trafficHandler *handler.TrafficS
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 
-	log.Printf("[Traffic Collector] Scheduler started, will run every 24 hours")
+	logger.Info("[流量收集器] 定时调度器已启动", "interval", "24小时")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[Traffic Collector] Scheduler stopped")
+			logger.Info("[流量收集器] 定时调度器已停止")
 			return
 		case <-ticker.C:
 			runWithRetry()
@@ -330,7 +351,7 @@ func syncSubscribeFilesToDatabase(repo *storage.TrafficRepository, subscribeDir 
 	// Read all files from subscribes directory
 	entries, err := os.ReadDir(subscribeDir)
 	if err != nil {
-		log.Printf("warning: failed to read subscribes directory: %v", err)
+		logger.Warn("读取订阅目录失败", "dir", subscribeDir, "error", err)
 		return
 	}
 
@@ -355,7 +376,7 @@ func syncSubscribeFilesToDatabase(repo *storage.TrafficRepository, subscribeDir 
 			// File already exists in database, skip
 			continue
 		} else if !errors.Is(err, storage.ErrSubscribeFileNotFound) {
-			log.Printf("warning: failed to check subscribe file %s: %v", filename, err)
+			logger.Warn("检查订阅文件失败", "filename", filename, "error", err)
 			continue
 		}
 
@@ -372,7 +393,7 @@ func syncSubscribeFilesToDatabase(repo *storage.TrafficRepository, subscribeDir 
 		}
 
 		if _, err := repo.CreateSubscribeFile(ctx, file); err != nil {
-			log.Printf("warning: failed to sync subscribe file %s to database: %v", filename, err)
+			logger.Warn("同步订阅文件到数据库失败", "filename", filename, "error", err)
 			continue
 		}
 
@@ -380,6 +401,28 @@ func syncSubscribeFilesToDatabase(repo *storage.TrafficRepository, subscribeDir 
 	}
 
 	if synced > 0 {
-		log.Printf("synced %d subscribe file(s) from directory to database", synced)
+		logger.Info("订阅文件同步完成", "count", synced)
+	}
+}
+
+// startLogCleanup 启动日志清理任务
+func startLogCleanup() {
+	logManager := logger.NewLogManager("data/logs")
+
+	// 启动时立即清理一次
+	if err := logManager.CleanupOldLogs(); err != nil {
+		logger.Error("[日志清理] 启动时清理失败", "error", err)
+	}
+
+	// 每天凌晨3点清理
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	logger.Info("[日志清理] 定时清理任务已启动", "interval", "24小时", "max_age", "7天")
+
+	for range ticker.C {
+		if err := logManager.CleanupOldLogs(); err != nil {
+			logger.Error("[日志清理] 定时清理失败", "error", err)
+		}
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"miaomiaowu/internal/logger"
 	"net"
 	"net/http"
 	"regexp"
@@ -53,7 +53,7 @@ func getGeoIPCountryCode(ipOrHost string) string {
 		// 是域名，需要解析
 		ips, err := net.LookupIP(ipOrHost)
 		if err != nil || len(ips) == 0 {
-			log.Printf("[GeoIP] Failed to resolve domain %s: %v", ipOrHost, err)
+			logger.Info("[GeoIP] Failed to resolve domain %s: %v", ipOrHost, err)
 			return ""
 		}
 		ip = ips[0].String()
@@ -68,7 +68,7 @@ func getGeoIPCountryCode(ipOrHost string) string {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("https://api.ipinfo.io/lite/%s?token=%s", ip, ipInfoToken))
 	if err != nil {
-		log.Printf("[GeoIP] Failed to query IP %s: %v", ip, err)
+		logger.Info("[GeoIP] Failed to query IP %s: %v", ip, err)
 		// 缓存空结果避免重复查询
 		geoIPCache.Store(ip, "")
 		return ""
@@ -77,7 +77,7 @@ func getGeoIPCountryCode(ipOrHost string) string {
 
 	var result geoIPResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("[GeoIP] Failed to decode response for IP %s: %v", ip, err)
+		logger.Info("[GeoIP] Failed to decode response for IP %s: %v", ip, err)
 		geoIPCache.Store(ip, "")
 		return ""
 	}
@@ -85,7 +85,7 @@ func getGeoIPCountryCode(ipOrHost string) string {
 	// 缓存结果
 	countryCode := strings.ToUpper(result.CountryCode)
 	geoIPCache.Store(ip, countryCode)
-	log.Printf("[GeoIP] IP %s -> Country: %s", ip, countryCode)
+	logger.Info("[GeoIP] IP %s -> Country: %s", ip, countryCode)
 	return countryCode
 }
 
@@ -163,7 +163,7 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 		// 检查缓存
 		cache := GetProxyProviderCache()
 		if entry, ok := cache.Get(configID); ok && !cache.IsExpired(entry) {
-			log.Printf("[ProxyProviderServe] 使用缓存 ID=%d, 节点数=%d", configID, entry.NodeCount)
+			logger.Info("[ProxyProviderServe] 使用缓存 ID=%d, 节点数=%d", configID, entry.NodeCount)
 			w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(entry.YAMLData)
@@ -173,7 +173,7 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 		// 缓存未命中或过期，拉取新数据
 		entry, err := RefreshProxyProviderCache(&sub, config)
 		if err != nil {
-			log.Printf("[ProxyProviderServe] Failed to fetch proxies for config %d: %v", configID, err)
+			logger.Info("[ProxyProviderServe] Failed to fetch proxies for config %d: %v", configID, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -193,14 +193,14 @@ func fetchSubscriptionContent(sub *storage.ExternalSubscription) ([]byte, error)
 	if cached, ok := subscriptionCache.Load(cacheKey); ok {
 		entry := cached.(*subscriptionCacheEntry)
 		if time.Since(entry.fetchedAt) < subscriptionCacheTTL {
-			log.Printf("[SubscriptionCache] Hit for URL: %s", sub.URL)
+			logger.Info("[SubscriptionCache] Hit for URL: %s", sub.URL)
 			return entry.content, nil
 		}
 		// 缓存过期，删除
 		subscriptionCache.Delete(cacheKey)
 	}
 
-	log.Printf("[SubscriptionCache] Miss for URL: %s, fetching...", sub.URL)
+	logger.Info("[SubscriptionCache] Miss for URL: %s, fetching...", sub.URL)
 
 	// 拉取订阅内容
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -428,7 +428,7 @@ func checkFilterMatches(sub *storage.ExternalSubscription, filter, excludeFilter
 		return 0, err
 	}
 
-	log.Printf("[checkFilterMatches] 订阅 %s 共 %d 个节点, filter=%s, excludeFilter=%s, geoIPFilter=%s",
+	logger.Info("[checkFilterMatches] 订阅 %s 共 %d 个节点, filter=%s, excludeFilter=%s, geoIPFilter=%s",
 		sub.Name, len(nodes), filter, excludeFilter, geoIPFilter)
 
 	// Compile regexes
@@ -437,7 +437,7 @@ func checkFilterMatches(sub *storage.ExternalSubscription, filter, excludeFilter
 	if filter != "" {
 		filterRegex, err = regexp.Compile(filter)
 		if err != nil {
-			log.Printf("[checkFilterMatches] Invalid filter regex: %v", err)
+			logger.Info("[checkFilterMatches] Invalid filter regex: %v", err)
 			return 0, fmt.Errorf("invalid filter regex: %w", err)
 		}
 	}
@@ -445,7 +445,7 @@ func checkFilterMatches(sub *storage.ExternalSubscription, filter, excludeFilter
 	if excludeFilter != "" {
 		excludeRegex, err = regexp.Compile(excludeFilter)
 		if err != nil {
-			log.Printf("[checkFilterMatches] Invalid exclude-filter regex: %v", err)
+			logger.Info("[checkFilterMatches] Invalid exclude-filter regex: %v", err)
 			return 0, fmt.Errorf("invalid exclude-filter regex: %w", err)
 		}
 	}
@@ -502,7 +502,7 @@ func checkFilterMatches(sub *storage.ExternalSubscription, filter, excludeFilter
 		matchCount++
 	}
 
-	log.Printf("[checkFilterMatches] 匹配结果: filter=%s, geoIPFilter=%s, matchCount=%d", filter, geoIPFilter, matchCount)
+	logger.Info("[checkFilterMatches] 匹配结果: filter=%s, geoIPFilter=%s, matchCount=%d", filter, geoIPFilter, matchCount)
 	return matchCount, nil
 }
 
@@ -537,7 +537,7 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 	if config.Filter != "" {
 		filterRegex, err = regexp.Compile(config.Filter)
 		if err != nil {
-			log.Printf("[ProxyProviderServe] Invalid filter regex: %v", err)
+			logger.Info("[ProxyProviderServe] Invalid filter regex: %v", err)
 			filterRegex = nil
 		}
 	}
@@ -545,12 +545,12 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 	if config.ExcludeFilter != "" {
 		excludeRegex, err = regexp.Compile(config.ExcludeFilter)
 		if err != nil {
-			log.Printf("[ProxyProviderServe] Invalid exclude-filter regex: %v", err)
+			logger.Info("[ProxyProviderServe] Invalid exclude-filter regex: %v", err)
 			excludeRegex = nil
 		}
 	}
 
-	log.Printf("[applyFiltersToNode] 配置 %s: filter=%q, excludeFilter(len=%d)=%q, filterRegex=%v, excludeRegex=%v",
+	logger.Info("[applyFiltersToNode] 配置 %s: filter=%q, excludeFilter(len=%d)=%q, filterRegex=%v, excludeRegex=%v",
 		config.Name, config.Filter, len(config.ExcludeFilter), config.ExcludeFilter, filterRegex != nil, excludeRegex != nil)
 
 	// Build exclude type map
@@ -583,7 +583,7 @@ func applyFiltersToNode(proxiesNode *yaml.Node, config *storage.ProxyProviderCon
 
 		// Apply exclude-filter first (remove matching names)
 		if excludeRegex != nil && excludeRegex.MatchString(name) {
-			log.Printf("[applyFiltersToNode] 排除节点(excludeFilter): %s", name)
+			logger.Info("[applyFiltersToNode] 排除节点(excludeFilter): %s", name)
 			continue
 		}
 
@@ -641,7 +641,7 @@ func applyOverridesToNode(proxiesNode *yaml.Node, overrideJSON string) {
 
 	var overrides map[string]any
 	if err := json.Unmarshal([]byte(overrideJSON), &overrides); err != nil {
-		log.Printf("[ProxyProviderServe] Invalid override JSON: %v", err)
+		logger.Info("[ProxyProviderServe] Invalid override JSON: %v", err)
 		return
 	}
 
@@ -681,7 +681,7 @@ func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storag
 
 	// 检查返回内容是否为空
 	if len(yamlBytes) == 0 {
-		log.Printf("[RefreshProxyProviderCache] 配置 %d 返回空内容", config.ID)
+		logger.Info("[RefreshProxyProviderCache] 配置 %d 返回空内容", config.ID)
 		entry := createEmptyCacheEntry(sub, config)
 		cache := GetProxyProviderCache()
 		cache.Set(config.ID, entry)
@@ -696,7 +696,7 @@ func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storag
 		if len(contentPreview) > 200 {
 			contentPreview = contentPreview[:200] + "..."
 		}
-		log.Printf("[RefreshProxyProviderCache] 配置 %d YAML 解析失败: %v, 原始内容: %s", config.ID, err, contentPreview)
+		logger.Info("[RefreshProxyProviderCache] 配置 %d YAML 解析失败: %v, 原始内容: %s", config.ID, err, contentPreview)
 		entry := createEmptyCacheEntry(sub, config)
 		cache := GetProxyProviderCache()
 		cache.Set(config.ID, entry)
@@ -735,6 +735,6 @@ func RefreshProxyProviderCache(sub *storage.ExternalSubscription, config *storag
 	cache := GetProxyProviderCache()
 	cache.Set(config.ID, entry)
 
-	log.Printf("[RefreshProxyProviderCache] 刷新缓存成功 ID=%d, 节点数=%d", config.ID, len(proxiesRaw))
+	logger.Info("[RefreshProxyProviderCache] 刷新缓存成功 ID=%d, 节点数=%d", config.ID, len(proxiesRaw))
 	return entry, nil
 }

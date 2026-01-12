@@ -45,8 +45,8 @@ func newTextHandler(w io.Writer, level slog.Level) slog.Handler {
 	return slog.NewTextHandler(w, &slog.HandlerOptions{
 		Level: level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// 自定义时间格式
-			if a.Key == slog.TimeKey {
+			// 自定义时间格式（仅处理slog内部的TimeKey）
+			if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
 				t := a.Value.Time()
 				return slog.String("time", t.Format("2006-01-02 15:04:05"))
 			}

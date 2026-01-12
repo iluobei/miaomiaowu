@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive, RefreshCw } from 'lucide-react'
+import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive, RefreshCw, Bug } from 'lucide-react'
+import { toast } from 'sonner'
 import useDialogState from '@/hooks/use-dialog-state'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 import { BackupDialog } from '@/components/backup-dialog'
@@ -15,22 +16,113 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Switch } from '@/components/ui/switch'
 import { profileQueryFn } from '@/lib/profile'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVersionCheck } from '@/hooks/use-version-check'
+import { api } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 
 export function UserMenu() {
   const [open, setOpen] = useDialogState<boolean>()
   const [backupDialogOpen, setBackupDialogOpen] = useState(false)
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const { auth } = useAuthStore()
   const { currentVersion, hasUpdate, releaseUrl } = useVersionCheck()
+  const queryClient = useQueryClient()
+
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: profileQueryFn,
     enabled: Boolean(auth.accessToken),
     staleTime: 5 * 60 * 1000,
   })
+
+  // Debug日志状态
+  const { data: debugStatus } = useQuery({
+    queryKey: ['debug-status'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/debug/status')
+      return response.data as {
+        enabled: boolean
+        log_path?: string
+        started_at?: string
+        file_size?: string
+        duration?: string
+      }
+    },
+    enabled: Boolean(auth.accessToken),
+    refetchInterval: (query) => {
+      return query.state.data?.enabled ? 5000 : false
+    },
+  })
+
+  // 开启Debug日志
+  const enableDebugMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/api/user/debug/enable')
+      return response.data
+    },
+    onSuccess: () => {
+      toast.success('Debug日志已开启')
+      queryClient.invalidateQueries({ queryKey: ['debug-status'] })
+    },
+    onError: (error) => {
+      handleServerError(error)
+      toast.error('开启Debug日志失败')
+    },
+  })
+
+  // 关闭Debug日志并下载
+  const disableDebugMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/api/user/debug/disable')
+      return response.data as { message: string; download_url: string; log_path: string }
+    },
+    onSuccess: async (data) => {
+      toast.success('Debug日志已关闭')
+      queryClient.invalidateQueries({ queryKey: ['debug-status'] })
+
+      // 自动下载日志文件
+      if (data.download_url) {
+        setIsDownloading(true)
+        try {
+          const response = await api.get(data.download_url, {
+            responseType: 'blob',
+          })
+
+          const url = window.URL.createObjectURL(new Blob([response.data]))
+          const link = document.createElement('a')
+          link.href = url
+          link.setAttribute('download', data.download_url.split('file=')[1] || 'debug.log')
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          window.URL.revokeObjectURL(url)
+
+          toast.success('日志文件已下载')
+        } catch (error) {
+          console.error('下载日志失败:', error)
+          toast.error('下载日志文件失败')
+        } finally {
+          setIsDownloading(false)
+        }
+      }
+    },
+    onError: (error) => {
+      handleServerError(error)
+      toast.error('关闭Debug日志失败')
+    },
+  })
+
+  const handleDebugToggle = (checked: boolean) => {
+    if (checked) {
+      enableDebugMutation.mutate()
+    } else {
+      disableDebugMutation.mutate()
+    }
+  }
 
   const displayName = profile?.nickname || profile?.username || '用户'
   const fallbackAvatar = profile?.is_admin ? '/images/admin-avatar.webp' : '/images/user-avatar.png'
@@ -84,6 +176,35 @@ export function UserMenu() {
               <Settings2 className='size-4' /> 个人设置
             </Link>
           </DropdownMenuItem>
+
+          {/* Debug日志开关 */}
+          <DropdownMenuItem
+            className='cursor-pointer justify-between px-2'
+            onSelect={(e) => e.preventDefault()}
+          >
+            <div className='flex items-center gap-2'>
+              <Bug className='size-4' />
+              <div className='flex flex-col'>
+                <span className='text-sm'>Debug 日志</span>
+                {debugStatus?.enabled && debugStatus.file_size && (
+                  <span className='text-xs text-muted-foreground'>
+                    {debugStatus.file_size} · {debugStatus.duration}
+                  </span>
+                )}
+              </div>
+            </div>
+            <Switch
+              checked={debugStatus?.enabled || false}
+              onCheckedChange={handleDebugToggle}
+              disabled={
+                enableDebugMutation.isPending ||
+                disableDebugMutation.isPending ||
+                isDownloading
+              }
+              onClick={(e) => e.stopPropagation()}
+            />
+          </DropdownMenuItem>
+
           <DropdownMenuItem asChild className='cursor-pointer justify-center'>
             <a href='https://docs.miaomiaowu.net' target='_blank' rel='noopener noreferrer' className='flex items-center gap-2'>
               <BookOpen className='size-4' /> 使用帮助

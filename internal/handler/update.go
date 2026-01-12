@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/version"
 )
 
@@ -97,7 +97,7 @@ func NewUpdateApplyHandler() http.Handler {
 		}
 
 		// 2. Download new binary to temp file
-		log.Printf("开始下载更新: %s", info.DownloadURL)
+		logger.Info("[系统更新] 开始下载更新", "url", info.DownloadURL)
 		tempFile, err := downloadBinary(info.DownloadURL)
 		if err != nil {
 			writeUpdateError(w, http.StatusInternalServerError, fmt.Errorf("下载失败: %w", err))
@@ -116,12 +116,12 @@ func NewUpdateApplyHandler() http.Handler {
 		if !isDocker() {
 			backupPath := targetPath + ".bak"
 			if err := copyFile(targetPath, backupPath); err != nil {
-				log.Printf("备份当前版本失败 (非致命错误): %v", err)
+				logger.Warn("[系统更新] 备份当前版本失败（非致命错误）", "error", err)
 			}
 		}
 
 		// 5. Replace binary
-		log.Printf("正在替换二进制文件: %s -> %s", tempFile, targetPath)
+		logger.Info("[系统更新] 正在替换二进制文件", "from", tempFile, "to", targetPath)
 		if err := replaceBinary(tempFile, targetPath); err != nil {
 			writeUpdateError(w, http.StatusInternalServerError, fmt.Errorf("替换失败: %w", err))
 			return
@@ -133,7 +133,7 @@ func NewUpdateApplyHandler() http.Handler {
 			return
 		}
 
-		log.Printf("更新成功，准备重启...")
+		logger.Info("[系统更新] 更新成功，准备重启服务器")
 
 		// 7. Return success response
 		w.Header().Set("Content-Type", "application/json")
@@ -195,7 +195,7 @@ func NewUpdateApplySSEHandler() http.Handler {
 
 		// 2. Download with progress
 		sendProgress("downloading", 0, "正在下载更新...")
-		log.Printf("开始下载更新: %s", info.DownloadURL)
+		logger.Info("[系统更新] 开始下载更新", "url", info.DownloadURL)
 
 		lastProgress := 0
 		tempFile, err := downloadBinaryWithProgressAndRetry(info.DownloadURL, func(downloaded, total int64) {
@@ -228,13 +228,13 @@ func NewUpdateApplySSEHandler() http.Handler {
 			sendProgress("backing_up", 0, "正在备份当前版本...")
 			backupPath := targetPath + ".bak"
 			if err := copyFile(targetPath, backupPath); err != nil {
-				log.Printf("备份当前版本失败 (非致命错误): %v", err)
+				logger.Warn("[系统更新] 备份当前版本失败（非致命错误）", "error", err)
 			}
 		}
 
 		// 5. Replace binary
 		sendProgress("replacing", 0, "正在替换文件...")
-		log.Printf("正在替换二进制文件: %s -> %s", tempFile, targetPath)
+		logger.Info("[系统更新] 正在替换二进制文件", "from", tempFile, "to", targetPath)
 		if err := replaceBinary(tempFile, targetPath); err != nil {
 			sendProgress("error", 0, fmt.Sprintf("替换失败: %v", err))
 			return
@@ -248,7 +248,7 @@ func NewUpdateApplySSEHandler() http.Handler {
 
 		// 7. Send restarting status
 		sendProgress("restarting", 0, "更新完成，正在重启服务...")
-		log.Printf("更新成功，准备重启...")
+		logger.Info("[系统更新] 更新成功，准备重启服务器")
 
 		// 8. Send done status
 		sendProgress("done", 100, "更新完成")
@@ -373,11 +373,11 @@ func downloadBinaryWithProgressAndRetry(url string, onProgress func(downloaded, 
 		return tempFile, nil
 	}
 
-	log.Printf("直接下载失败: %v，尝试使用代理下载...", err)
+	logger.Warn("[系统更新] 直接下载失败，尝试使用代理下载", "error", err)
 
 	// 使用 GitHub 代理重试
 	proxyURL := githubProxyURL + url
-	log.Printf("使用代理下载: %s", proxyURL)
+	logger.Info("[系统更新] 使用代理下载", "url", proxyURL)
 
 	// 通知切换到代理
 	if onRetry != nil {
@@ -542,13 +542,13 @@ func copyFile(src, dst string) error {
 
 // restartSelf restarts the current process
 func restartSelf(execPath string) {
-	log.Printf("正在重启: %s", execPath)
+	logger.Info("[系统重启] 正在重启服务器", "exec_path", execPath)
 
 	// Use syscall.Exec to replace current process (PID stays the same)
 	// This is important for Docker where PID 1 must stay alive
 	err := syscall.Exec(execPath, os.Args, os.Environ())
 	if err != nil {
-		log.Printf("syscall.Exec 失败: %v, 尝试启动新进程", err)
+		logger.Warn("[系统重启] syscall.Exec失败，尝试启动新进程", "error", err)
 
 		// Fallback: start new process and exit
 		cmd := exec.Command(execPath, os.Args[1:]...)
@@ -557,11 +557,11 @@ func restartSelf(execPath string) {
 		cmd.Stdin = os.Stdin
 
 		if err := cmd.Start(); err != nil {
-			log.Printf("启动新进程失败: %v", err)
+			logger.Error("[系统重启] 启动新进程失败", "error", err)
 			return
 		}
 
-		log.Printf("新进程已启动 (PID: %d), 退出当前进程", cmd.Process.Pid)
+		logger.Info("[系统重启] 新进程已启动，退出当前进程", "new_pid", cmd.Process.Pid)
 		os.Exit(0)
 	}
 }

@@ -3,12 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"miaomiaowu/internal/auth"
+	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/storage"
 )
 
@@ -89,9 +89,11 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 		}
 
 		if !ok {
-			// Log login failure
-			now := time.Now().Format("2006-01-02 15:04:05")
-			log.Printf("%s - %s - %s - 登录失败", clientIP, now, username)
+			// 记录登录失败
+			logger.Warn("[认证] 登录失败",
+				"username", username,
+				"client_ip", clientIP,
+				"time", time.Now().Format("2006-01-02 15:04:05"))
 			writeError(w, http.StatusUnauthorized, errors.New("invalid credentials"))
 			return
 		}
@@ -126,10 +128,17 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 		// Persist session to database if repo is available
 		if repo != nil {
 			if err := repo.CreateSession(r.Context(), token, username, expiry); err != nil {
-				log.Printf("Failed to persist session: %v", err)
+				logger.Warn("[认证] 会话持久化失败", "username", username, "error", err)
 				// Don't fail the login, just log the error
 			}
 		}
+
+		// 记录登录成功
+		logger.Info("[认证] 登录成功",
+			"username", username,
+			"client_ip", clientIP,
+			"remember_me", payload.RememberMe,
+			"expires_at", expiry.Format("2006-01-02 15:04:05"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

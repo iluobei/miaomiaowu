@@ -3,7 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"miaomiaowu/internal/logger"
 	"os"
 	"path/filepath"
 
@@ -778,7 +778,7 @@ func batchSyncNodesToYAMLFiles(subscribeDir string, updates []NodeUpdate) error 
 			continue
 		}
 
-		log.Printf("[YAML同步] 批量更新文件: %s", filename)
+		logger.Info("[YAML同步] 批量更新文件: %s", filename)
 	}
 
 	return nil
