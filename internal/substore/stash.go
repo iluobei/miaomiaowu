@@ -3,6 +3,7 @@ package substore
 import (
 	"encoding/json"
 	"fmt"
+	"miaomiaowu/internal/logger"
 	"regexp"
 	"strings"
 )
@@ -68,36 +69,46 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		// Check supported types
 		if !p.isSupportedType(proxyType) {
 			shouldSkip = true
+			logger.Info("[Stash] 跳过不支持的协议类型", "name", GetString(proxy, "name"), "type", proxyType)
 		}
 
 		// Check SS cipher
 		if proxyType == "ss" {
 			cipher := GetString(proxy, "cipher")
 			if !supportedSSCiphers[cipher] {
-				// 不跳过不支持的cipher 节点, 让stash报错去吧
-				// shouldSkip = true
+				// 客户端兼容模式开启时跳过不支持的cipher节点
+				if opts.ClientCompatibilityMode {
+					shouldSkip = true
+					logger.Info("[Stash] 跳过不支持的SS加密方式", "name", GetString(proxy, "name"), "cipher", cipher)
+				}
 			}
 		}
 
 		// Check Snell version
 		if proxyType == "snell" && GetInt(proxy, "version") >= 4 {
 			shouldSkip = true
+			logger.Info("[Stash] 跳过Snell v4+节点", "name", GetString(proxy, "name"), "version", GetInt(proxy, "version"))
 		}
 
 		// Check VLESS reality
 		if proxyType == "vless" && IsPresent(proxy, "reality-opts") {
 			flow := GetString(proxy, "flow")
 			if flow != "xtls-rprx-vision" {
-				// 不跳过没有流控算法的节点, 让stash报错去吧
-				// shouldSkip = true
-				// shouldSkip = true
+				// 客户端兼容模式开启时跳过没有流控算法的节点
+				if opts.ClientCompatibilityMode {
+					shouldSkip = true
+					logger.Info("[Stash] 跳过VLESS reality节点(缺少xtls-rprx-vision流控)", "name", GetString(proxy, "name"), "flow", flow)
+				}
 			}
 		}
 
 		// Check underlying-proxy / dialer-proxy
 		if IsPresent(proxy, "underlying-proxy") || IsPresent(proxy, "dialer-proxy") {
-			// stash 不支持链式代理, 不跳过, 让stash报错去吧
-			// shouldSkip = true
+			// 客户端兼容模式开启时跳过链式代理节点
+			if opts.ClientCompatibilityMode {
+				shouldSkip = true
+				logger.Info("[Stash] 跳过链式代理节点", "name", GetString(proxy, "name"))
+			}
 		}
 
 		if shouldSkip {

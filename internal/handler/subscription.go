@@ -525,7 +525,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// clash 和 clashmeta 类型直接输出源文件, 不需要转换
 	if clientType != "" && clientType != "clash" && clientType != "clashmeta" {
 		// Convert subscription using substore producers
-		convertedData, err := h.convertSubscription(data, clientType)
+		convertedData, err := h.convertSubscription(r.Context(), data, clientType)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("failed to convert subscription for client %s: %w", clientType, err))
 			return
@@ -874,7 +874,7 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 
 	// 如果指定了客户端类型且不是clash/clashmeta，进行转换
 	if clientType != "" && clientType != "clash" && clientType != "clashmeta" {
-		convertedData, err := h.convertSubscription(data, clientType)
+		convertedData, err := h.convertSubscription(r.Context(), data, clientType)
 		if err != nil {
 			// 转换失败，记录日志但继续返回YAML
 			logger.Info("[Token Invalid] 转换失败", "client_type", clientType, "error", err)
@@ -913,7 +913,7 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 }
 
 // convertSubscription converts a YAML subscription file to the specified client format
-func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType string) ([]byte, error) {
+func (h *SubscriptionHandler) convertSubscription(ctx context.Context, yamlData []byte, clientType string) ([]byte, error) {
 	// 使用 yaml.Node 解析, 解决值前导零的问题
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
@@ -959,8 +959,11 @@ func (h *SubscriptionHandler) convertSubscription(yamlData []byte, clientType st
 	}
 
 	// 调用Produce方法生成转换后的节点, 传入完整配置供需要的 Producer 使用（如 Stash）
+	// 获取系统配置以获取客户端兼容模式设置
+	systemConfig, _ := h.repo.GetSystemConfig(ctx)
 	opts := &substore.ProduceOptions{
-		FullConfig: config,
+		FullConfig:              config,
+		ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
 	}
 	result, err := producer.Produce(proxies, "", opts)
 	if err != nil {
