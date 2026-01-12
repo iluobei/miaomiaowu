@@ -11,6 +11,9 @@ import (
 
 // MarshalYAMLWithIndent marshals a YAML node with 2-space indentation
 func MarshalYAMLWithIndent(node *yaml.Node) ([]byte, error) {
+	// Sanitize explicit string tags before encoding to prevent !!str from appearing in output
+	sanitizeExplicitStringTags(node)
+
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
@@ -183,4 +186,33 @@ func looksLikeNumericStringWithLeadingZero(s string) bool {
 		return true
 	}
 	return false
+}
+
+// sanitizeExplicitStringTags removes explicit !!str tags from scalar nodes by clearing
+// the TaggedStyle bit. This prevents the YAML encoder from emitting literal !!str tags
+// in the output, which can cause parsing errors in some YAML clients.
+//
+// The function recursively walks the entire node tree and normalizes any scalar nodes
+// that have explicit string tags (!!str or tag:yaml.org,2002:str). After clearing the
+// TaggedStyle bit, the encoder will use implicit typing and add quotes automatically
+// when needed, maintaining semantic correctness while improving compatibility.
+func sanitizeExplicitStringTags(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	// Clear TaggedStyle for scalar nodes with explicit string tags
+	if node.Kind == yaml.ScalarNode && isExplicitStringTag(node.Tag) {
+		node.Style &^= yaml.TaggedStyle
+	}
+
+	// Recursively process all child nodes
+	for _, child := range node.Content {
+		sanitizeExplicitStringTags(child)
+	}
+}
+
+// isExplicitStringTag checks if the given YAML tag represents an explicit string type
+func isExplicitStringTag(tag string) bool {
+	return tag == "!!str" || tag == "tag:yaml.org,2002:str"
 }

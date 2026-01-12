@@ -996,7 +996,6 @@ func setFieldNode(mappingNode *yaml.Node, key string, valueNode *yaml.Node) {
 	// Add new key-value pair
 	keyNode := &yaml.Node{
 		Kind:  yaml.ScalarNode,
-		Tag:   "!!str",
 		Value: key,
 	}
 	mappingNode.Content = append(mappingNode.Content, keyNode, valueNode)
