@@ -684,7 +684,7 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		return
 	}
 
-	// Fix emoji escapes and quoted numbers
+	// Fix emoji/backslash escapes
 	fixedContent := RemoveUnicodeEscapeQuotes(string(reserializedContent))
 
 	// 保存文件到subscribes目录
@@ -841,14 +841,14 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 	}
 
 	// 如果有自动修复，使用修复后的配置
-	contentToSave := req.Content
+	contentToSave := RemoveUnicodeEscapeQuotes(req.Content)
 	if validationResult.FixedConfig != nil {
-		fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+		fixedYAML, err := MarshalWithIndent(validationResult.FixedConfig)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
 			return
 		}
-		contentToSave = string(fixedYAML)
+		contentToSave = RemoveUnicodeEscapeQuotes(string(fixedYAML))
 
 		// 记录自动修复的警告
 		for _, issue := range validationResult.Issues {
@@ -866,7 +866,7 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 	}
 
 	// 保存版本记录
-	version, err := h.repo.SaveRuleVersion(r.Context(), filename, req.Content, "admin")
+	version, err := h.repo.SaveRuleVersion(r.Context(), filename, contentToSave, "admin")
 	if err != nil {
 		// 版本保存失败不影响文件保存，只记录错误
 		writeError(w, http.StatusInternalServerError, errors.New("保存版本记录失败"))

@@ -42,7 +42,7 @@ func MarshalWithIndent(v interface{}) ([]byte, error) {
 
 // RemoveUnicodeEscapeQuotes removes quotes from strings that contain Unicode escape sequences
 // and converts the escape sequences back to actual Unicode characters (like emoji).
-// This also removes quotes from numeric values.
+// For known numeric fields (port, interval, etc.), removes quotes to ensure proper numeric type.
 func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 	// Step 1: Remove quotes from strings that contain Unicode escape sequences
 	// Pattern: "...\U000XXXXX..." or "...\uXXXX..."
@@ -78,10 +78,17 @@ func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 	// \U0001F4B0 -> 💰, \u4E2D -> 中, \U0001F1ED\U0001F1F0 -> 🇭🇰
 	result = convertUnicodeEscapes(result)
 
-	// Step 3: Remove quotes from numeric values (like port: "443")
-	// This fixes values that should be numbers but got quoted
-	numericQuotesRe := regexp.MustCompile(`:\s+"(\d+)"`)
-	result = numericQuotesRe.ReplaceAllString(result, `: $1`)
+	// Step 3: Remove quotes from numeric values for known numeric fields
+	// Only unquote fields that are expected to be numbers to avoid changing string-typed fields like name/server.
+	numericFields := []string{
+		"port", "socks-port", "redir-port", "tproxy-port", "mixed-port", "dns-port",
+		"interval", "timeout", "geo-update-interval", "update-interval",
+		"size-limit", "size_limit",
+		"health-check-interval", "health-check-timeout",
+	}
+	numericFieldsPattern := fmt.Sprintf(`(?m)^(\s*)(%s):\s+"(\d+)"`, strings.Join(numericFields, "|"))
+	numericQuotesRe := regexp.MustCompile(numericFieldsPattern)
+	result = numericQuotesRe.ReplaceAllString(result, `$1$2: $3`)
 
 	return result
 }
