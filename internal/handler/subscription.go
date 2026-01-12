@@ -273,19 +273,19 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
 		if err == nil && settings.ForceSyncExternal {
-			logger.Info("[Subscription] User %s has force sync enabled (cache_expire_minutes: %d)", username, settings.CacheExpireMinutes)
+			logger.Info("[Subscription] 用户启用强制同步", "user", username, "cache_expire_minutes", settings.CacheExpireMinutes)
 
 			// Get external subscriptions referenced in current file
 			usedExternalSubs, err := getExternalSubscriptionsFromFile(r.Context(), data, username, h.repo)
 			if err != nil {
-				logger.Info("[Subscription] Failed to get external subscriptions from file: %v", err)
+				logger.Info("[Subscription] 获取文件中的外部订阅失败", "error", err)
 			} else if len(usedExternalSubs) > 0 {
-				logger.Info("[Subscription] Found %d external subscriptions referenced in current file", len(usedExternalSubs))
+				logger.Info("[Subscription] 找到当前文件引用的外部订阅", "count", len(usedExternalSubs))
 
 				// Get user's external subscriptions to check cache and get URLs
 				allExternalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
 				if err != nil {
-					logger.Info("[Subscription] Failed to list external subscriptions: %v", err)
+					logger.Info("[Subscription] 获取外部订阅列表失败", "error", err)
 				} else {
 					// Filter to only sync subscriptions that are referenced in the current file
 					var subsToSync []storage.ExternalSubscription
@@ -298,7 +298,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 						}
 					}
 
-					logger.Info("[Subscription] ForceSyncExternal enabled: will sync %d/%d external subscriptions referenced in current file", len(subsToSync), len(allExternalSubs))
+					logger.Info("[Subscription] 强制同步已启用，将同步引用的外部订阅", "sync_count", len(subsToSync), "total_count", len(allExternalSubs))
 
 					// Check if we need to sync based on cache expiration
 					shouldSync := false
@@ -307,7 +307,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 						for _, sub := range subsToSync {
 							if sub.LastSyncAt == nil {
 								// Never synced before
-								logger.Info("[Subscription] Subscription %s (%s) never synced, will sync", sub.Name, sub.URL)
+								logger.Info("[Subscription] 订阅从未同步过，将进行同步", "name", sub.Name, "url", sub.URL)
 								shouldSync = true
 								break
 							}
@@ -316,7 +316,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 							elapsed := time.Since(*sub.LastSyncAt).Minutes()
 							if elapsed >= float64(settings.CacheExpireMinutes) {
 								// Cache expired
-								logger.Info("[Subscription] Subscription %s (%s) cache expired (%.2f >= %d minutes), will sync", sub.Name, sub.URL, elapsed, settings.CacheExpireMinutes)
+								logger.Info("[Subscription] 订阅缓存已过期，将进行同步", "name", sub.Name, "url", sub.URL, "elapsed_minutes", elapsed, "expire_minutes", settings.CacheExpireMinutes)
 								shouldSync = true
 								break
 							}
@@ -331,10 +331,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					}
 
 					if shouldSync {
-						logger.Info("[Subscription] Starting external subscriptions sync for user %s (only referenced subscriptions)", username)
+						logger.Info("[Subscription] 开始同步用户的外部订阅(仅引用的订阅)", "user", username)
 						// Sync only the referenced external subscriptions
 						if err := syncReferencedExternalSubscriptions(r.Context(), h.repo, h.baseDir, username, subsToSync); err != nil {
-							logger.Info("[Subscription] Failed to sync external subscriptions: %v", err)
+							logger.Info("[Subscription] 同步外部订阅失败", "error", err)
 							// Log error but don't fail the request
 							// The sync is best-effort
 						} else {
@@ -343,10 +343,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 							// Re-read the subscription file after sync to get updated nodes
 							updatedData, err := os.ReadFile(resolvedPath)
 							if err != nil {
-								logger.Info("[Subscription] Failed to re-read subscription file after sync: %v", err)
+								logger.Info("[Subscription] 同步后重新读取订阅文件失败", "error", err)
 							} else {
 								data = updatedData
-								logger.Info("[Subscription] Re-read subscription file after sync, got %d bytes", len(data))
+								logger.Info("[Subscription] 同步后重新读取订阅文件成功", "bytes", len(data))
 							}
 						}
 					}
@@ -375,7 +375,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				var yamlConfig map[string]any
 				if err := yaml.Unmarshal(data, &yamlConfig); err == nil {
 					if proxies, ok := yamlConfig["proxies"].([]any); ok {
-						logger.Info("[Subscription] Found %d proxies in subscription YAML", len(proxies))
+						logger.Info("[Subscription] 找到订阅YAML中的代理节点", "count", len(proxies))
 						// 收集所有节点名称
 						usedNodeNames := make(map[string]bool)
 						for _, proxy := range proxies {
@@ -388,7 +388,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 						// 如果有节点名称，从数据库查询这些节点
 						if len(usedNodeNames) > 0 {
-							logger.Info("[Subscription] Querying database for %d nodes", len(usedNodeNames))
+							logger.Info("[Subscription] 查询数据库中的节点", "count", len(usedNodeNames))
 							nodes, err := h.repo.ListNodes(r.Context(), username)
 							if err == nil {
 								// 收集使用到的外部订阅名称（通过 tag 识别）
@@ -405,7 +405,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 												usedProbeServers = make(map[string]struct{})
 											}
 											usedProbeServers[node.ProbeServer] = struct{}{}
-											logger.Info("[Subscription] Detected probe node '%s' bound to server '%s'", node.NodeName, node.ProbeServer)
+											logger.Info("[Subscription] 检测到探针节点绑定服务器", "node_name", node.NodeName, "probe_server", node.ProbeServer)
 										}
 
 										// 如果开启了流量同步，收集外部订阅节点
@@ -413,7 +413,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 											// 如果 tag 不是默认值，说明是外部订阅节点
 											if node.Tag != "" && node.Tag != "手动输入" {
 												usedExternalSubs[node.Tag] = true
-												logger.Info("[Subscription] Node '%s' is from external subscription '%s'", node.NodeName, node.Tag)
+												logger.Info("[Subscription] 节点来自外部订阅", "node_name", node.NodeName, "tag", node.Tag)
 											}
 										}
 									}
@@ -421,7 +421,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 								// 如果开启了流量同步且有使用到外部订阅的节点，汇总这些订阅的流量
 								if settings.SyncTraffic && len(usedExternalSubs) > 0 {
-									logger.Info("[Subscription] User %s has SyncTraffic enabled, found %d external subscriptions in use: %v", username, len(usedExternalSubs), getKeys(usedExternalSubs))
+									logger.Info("[Subscription] 用户启用流量同步，找到使用中的外部订阅", "user", username, "count", len(usedExternalSubs), "tags", getKeys(usedExternalSubs))
 									externalSubs, err := h.repo.ListExternalSubscriptions(r.Context(), username)
 									if err == nil {
 										now := time.Now()
@@ -431,15 +431,13 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 												// 如果有过期时间且已过期，则跳过
 												// 如果过期时间为空，表示长期订阅，不跳过
 												if sub.Expire != nil && sub.Expire.Before(now) {
-													logger.Info("[Subscription] Skipping expired external subscription '%s' (expired at %s)", sub.Name, sub.Expire.Format("2006-01-02 15:04:05"))
+													logger.Info("[Subscription] 跳过已过期的外部订阅", "name", sub.Name, "expire", sub.Expire.Format("2006-01-02 15:04:05"))
 													continue
 												}
 												if sub.Expire == nil {
-													logger.Info("[Subscription] Adding traffic from long-term external subscription '%s': upload=%d, download=%d, total=%d, mode=%s",
-														sub.Name, sub.Upload, sub.Download, sub.Total, sub.TrafficMode)
+													logger.Info("[Subscription] 添加长期外部订阅流量", "name", sub.Name, "upload", sub.Upload, "download", sub.Download, "total", sub.Total, "mode", sub.TrafficMode)
 												} else {
-													logger.Info("[Subscription] Adding traffic from external subscription '%s': upload=%d, download=%d, total=%d, mode=%s (expires at %s)",
-														sub.Name, sub.Upload, sub.Download, sub.Total, sub.TrafficMode, sub.Expire.Format("2006-01-02 15:04:05"))
+													logger.Info("[Subscription] 添加外部订阅流量", "name", sub.Name, "upload", sub.Upload, "download", sub.Download, "total", sub.Total, "mode", sub.TrafficMode, "expire", sub.Expire.Format("2006-01-02 15:04:05"))
 												}
 												externalTrafficLimit += sub.Total
 												// 根据 TrafficMode 计算已用流量
@@ -453,17 +451,15 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 												}
 											}
 										}
-										logger.Info("[Subscription] External subscriptions traffic total: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-											externalTrafficLimit, float64(externalTrafficLimit)/(1024*1024*1024),
-											externalTrafficUsed, float64(externalTrafficUsed)/(1024*1024*1024))
+										logger.Info("[Subscription] 外部订阅流量汇总", "limit_bytes", externalTrafficLimit, "limit_gb", float64(externalTrafficLimit)/(1024*1024*1024), "used_bytes", externalTrafficUsed, "used_gb", float64(externalTrafficUsed)/(1024*1024*1024))
 									} else {
-										logger.Info("[Subscription] Failed to list external subscriptions: %v", err)
+										logger.Info("[Subscription] 获取外部订阅列表失败", "error", err)
 									}
 								} else if settings.SyncTraffic {
-									logger.Info("[Subscription] User %s has SyncTraffic enabled, but no external subscription nodes found in use", username)
+									logger.Info("[Subscription] 用户启用流量同步但未找到使用中的外部订阅节点", "user", username)
 								}
 							} else {
-								logger.Info("[Subscription] Failed to list nodes: %v", err)
+								logger.Info("[Subscription] 获取节点列表失败", "error", err)
 							}
 						}
 					}
@@ -478,7 +474,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
 		if err == nil {
 			nodeOrder = settings.NodeOrder
-			logger.Info("[Subscription] User %s has %d nodes in node order", username, len(nodeOrder))
+			logger.Info("[Subscription] 用户节点排序配置", "user", username, "node_count", len(nodeOrder))
 		}
 	}
 
@@ -495,7 +491,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 						proxiesNode := rootMap.Content[i+1]
 						if proxiesNode.Kind == yaml.SequenceNode {
 							if err := sortProxiesByNodeOrder(r.Context(), h.repo, username, proxiesNode, nodeOrder); err != nil {
-								logger.Info("[Subscription] Failed to sort proxies by node order before conversion: %v", err)
+								logger.Info("[Subscription] 转换前按节点顺序排序失败", "error", err)
 							} else {
 								shouldRewrite = true
 								logger.Info("[Subscription] Successfully sorted proxies by node order before conversion")
@@ -652,28 +648,22 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if includeProbeTraffic && hasTrafficInfo {
 			finalLimit = totalLimit + externalTrafficLimit
 			finalUsed = totalUsed + externalTrafficUsed
-			logger.Info("[Subscription] Final traffic summary for user %s:", username)
-			logger.Info("[Subscription]   Probe traffic:    limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-				totalLimit, float64(totalLimit)/(1024*1024*1024),
-				totalUsed, float64(totalUsed)/(1024*1024*1024))
+			logger.Info("[Subscription] 最终流量统计", "user", username)
+			logger.Info("[Subscription] 探针流量", "limit_bytes", totalLimit, "limit_gb", float64(totalLimit)/(1024*1024*1024), "used_bytes", totalUsed, "used_gb", float64(totalUsed)/(1024*1024*1024))
 		} else {
 			// 仅统计外部订阅流量
 			finalLimit = externalTrafficLimit
 			finalUsed = externalTrafficUsed
-			logger.Info("[Subscription] Final traffic summary for user %s:", username)
-			logger.Info("[Subscription]   Probe traffic:    (not included - probe binding enabled but no probe nodes used)")
+			logger.Info("[Subscription] 最终流量统计(仅外部订阅)", "user", username)
+			logger.Info("[Subscription] 探针流量未包含(探针绑定已开启但未使用探针节点)")
 		}
 
-		logger.Info("[Subscription]   External traffic: limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-			externalTrafficLimit, float64(externalTrafficLimit)/(1024*1024*1024),
-			externalTrafficUsed, float64(externalTrafficUsed)/(1024*1024*1024))
-		logger.Info("[Subscription]   Total traffic:    limit=%d bytes (%.2f GB), used=%d bytes (%.2f GB)",
-			finalLimit, float64(finalLimit)/(1024*1024*1024),
-			finalUsed, float64(finalUsed)/(1024*1024*1024))
+		logger.Info("[Subscription] 外部订阅流量", "limit_bytes", externalTrafficLimit, "limit_gb", float64(externalTrafficLimit)/(1024*1024*1024), "used_bytes", externalTrafficUsed, "used_gb", float64(externalTrafficUsed)/(1024*1024*1024))
+		logger.Info("[Subscription] 总流量", "limit_bytes", finalLimit, "limit_gb", float64(finalLimit)/(1024*1024*1024), "used_bytes", finalUsed, "used_gb", float64(finalUsed)/(1024*1024*1024))
 
 		headerValue := buildSubscriptionHeader(finalLimit, finalUsed)
 		w.Header().Set("subscription-userinfo", headerValue)
-		logger.Info("[Subscription] Setting subscription-userinfo header: %s", headerValue)
+		logger.Info("[Subscription] 设置订阅用户信息头", "header", headerValue)
 	}
 	w.Header().Set("profile-update-interval", "24")
 	// 只有非浏览器访问时才添加 content-disposition 头（避免浏览器直接下载）
@@ -742,7 +732,7 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 
 	// Extract proxies and query database for their raw_url
 	if proxies, ok := yamlContent["proxies"].([]any); ok {
-		logger.Info("[Subscription] Found %d proxies in subscription file", len(proxies))
+		logger.Info("[Subscription] 找到订阅文件中的代理节点", "count", len(proxies))
 
 		// Collect all proxy names
 		proxyNames := make(map[string]bool)
@@ -755,12 +745,12 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 		}
 
 		if len(proxyNames) > 0 {
-			logger.Info("[Subscription] Querying database for %d proxies to find external subscription URLs", len(proxyNames))
+			logger.Info("[Subscription] 查询数据库获取外部订阅URL", "proxy_count", len(proxyNames))
 
 			// Query database for nodes with these names
 			nodes, err := repo.ListNodes(ctx, username)
 			if err != nil {
-				logger.Info("[Subscription] Failed to list nodes from database: %v", err)
+				logger.Info("[Subscription] 查询节点列表失败", "error", err)
 				return usedURLs, fmt.Errorf("failed to list nodes: %w", err)
 			}
 
@@ -768,7 +758,7 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 			for _, node := range nodes {
 				if proxyNames[node.NodeName] && node.RawURL != "" {
 					usedURLs[node.RawURL] = true
-					logger.Info("[Subscription] Found external subscription URL from node '%s': %s", node.NodeName, node.RawURL)
+					logger.Info("[Subscription] 从节点找到外部订阅URL", "node_name", node.NodeName, "url", node.RawURL)
 				}
 			}
 		}
@@ -791,17 +781,17 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 		}
 
 		if len(providerNames) > 0 {
-			logger.Info("[Subscription] Found %d proxy provider references in proxy-groups", len(providerNames))
+			logger.Info("[Subscription] 找到代理集合引用", "count", len(providerNames))
 
 			// Get all proxy provider configs for this user
 			configs, err := repo.ListProxyProviderConfigs(ctx, username)
 			if err != nil {
-				logger.Info("[Subscription] Failed to list proxy provider configs: %v", err)
+				logger.Info("[Subscription] 查询代理集合配置失败", "error", err)
 			} else {
 				// Get external subscriptions to map config -> URL
 				externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
 				if err != nil {
-					logger.Info("[Subscription] Failed to list external subscriptions: %v", err)
+					logger.Info("[Subscription] 获取外部订阅列表失败", "error", err)
 				} else {
 					// Build external subscription ID -> URL map
 					subIDToURL := make(map[int64]string)
@@ -814,7 +804,7 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 						if providerNames[config.Name] {
 							if url, ok := subIDToURL[config.ExternalSubscriptionID]; ok {
 								usedURLs[url] = true
-								logger.Info("[Subscription] Found external subscription URL from proxy provider config '%s': %s", config.Name, url)
+								logger.Info("[Subscription] 从代理集合配置找到外部订阅URL", "config_name", config.Name, "url", url)
 							}
 						}
 					}
@@ -823,7 +813,7 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 		}
 	}
 
-	logger.Info("[Subscription] Found %d unique external subscription URLs referenced in current file", len(usedURLs))
+	logger.Info("[Subscription] 找到当前文件引用的外部订阅URL", "count", len(usedURLs))
 	return usedURLs, nil
 }
 
@@ -840,7 +830,7 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 		userSettings.MatchRule = "node_name"
 	}
 
-	logger.Info("[Subscription] User %s has %d referenced external subscriptions to sync (match rule: %s)", username, len(subsToSync), userSettings.MatchRule)
+	logger.Info("[Subscription] 用户需要同步的外部订阅", "user", username, "count", len(subsToSync), "match_rule", userSettings.MatchRule)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -852,7 +842,7 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	for _, sub := range subsToSync {
 		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings)
 		if err != nil {
-			logger.Info("[Subscription] Failed to sync subscription %s (%s): %v", sub.Name, sub.URL, err)
+			logger.Info("[Subscription] 同步订阅失败", "name", sub.Name, "url", sub.URL, "error", err)
 			continue
 		}
 
@@ -864,11 +854,11 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 		updatedSub.LastSyncAt = &now
 		updatedSub.NodeCount = nodeCount
 		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
-			logger.Info("[Subscription] Failed to update sync time for subscription %s: %v", sub.Name, err)
+			logger.Info("[Subscription] 更新订阅同步时间失败", "name", sub.Name, "error", err)
 		}
 	}
 
-	logger.Info("[Subscription] Completed: synced %d nodes total from %d referenced subscriptions", totalNodesSynced, len(subsToSync))
+	logger.Info("[Subscription] 同步完成", "total_nodes", totalNodesSynced, "subscription_count", len(subsToSync))
 
 	return nil
 }
@@ -887,7 +877,7 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 		convertedData, err := h.convertSubscription(data, clientType)
 		if err != nil {
 			// 转换失败，记录日志但继续返回YAML
-			logger.Info("[Token Invalid] Failed to convert for client %s: %v", clientType, err)
+			logger.Info("[Token Invalid] 转换失败", "client_type", clientType, "error", err)
 		} else {
 			data = convertedData
 
@@ -919,7 +909,7 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 
-	logger.Info("[Token Invalid] Served token invalid response, client type: %s", clientType)
+	logger.Info("[Token Invalid] 返回Token失效响应", "client_type", clientType)
 }
 
 // convertSubscription converts a YAML subscription file to the specified client format
@@ -1315,6 +1305,6 @@ func sortProxiesByNodeOrder(ctx context.Context, repo *storage.TrafficRepository
 	}
 	proxiesNode.Content = newContent
 
-	logger.Info("[Subscription] Sorted %d proxies according to node order (user: %s)", len(proxiesWithOrder), username)
+	logger.Info("[Subscription] 按节点顺序排序完成", "count", len(proxiesWithOrder), "user", username)
 	return nil
 }

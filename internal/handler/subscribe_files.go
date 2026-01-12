@@ -443,11 +443,11 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 		go func() {
 			addedGroups, err := syncCustomRulesToFile(context.Background(), h.repo, updated)
 			if err != nil {
-				logger.Info("[AutoSync] Failed to sync custom rules to file %s (ID: %d) after enabling auto-sync: %v", updated.Filename, updated.ID, err)
+				logger.Info("[AutoSync] 同步自定义规则失败", "filename", updated.Filename, "id", updated.ID, "error", err)
 			} else {
-				logger.Info("[AutoSync] Successfully synced custom rules to file %s (ID: %d) after enabling auto-sync", updated.Filename, updated.ID)
+				logger.Info("[AutoSync] 同步自定义规则成功", "filename", updated.Filename, "id", updated.ID)
 				if len(addedGroups) > 0 {
-					logger.Info("[AutoSync] Added proxy groups: %v", addedGroups)
+					logger.Info("[AutoSync] 添加的代理组", "groups", addedGroups)
 				}
 			}
 		}()
@@ -638,7 +638,7 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 
 	validationResult := validator.ValidateClashConfig(configMap)
 	if !validationResult.Valid {
-		logger.Info("[创建订阅文件] [配置校验] 校验失败 - 文件名: %s", filename)
+		logger.Info("[创建订阅文件] [配置校验] 校验失败", "filename", filename)
 		var errorMessages []string
 		for _, issue := range validationResult.Issues {
 			if issue.Level == validator.ErrorLevel {
@@ -647,7 +647,7 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
 				}
 				errorMessages = append(errorMessages, errorMsg)
-				logger.Info("[创建订阅文件] [配置校验] 错误: %s", errorMsg)
+				logger.Info("[创建订阅文件] [配置校验] 错误", "message", errorMsg)
 			}
 		}
 		writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
@@ -669,7 +669,7 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		// 记录自动修复的警告
 		for _, issue := range validationResult.Issues {
 			if issue.Level == validator.WarningLevel && issue.AutoFixed {
-				logger.Info("[创建订阅文件] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+				logger.Info("[创建订阅文件] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
 			}
 		}
 	}
@@ -824,16 +824,16 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 	// 校验配置内容
 	validationResult := validator.ValidateClashConfig(yamlCheck)
 	if !validationResult.Valid {
-		logger.Info("[更新订阅文件] [配置校验] 校验失败 - 文件名: %s", filename)
+		logger.Info("[更新订阅文件] [配置校验] 校验失败", "filename", filename)
 		var errorMessages []string
 		for _, issue := range validationResult.Issues {
 			if issue.Level == validator.ErrorLevel {
 				errorMsg := issue.Message
 				if issue.Location != "" {
-					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+					errorMsg = fmt.Sprintf("%s (位��: %s)", errorMsg, issue.Location)
 				}
 				errorMessages = append(errorMessages, errorMsg)
-				logger.Info("[更新订阅文件] [配置校验] 错误: %s", errorMsg)
+				logger.Info("[更新订阅文件] [配置校验] 错误", "message", errorMsg)
 			}
 		}
 		writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
@@ -853,7 +853,7 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 		// 记录自动修复的警告
 		for _, issue := range validationResult.Issues {
 			if issue.Level == validator.WarningLevel && issue.AutoFixed {
-				logger.Info("[更新订阅文件] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+				logger.Info("[更新订阅文件] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
 			}
 		}
 	}
@@ -895,7 +895,7 @@ func (h *subscribeFilesHandler) initializeCustomRuleApplications(ctx context.Con
 	// Get all enabled custom rules to record their current state
 	rules, err := h.repo.ListEnabledCustomRules(ctx, "")
 	if err != nil {
-		logger.Info("[Subscribe] Warning: failed to get custom rules for recording: %v", err)
+		logger.Info("[Subscribe] 获取自定义规则失败", "error", err)
 		return
 	}
 
@@ -979,11 +979,11 @@ func (h *subscribeFilesHandler) initializeCustomRuleApplications(ctx context.Con
 		}
 
 		if err := h.repo.UpsertCustomRuleApplication(ctx, app); err != nil {
-			logger.Info("[Subscribe] Warning: failed to record custom rule application for rule %d: %v", rule.ID, err)
+			logger.Info("[Subscribe] 记录自定义规则应用失败", "rule_id", rule.ID, "error", err)
 		}
 	}
 
-	logger.Info("[Subscribe] Recorded %d custom rule application states for file ID %d", len(rules), fileID)
+	logger.Info("[Subscribe] 记录自定义规则应用状态完成", "rule_count", len(rules), "file_id", fileID)
 }
 
 // syncMMWProxyProvidersToFile 同步 MMW 模式代理集合的节点到指定文件
@@ -994,25 +994,25 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 	// 1. 读取刚保存的 YAML 文件
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		logger.Info("[MMW同步] 读取文件失败: %v", err)
+		logger.Info("[MMW同步] 读取文件失败", "error", err)
 		return
 	}
 
 	// 2. 解析 YAML
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(content, &rootNode); err != nil {
-		logger.Info("[MMW同步] 解析YAML失败: %v", err)
+		logger.Info("[MMW同步] 解析YAML失败", "error", err)
 		return
 	}
 
 	// 3. 查找 proxy-groups，收集 use 引用的代理集合名称
 	providerNames := collectUsedProviderNames(&rootNode)
 	if len(providerNames) == 0 {
-		logger.Info("[MMW同步] 文件 %s 没有使用代理集合", filename)
+		logger.Info("[MMW同步] 文件没有使用代理集合", "filename", filename)
 		return
 	}
 
-	logger.Info("[MMW同步] 文件 %s 使用了 %d 个代理集合: %v", filename, len(providerNames), providerNames)
+	logger.Info("[MMW同步] 文件使用代理集合", "filename", filename, "count", len(providerNames), "providers", providerNames)
 
 	ctx := context.Background()
 	syncedCount := 0
@@ -1021,19 +1021,19 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 	for _, providerName := range providerNames {
 		config, err := h.repo.GetProxyProviderConfigByName(ctx, providerName)
 		if err != nil {
-			logger.Info("[MMW同步] 查询代理集合 %s 配置失败: %v", providerName, err)
+			logger.Info("[MMW同步] 查询代理集合配置失败", "provider_name", providerName, "error", err)
 			continue
 		}
 		if config == nil {
-			logger.Info("[MMW同步] 代理集合 %s 配置不存在", providerName)
+			logger.Info("[MMW同步] 代理集合配置不存在", "provider_name", providerName)
 			continue
 		}
 		if config.ProcessMode != "mmw" {
-			logger.Info("[MMW同步] 代理集合 %s 不是妙妙屋模式 (mode=%s)，跳过", providerName, config.ProcessMode)
+			logger.Info("[MMW同步] 代理集合不是妙妙屋模式，跳过", "provider_name", providerName, "mode", config.ProcessMode)
 			continue
 		}
 
-		logger.Info("[MMW同步] 处理妙妙屋模式代理集合: %s", providerName)
+		logger.Info("[MMW同步] 处理妙妙屋模式代理集合", "provider_name", providerName)
 
 		// 5. 从缓存获取节点数据
 		cache := GetProxyProviderCache()
@@ -1042,22 +1042,22 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 			// 缓存不存在或过期，尝试刷新
 			sub, err := h.repo.GetExternalSubscription(ctx, config.ExternalSubscriptionID, config.Username)
 			if err != nil || sub.ID == 0 {
-				logger.Info("[MMW同步] 获取代理集合 %s 的外部订阅失败: %v", providerName, err)
+				logger.Info("[MMW同步] 获取代理集合的外部订阅失败", "provider_name", providerName, "error", err)
 				continue
 			}
 			entry, err = RefreshProxyProviderCache(&sub, config)
 			if err != nil {
-				logger.Info("[MMW同步] 刷新代理集合 %s 缓存失败: %v", providerName, err)
+				logger.Info("[MMW同步] 刷新代理集合缓存失败", "provider_name", providerName, "error", err)
 				continue
 			}
 		}
 
 		if len(entry.Nodes) == 0 {
-			logger.Info("[MMW同步] 代理集合 %s 没有节点", providerName)
+			logger.Info("[MMW同步] 代理集合没有节点", "provider_name", providerName)
 			continue
 		}
 
-		logger.Info("[MMW同步] 代理集合 %s 获取到 %d 个节点", providerName, len(entry.Nodes))
+		logger.Info("[MMW同步] 代理集合获取到节点", "provider_name", providerName, "node_count", len(entry.Nodes))
 
 		// 6. 为节点添加前缀
 		namePrefix := config.Name
@@ -1081,16 +1081,16 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 
 		// 7. 调用已有的同步函数写入节点
 		if err := updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, config.Name, prefix, proxiesRaw, nodeNames); err != nil {
-			logger.Info("[MMW同步] 更新文件 %s 失败: %v", filename, err)
+			logger.Info("[MMW同步] 更新文件失败", "filename", filename, "error", err)
 			continue
 		}
 
 		syncedCount++
-		logger.Info("[MMW同步] 代理集合 %s 同步完成: %d 个节点", providerName, len(nodeNames))
+		logger.Info("[MMW同步] 代理集合同步完成", "provider_name", providerName, "node_count", len(nodeNames))
 	}
 
 	if syncedCount > 0 {
-		logger.Info("[MMW同步] 文件 %s 同步完成: 处理了 %d 个妙妙屋模式代理集合", filename, syncedCount)
+		logger.Info("[MMW同步] 文件同步完成", "filename", filename, "synced_count", syncedCount)
 	}
 }
 

@@ -92,7 +92,7 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		if errors.Is(probeErr, storage.ErrProbeConfigNotFound) {
 			logger.Info("[Traffic] Probe not configured, will use external subscription traffic only")
 		} else {
-			logger.Info("[Traffic] Failed to fetch probe traffic: %v", probeErr)
+			logger.Info("[流量] 获取探针流量失败", "error", probeErr)
 		}
 		// Reset values in case of error
 		totalLimit, totalRemaining, totalUsed = 0, 0, 0
@@ -115,12 +115,12 @@ func (h *TrafficSummaryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.recordSnapshot(ctx, totalLimit, totalUsed, totalRemaining); err != nil {
-		logger.Info("record traffic snapshot failed: %v", err)
+		logger.Info("[流量] 记录快照失败", "error", err)
 	}
 
 	history, err := h.loadHistory(ctx, 30)
 	if err != nil {
-		logger.Info("load traffic history failed: %v", err)
+		logger.Info("[流量] 加载历史记录失败", "error", err)
 	}
 
 	metrics := trafficSummaryMetrics{
@@ -239,7 +239,7 @@ func (h *TrafficSummaryHandler) syncAndFetchExternalSubscriptionTraffic(ctx cont
 		return 0, 0
 	}
 
-	logger.Info("[Traffic Record] Syncing %d external subscriptions", len(subs))
+	logger.Info("[流量记录] 同步外部订阅", "count", len(subs))
 
 	var totalLimit, totalUsed int64
 	now := time.Now()
@@ -248,20 +248,19 @@ func (h *TrafficSummaryHandler) syncAndFetchExternalSubscriptionTraffic(ctx cont
 		// Fetch and update traffic info from subscription URL
 		updatedSub, err := h.fetchExternalSubscriptionTrafficInfo(ctx, sub)
 		if err != nil {
-			logger.Info("[Traffic Record] Failed to fetch traffic for subscription %s: %v", sub.Name, err)
+			logger.Info("[流量记录] 获取订阅流量失败", "name", sub.Name, "error", err)
 			// Use existing data if fetch fails
 			updatedSub = sub
 		} else {
 			// Update subscription in database
 			if updateErr := h.repo.UpdateExternalSubscription(ctx, updatedSub); updateErr != nil {
-				logger.Info("[Traffic Record] Failed to update subscription %s: %v", sub.Name, updateErr)
+				logger.Info("[流量记录] 更新订阅失败", "name", sub.Name, "error", updateErr)
 			}
 		}
 
 		// Skip expired subscriptions
 		if updatedSub.Expire != nil && updatedSub.Expire.Before(now) {
-			logger.Info("[Traffic Record] Skipping expired subscription: %s (expired at %s)",
-				updatedSub.Name, updatedSub.Expire.Format("2006-01-02 15:04:05"))
+			logger.Info("[流量记录] 跳过已过期订阅", "name", updatedSub.Name, "expired_at", updatedSub.Expire.Format("2006-01-02 15:04:05"))
 			continue
 		}
 
@@ -270,17 +269,22 @@ func (h *TrafficSummaryHandler) syncAndFetchExternalSubscriptionTraffic(ctx cont
 		totalUsed += updatedSub.Upload + updatedSub.Download
 
 		if updatedSub.Expire == nil {
-			logger.Info("[Traffic Record] Added long-term subscription traffic: %s (limit=%.2f GB, used=%.2f GB)",
-				updatedSub.Name, bytesToGigabytes(updatedSub.Total), bytesToGigabytes(updatedSub.Upload+updatedSub.Download))
+			logger.Info("[流量记录] 添加长期订阅流量",
+				"name", updatedSub.Name,
+				"limit_gb", bytesToGigabytes(updatedSub.Total),
+				"used_gb", bytesToGigabytes(updatedSub.Upload+updatedSub.Download))
 		} else {
-			logger.Info("[Traffic Record] Added subscription traffic: %s (limit=%.2f GB, used=%.2f GB, expires=%s)",
-				updatedSub.Name, bytesToGigabytes(updatedSub.Total), bytesToGigabytes(updatedSub.Upload+updatedSub.Download),
-				updatedSub.Expire.Format("2006-01-02 15:04:05"))
+			logger.Info("[流量记录] 添加订阅流量",
+				"name", updatedSub.Name,
+				"limit_gb", bytesToGigabytes(updatedSub.Total),
+				"used_gb", bytesToGigabytes(updatedSub.Upload+updatedSub.Download),
+				"expires", updatedSub.Expire.Format("2006-01-02 15:04:05"))
 		}
 	}
 
-	logger.Info("[Traffic Record] Total external subscription traffic: limit=%.2f GB, used=%.2f GB",
-		bytesToGigabytes(totalLimit), bytesToGigabytes(totalUsed))
+	logger.Info("[流量记录] 外部订阅流量总计",
+		"limit_gb", bytesToGigabytes(totalLimit),
+		"used_gb", bytesToGigabytes(totalUsed))
 
 	return totalLimit, totalUsed
 }
@@ -322,8 +326,11 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTrafficInfo(ctx context
 	sub.Total = total
 	sub.Expire = expire
 
-	logger.Info("[Traffic Record] Parsed traffic for %s: upload=%.2f MB, download=%.2f MB, total=%.2f GB",
-		sub.Name, float64(upload)/(1024*1024), float64(download)/(1024*1024), float64(total)/(1024*1024*1024))
+	logger.Info("[流量记录] 解析流量信息",
+		"name", sub.Name,
+		"upload_mb", float64(upload)/(1024*1024),
+		"download_mb", float64(download)/(1024*1024),
+		"total_gb", float64(total)/(1024*1024*1024))
 
 	return sub, nil
 }
@@ -405,7 +412,7 @@ func (h *TrafficSummaryHandler) fetchTotals(ctx context.Context, username string
 		}
 
 		cfg.Servers = filteredServers
-		logger.Info("[Traffic Fetch] Filtered to %d probe servers based on bindings", len(cfg.Servers))
+		logger.Info("[流量获取] 根据绑定过滤探针服务器", "count", len(cfg.Servers))
 	}
 
 	serverIDs := make([]string, 0, len(cfg.Servers))
@@ -564,7 +571,7 @@ func (h *TrafficSummaryHandler) fetchNezhaTotals(ctx context.Context, cfg storag
 	var totalLimit int64
 	var totalUsed int64
 
-	logger.Info("[Nezha] Processing %d servers from WebSocket data", len(cfg.Servers))
+	logger.Info("[Nezha] 处理服务器流量", "count", len(cfg.Servers))
 
 	for _, srv := range cfg.Servers {
 		id := strings.TrimSpace(srv.ServerID)
@@ -576,7 +583,7 @@ func (h *TrafficSummaryHandler) fetchNezhaTotals(ctx context.Context, cfg storag
 
 		wsEntry, ok := observed[id]
 		if !ok {
-			logger.Info("[Nezha] Server ID %s not found in probe data", id)
+			logger.Info("[Nezha] 服务器未在探针数据中找到", "server_id", id)
 			continue
 		}
 
@@ -597,9 +604,13 @@ func (h *TrafficSummaryHandler) fetchNezhaTotals(ctx context.Context, cfg storag
 			used = srv.MonthlyTrafficBytes
 		}
 
-		logger.Info("[Nezha] Server ID %s - NetIn: %.2f GB, NetOut: %.2f GB, Method: %s, Used: %.2f GB, Limit: %.2f GB",
-			id, bytesToGigabytes(wsEntry.NetIn), bytesToGigabytes(wsEntry.NetOut),
-			srv.TrafficMethod, bytesToGigabytes(used), bytesToGigabytes(srv.MonthlyTrafficBytes))
+		logger.Info("[Nezha] 服务器流量",
+			"server_id", id,
+			"net_in_gb", bytesToGigabytes(wsEntry.NetIn),
+			"net_out_gb", bytesToGigabytes(wsEntry.NetOut),
+			"method", srv.TrafficMethod,
+			"used_gb", bytesToGigabytes(used),
+			"limit_gb", bytesToGigabytes(srv.MonthlyTrafficBytes))
 
 		totalUsed += used
 	}
@@ -609,8 +620,10 @@ func (h *TrafficSummaryHandler) fetchNezhaTotals(ctx context.Context, cfg storag
 		totalRemaining = 0
 	}
 
-	logger.Info("[Nezha] Total - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB",
-		bytesToGigabytes(totalLimit), bytesToGigabytes(totalUsed), bytesToGigabytes(totalRemaining))
+	logger.Info("[Nezha] 总计流量",
+		"limit_gb", bytesToGigabytes(totalLimit),
+		"used_gb", bytesToGigabytes(totalUsed),
+		"remaining_gb", bytesToGigabytes(totalRemaining))
 
 	return totalLimit, totalRemaining, totalUsed, nil
 }
@@ -717,7 +730,7 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 	var totalLimit int64
 	var totalUsed int64
 
-	logger.Info("[Nezha V0] Processing %d servers from HTTP API data", len(cfg.Servers))
+	logger.Info("[Nezha V0] 处理服务器流量", "count", len(cfg.Servers))
 
 	for _, srv := range cfg.Servers {
 		id := strings.TrimSpace(srv.ServerID)
@@ -729,7 +742,7 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 
 		entry, ok := observed[id]
 		if !ok {
-			logger.Info("[Nezha V0] Server ID %s not found in probe data", id)
+			logger.Info("[Nezha V0] 服务器未在探针数据中找到", "server_id", id)
 			continue
 		}
 
@@ -750,9 +763,13 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 			used = srv.MonthlyTrafficBytes
 		}
 
-		logger.Info("[Nezha V0] Server ID %s - NetIn: %.2f GB, NetOut: %.2f GB, Method: %s, Used: %.2f GB, Limit: %.2f GB",
-			id, bytesToGigabytes(entry.NetIn), bytesToGigabytes(entry.NetOut),
-			srv.TrafficMethod, bytesToGigabytes(used), bytesToGigabytes(srv.MonthlyTrafficBytes))
+		logger.Info("[Nezha V0] 服务器流量",
+			"server_id", id,
+			"net_in_gb", bytesToGigabytes(entry.NetIn),
+			"net_out_gb", bytesToGigabytes(entry.NetOut),
+			"method", srv.TrafficMethod,
+			"used_gb", bytesToGigabytes(used),
+			"limit_gb", bytesToGigabytes(srv.MonthlyTrafficBytes))
 
 		totalUsed += used
 	}
@@ -762,8 +779,10 @@ func (h *TrafficSummaryHandler) fetchNezhaV0Totals(ctx context.Context, cfg stor
 		totalRemaining = 0
 	}
 
-	logger.Info("[Nezha V0] Total - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB",
-		bytesToGigabytes(totalLimit), bytesToGigabytes(totalUsed), bytesToGigabytes(totalRemaining))
+	logger.Info("[Nezha V0] 总计流量",
+		"limit_gb", bytesToGigabytes(totalLimit),
+		"used_gb", bytesToGigabytes(totalUsed),
+		"remaining_gb", bytesToGigabytes(totalRemaining))
 
 	return totalLimit, totalRemaining, totalUsed, nil
 }
@@ -863,7 +882,7 @@ func (h *TrafficSummaryHandler) fetchKomariTotals(ctx context.Context, cfg stora
 	var totalLimit int64
 	var totalUsed int64
 
-	logger.Info("[Komari] Processing %d servers from JSON-RPC data", len(cfg.Servers))
+	logger.Info("[Komari] 处理服务器流量", "count", len(cfg.Servers))
 
 	for _, srv := range cfg.Servers {
 		id := strings.TrimSpace(srv.ServerID)
@@ -875,7 +894,7 @@ func (h *TrafficSummaryHandler) fetchKomariTotals(ctx context.Context, cfg stora
 
 		usage, ok := observed[id]
 		if !ok {
-			logger.Info("[Komari] Server ID %s not found in probe data", id)
+			logger.Info("[Komari] 服务器未在探针数据中找到", "server_id", id)
 			continue
 		}
 
@@ -896,9 +915,13 @@ func (h *TrafficSummaryHandler) fetchKomariTotals(ctx context.Context, cfg stora
 			used = srv.MonthlyTrafficBytes
 		}
 
-		logger.Info("[Komari] Server ID %s - Up: %.2f GB, Down: %.2f GB, Method: %s, Used: %.2f GB, Limit: %.2f GB",
-			id, bytesToGigabytes(usage.Up), bytesToGigabytes(usage.Down),
-			srv.TrafficMethod, bytesToGigabytes(used), bytesToGigabytes(srv.MonthlyTrafficBytes))
+		logger.Info("[Komari] 服务器流量",
+			"server_id", id,
+			"up_gb", bytesToGigabytes(usage.Up),
+			"down_gb", bytesToGigabytes(usage.Down),
+			"method", srv.TrafficMethod,
+			"used_gb", bytesToGigabytes(used),
+			"limit_gb", bytesToGigabytes(srv.MonthlyTrafficBytes))
 
 		totalUsed += used
 	}
@@ -908,8 +931,10 @@ func (h *TrafficSummaryHandler) fetchKomariTotals(ctx context.Context, cfg stora
 		totalRemaining = 0
 	}
 
-	logger.Info("[Komari] Total - Limit: %.2f GB, Used: %.2f GB, Remaining: %.2f GB",
-		bytesToGigabytes(totalLimit), bytesToGigabytes(totalUsed), bytesToGigabytes(totalRemaining))
+	logger.Info("[Komari] 总计流量",
+		"limit_gb", bytesToGigabytes(totalLimit),
+		"used_gb", bytesToGigabytes(totalUsed),
+		"remaining_gb", bytesToGigabytes(totalRemaining))
 
 	return totalLimit, totalRemaining, totalUsed, nil
 }
@@ -1085,7 +1110,7 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 	// Get all external subscriptions
 	subs, err := h.repo.ListExternalSubscriptions(ctx, username)
 	if err != nil {
-		logger.Info("[Traffic] Failed to fetch external subscriptions: %v", err)
+		logger.Info("[流量] 获取外部订阅失败", "error", err)
 		return 0, 0
 	}
 
@@ -1097,7 +1122,7 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 		// Skip if subscription is expired
 		// If Expire is nil, it's a long-term subscription and should not be skipped
 		if sub.Expire != nil && sub.Expire.Before(now) {
-			logger.Info("[Traffic] Skipping expired subscription: %s (expired at %s)", sub.Name, sub.Expire.Format("2006-01-02 15:04:05"))
+			logger.Info("[流量] 跳过已过期订阅", "name", sub.Name, "expired_at", sub.Expire.Format("2006-01-02 15:04:05"))
 			continue
 		}
 
@@ -1106,14 +1131,17 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 		totalUsed += sub.Upload + sub.Download
 
 		if sub.Expire == nil {
-			logger.Info("[Traffic] Adding long-term subscription traffic: %s (limit=%d, used=%d)", sub.Name, sub.Total, sub.Upload+sub.Download)
+			logger.Info("[流量] 添加长期订阅流量", "name", sub.Name, "limit", sub.Total, "used", sub.Upload+sub.Download)
 		} else {
-			logger.Info("[Traffic] Adding subscription traffic: %s (limit=%d, used=%d, expires=%s)",
-				sub.Name, sub.Total, sub.Upload+sub.Download, sub.Expire.Format("2006-01-02 15:04:05"))
+			logger.Info("[流量] 添加订阅流量",
+				"name", sub.Name,
+				"limit", sub.Total,
+				"used", sub.Upload+sub.Download,
+				"expires", sub.Expire.Format("2006-01-02 15:04:05"))
 		}
 	}
 
-	logger.Info("[Traffic] Total external subscription traffic: limit=%d, used=%d", totalLimit, totalUsed)
+	logger.Info("[流量] 外部订阅流量总计", "limit", totalLimit, "used", totalUsed)
 	return totalLimit, totalUsed
 }
 

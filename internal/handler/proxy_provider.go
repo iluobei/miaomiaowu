@@ -336,7 +336,7 @@ func handleUpdateProxyProviderConfig(w http.ResponseWriter, r *http.Request, rep
 
 	// 检测 ProcessMode 是否发生变化，如果变化则同步更新订阅文件
 	if existing.ProcessMode != processMode {
-		logger.Info("[代理集合] 处理模式切换: %s -> %s (代理集合: %s)", existing.ProcessMode, processMode, config.Name)
+		logger.Info("[代理集合] 处理模式切换", "old_mode", existing.ProcessMode, "new_mode", processMode, "config_name", config.Name)
 		go syncProxyProviderModeChange(repo, config, existing.ProcessMode, processMode)
 	}
 
@@ -618,7 +618,7 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 	// 获取所有订阅文件
 	files, err := repo.ListSubscribeFiles(ctx)
 	if err != nil {
-		logger.Info("[代理集合模式切换] 获取订阅文件列表失败: %v", err)
+		logger.Info("[代理集合模式切换] 获取订阅文件列表失败", "error", err)
 		return
 	}
 
@@ -641,14 +641,14 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 		// 读取 YAML 文件
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			logger.Info("[代理集合模式切换] 读取文件 %s 失败: %v", file.Filename, err)
+			logger.Info("[代理集合模式切换] 读取文件失败", "filename", file.Filename, "error", err)
 			continue
 		}
 
 		// 解析 YAML
 		var rootNode yaml.Node
 		if err := yaml.Unmarshal(content, &rootNode); err != nil {
-			logger.Info("[代理集合模式切换] 解析文件 %s 失败: %v", file.Filename, err)
+			logger.Info("[代理集合模式切换] 解析文件失败", "filename", file.Filename, "error", err)
 			continue
 		}
 
@@ -657,7 +657,7 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 			continue
 		}
 
-		logger.Info("[代理集合模式切换] 处理文件 %s (代理集合: %s, %s -> %s)", file.Filename, config.Name, oldMode, newMode)
+		logger.Info("[代理集合模式切换] 处理文件", "filename", file.Filename, "config_name", config.Name, "old_mode", oldMode, "new_mode", newMode)
 
 		var modified bool
 		if newMode == "mmw" {
@@ -682,7 +682,7 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 		}
 
 		if err != nil {
-			logger.Info("[代理集合模式切换] 处理文件 %s 失败: %v", file.Filename, err)
+			logger.Info("[代理集合模式切换] 处理文件失败", "filename", file.Filename, "error", err)
 			continue
 		}
 
@@ -696,20 +696,20 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 		tempEncoder := yaml.NewEncoder(&tempBuf)
 		tempEncoder.SetIndent(2)
 		if err := tempEncoder.Encode(&rootNode); err != nil {
-			logger.Info("[代理集合模式切换] [配置校验] 编码配置失败: %v", err)
+			logger.Info("[代理集合模式切换] [配置校验] 编码配置失败", "error", err)
 			continue
 		}
 		if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
-			logger.Info("[代理集合模式切换] [配置校验] 解析配置失败: %v", err)
+			logger.Info("[代理集合模式切换] [配置校验] 解析配置失败", "error", err)
 			continue
 		}
 
 		validationResult := validator.ValidateClashConfig(configMap)
 		if !validationResult.Valid {
-			logger.Info("[代理集合模式切换] [配置校验] 文件 %s 校验失败，跳过保存", file.Filename)
+			logger.Info("[代理集合模式切换] [配置校验] 文件校验失败，跳过保存", "filename", file.Filename)
 			for _, issue := range validationResult.Issues {
 				if issue.Level == validator.ErrorLevel {
-					logger.Info("[代理集合模式切换] [配置校验] 错误: %s - 位置: %s", issue.Message, issue.Location)
+					logger.Info("[代理集合模式切换] [配置校验] 错误", "message", issue.Message, "location", issue.Location)
 				}
 			}
 			continue
@@ -720,11 +720,11 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 			var fixedNode yaml.Node
 			fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
 			if err != nil {
-				logger.Info("[代理集合模式切换] [配置校验] 序列化修复配置失败: %v", err)
+				logger.Info("[代理集合模式切换] [配置校验] 序列化修复配置失败", "error", err)
 				continue
 			}
 			if err := yaml.Unmarshal(fixedYAML, &fixedNode); err != nil {
-				logger.Info("[代理集合模式切换] [配置校验] 解析修复配置失败: %v", err)
+				logger.Info("[代理集合模式切换] [配置校验] 解析修复配置失败", "error", err)
 				continue
 			}
 			rootNode = fixedNode
@@ -732,7 +732,7 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 			// 记录自动修复的警告
 			for _, issue := range validationResult.Issues {
 				if issue.Level == validator.WarningLevel && issue.AutoFixed {
-					logger.Info("[代理集合模式切换] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+					logger.Info("[代理集合模式切换] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
 				}
 			}
 		}
@@ -742,23 +742,23 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 		encoder := yaml.NewEncoder(&buf)
 		encoder.SetIndent(2)
 		if err := encoder.Encode(&rootNode); err != nil {
-			logger.Info("[代理集合模式切换] 编码文件 %s 失败: %v", file.Filename, err)
+			logger.Info("[代理集合模式切换] 编码文件失败", "filename", file.Filename, "error", err)
 			continue
 		}
 
 		// 处理 emoji 编码
 		output := RemoveUnicodeEscapeQuotes(buf.String())
 		if err := os.WriteFile(filePath, []byte(output), 0644); err != nil {
-			logger.Info("[代理集合模式切换] 保存文件 %s 失败: %v", file.Filename, err)
+			logger.Info("[代理集合模式切换] 保存文件失败", "filename", file.Filename, "error", err)
 			continue
 		}
 
 		syncedCount++
-		logger.Info("[代理集合模式切换] 文件 %s 同步完成", file.Filename)
+		logger.Info("[代理集合模式切换] 文件同步完成", "filename", file.Filename)
 	}
 
 	if syncedCount > 0 {
-		logger.Info("[代理集合模式切换] 同步完成: 共更新 %d 个文件", syncedCount)
+		logger.Info("[代理集合模式切换] 同步完成", "synced_count", syncedCount)
 	}
 }
 
@@ -932,7 +932,7 @@ func syncMMWToClient(config *storage.ProxyProviderConfig, rootNode *yaml.Node, p
 			name := util.GetNodeFieldValue(groupNode, "name")
 			if name == config.Name {
 				modified = true
-				logger.Info("[代理集合模式切换] 删除代理组: %s", config.Name)
+				logger.Info("[代理集合模式切换] 删除代理组", "group_name", config.Name)
 				continue
 			}
 		}
@@ -1016,7 +1016,7 @@ func syncMMWToClient(config *storage.ProxyProviderConfig, rootNode *yaml.Node, p
 			useNode.Content = append(useNode.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: config.Name})
 		}
 
-		logger.Info("[代理集合模式切换] 代理组恢复 use 引用: %s", config.Name)
+		logger.Info("[代理集合模式切换] 代理组恢复 use 引用", "config_name", config.Name)
 	}
 
 	// 3. 删除代理集合的节点（精确匹配 nodeNamesToRemove 列表）
@@ -1042,7 +1042,7 @@ func syncMMWToClient(config *storage.ProxyProviderConfig, rootNode *yaml.Node, p
 		if removedCount > 0 {
 			modified = true
 			proxiesNode.Content = newProxiesContent
-			logger.Info("[代理集合模式切换] 删除 %d 个节点 (代理集合: %s)", removedCount, config.Name)
+			logger.Info("[代理集合模式切换] 删除节点", "removed_count", removedCount, "config_name", config.Name)
 		}
 	}
 
@@ -1074,7 +1074,7 @@ func syncMMWToClient(config *storage.ProxyProviderConfig, rootNode *yaml.Node, p
 				providerConfig,
 			)
 		}
-		logger.Info("[代理集合模式切换] 添加 proxy-providers 配置: %s", config.Name)
+		logger.Info("[代理集合模式切换] 添加 proxy-providers 配置", "config_name", config.Name)
 
 		// 如果是新创建的，需要重新设置索引
 		if proxyProvidersKeyIndex == -1 {
@@ -1181,7 +1181,7 @@ func updateYAMLNodeForMMW(rootNode *yaml.Node, providerName, prefix string, prox
 
 		modified = true
 		needCreateNewGroup = true
-		logger.Info("[代理集合模式切换] 在代理组 %s 中找到代理集合 %s 的引用", groupName, providerName)
+		logger.Info("[代理集合模式切换] 在代理组中找到代理集合的引用", "group_name", groupName, "provider_name", providerName)
 
 		// 确保 proxies 节点存在
 		if groupProxiesNode == nil {

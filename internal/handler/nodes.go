@@ -207,12 +207,12 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// 校验节点名称是否重复（数据库层面）
 	exists, err := h.repo.CheckNodeNameExists(r.Context(), req.NodeName, username, 0)
 	if err != nil {
-		logger.Info("[节点创建] 检查节点名称重复失败: %v", err)
+		logger.Info("[节点创建] 检查节点名称重复失败", "error", err)
 		writeError(w, http.StatusInternalServerError, errors.New("服务器错误"))
 		return
 	}
 	if exists {
-		logger.Info("[节点创建] 节点名称重复: %s", req.NodeName)
+		logger.Info("[节点创建] 节点名称重复", "node_name", req.NodeName)
 		writeBadRequest(w, fmt.Sprintf("节点名称 \"%s\" 已存在，请使用其他名称", req.NodeName))
 		return
 	}
@@ -221,20 +221,20 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if req.ClashConfig != "" {
 		var clashConfig map[string]interface{}
 		if err := json.Unmarshal([]byte(req.ClashConfig), &clashConfig); err != nil {
-			logger.Info("[节点创建] Clash配置格式错误: %v", err)
+			logger.Info("[节点创建] Clash配置格式错误", "error", err)
 			writeBadRequest(w, "Clash配置格式错误")
 			return
 		}
 
 		// 确保配置中的name与节点名称一致
 		if configName, ok := clashConfig["name"].(string); !ok || configName != req.NodeName {
-			logger.Info("[节点创建] 配置name不匹配: 节点名=%s, 配置名=%v", req.NodeName, clashConfig["name"])
+			logger.Info("[节点创建] 配置name不匹配: 节点名=, 配置名", "node_name", req.NodeName, "param", clashConfig["name"])
 			writeBadRequest(w, "Clash配置中的name字段必须与节点名称一致")
 			return
 		}
 	}
 
-	logger.Info("[节点创建] 校验通过 - 节点名称: %s, 用户: %s", req.NodeName, username)
+	logger.Info("[节点创建] 校验通过 - 节点名称, 用户", "node_name", req.NodeName, "user", username)
 
 	node := storage.Node{
 		Username:     username,
@@ -249,12 +249,12 @@ func (h *nodesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.repo.CreateNode(r.Context(), node)
 	if err != nil {
-		logger.Info("[节点创建] 数据库创建失败: %v", err)
+		logger.Info("[节点创建] 数据库创建失败", "error", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	logger.Info("[节点创建] 成功 - ID: %d, 节点名称: %s", created.ID, created.NodeName)
+	logger.Info("[节点创建] 成功 - ID, 节点名称", "id", created.ID, "node_name", created.NodeName)
 
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"node": convertNode(created),
@@ -360,12 +360,12 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 		// 校验节点名称是否重复（数据库层面）
 		exists, err := h.repo.CheckNodeNameExists(r.Context(), req.NodeName, username, id)
 		if err != nil {
-			logger.Info("[节点更新] 检查节点名称重复失败: %v", err)
+			logger.Info("[节点更新] 检查节点名称重复失败", "error", err)
 			writeError(w, http.StatusInternalServerError, errors.New("服务器错误"))
 			return
 		}
 		if exists {
-			logger.Info("[节点更新] 节点名称重复: %s", req.NodeName)
+			logger.Info("[节点更新] 节点名称重复", "node_name", req.NodeName)
 			writeBadRequest(w, fmt.Sprintf("节点名称 \"%s\" 已存在，请使用其他名称", req.NodeName))
 			return
 		}
@@ -375,7 +375,7 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 	if req.ClashConfig != "" {
 		var clashConfig map[string]interface{}
 		if err := json.Unmarshal([]byte(req.ClashConfig), &clashConfig); err != nil {
-			logger.Info("[节点更新] Clash配置格式错误: %v", err)
+			logger.Info("[节点更新] Clash配置格式错误", "error", err)
 			writeBadRequest(w, "Clash配置格式错误")
 			return
 		}
@@ -386,13 +386,13 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 			newNodeName = oldNodeName
 		}
 		if configName, ok := clashConfig["name"].(string); !ok || configName != newNodeName {
-			logger.Info("[节点更新] 配置name不匹配: 节点名=%s, 配置名=%v", newNodeName, clashConfig["name"])
+			logger.Info("[节点更新] 配置name不匹配: 节点名=, 配置名", "value", newNodeName, "param", clashConfig["name"])
 			writeBadRequest(w, "Clash配置中的name字段必须与节点名称一致")
 			return
 		}
 	}
 
-	logger.Info("[节点更新] 校验通过 - 节点ID: %d, 旧名称: %s, 新名称: %s", id, oldNodeName, req.NodeName)
+	logger.Info("[节点更新] 校验通过 - 节点ID, 旧名称, 新名称", "value", id, "param", oldNodeName, "node_name", req.NodeName)
 
 	// Update fields
 	if req.RawURL != "" {
@@ -417,7 +417,7 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 
 	updated, err := h.repo.UpdateNode(r.Context(), existing)
 	if err != nil {
-		logger.Info("[节点更新] 数据库更新失败: %v", err)
+		logger.Info("[节点更新] 数据库更新失败", "error", err)
 		status := http.StatusBadRequest
 		if errors.Is(err, storage.ErrNodeNotFound) {
 			status = http.StatusNotFound
@@ -426,7 +426,7 @@ func (h *nodesHandler) handleUpdate(w http.ResponseWriter, r *http.Request, idSe
 		return
 	}
 
-	logger.Info("[节点更新] 数据库更新成功 - 节点ID: %d, 节点名称: %s", updated.ID, updated.NodeName)
+	logger.Info("[节点更新] 数据库更新成功 - 节点ID, 节点名称", "id", updated.ID, "node_name", updated.NodeName)
 
 	// Sync node changes to YAML files using the sync manager
 	if updated.ClashConfig != "" {
@@ -896,7 +896,7 @@ func (h *nodesHandler) handleBatchRename(w http.ResponseWriter, r *http.Request)
 	if len(yamlUpdates) > 0 {
 		if err := h.yamlSyncManager.BatchSyncNodes(yamlUpdates); err != nil {
 			// Log error but don't fail the request
-			logger.Info("[批量重命名] YAML 同步失败: %v", err)
+			logger.Info("[批量重命名] YAML 同步失败", "error", err)
 		}
 	}
 
@@ -1001,28 +1001,32 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	// 添加User-Agent头
 	httpReq.Header.Set("User-Agent", userAgent)
 
-	logger.Info("[订阅获取] 开始请求外部订阅: URL=%s, User-Agent=%s", req.URL, userAgent)
+	logger.Info("[订阅获取] 开始请求外部订阅", "url", req.URL, "user_agent", userAgent)
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		logger.Info("[订阅获取] 请求失败: URL=%s, 错误=%v", req.URL, err)
+		logger.Info("[订阅获取] 请求失败", "url", req.URL, "error", err)
 		writeError(w, http.StatusBadRequest, errors.New("无法获取订阅内容: "+err.Error()))
 		return
 	}
 	defer resp.Body.Close()
 
-	logger.Info("[订阅获取] 收到响应: URL=%s, 状态码=%d, 状态=%s, Content-Type=%s, Content-Length=%d",
-		req.URL, resp.StatusCode, resp.Status, resp.Header.Get("Content-Type"), resp.ContentLength)
+	logger.Info("[订阅获取] 收到响应",
+		"url", req.URL,
+		"status_code", resp.StatusCode,
+		"status", resp.Status,
+		"content_type", resp.Header.Get("Content-Type"),
+		"content_length", resp.ContentLength)
 
 	// 读取响应内容（无论成功还是失败都需要读取以便记录日志）
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Info("[订阅获取] 读取响应体失败: URL=%s, 错误=%v", req.URL, err)
+		logger.Info("[订阅获取] 读取响应体失败", "url", req.URL, "error", err)
 		writeError(w, http.StatusInternalServerError, errors.New("读取订阅内容失败"))
 		return
 	}
 
-	logger.Info("[订阅获取] 响应体大小: URL=%s, 大小=%d 字节", req.URL, len(body))
+	logger.Info("[订阅获取] 响应体大小", "url", req.URL, "size", len(body))
 
 	if resp.StatusCode != http.StatusOK {
 		// 记录详细的错误响应内容
@@ -1030,8 +1034,11 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		if len(bodyPreview) > 500 {
 			bodyPreview = bodyPreview[:500] + "...(截断)"
 		}
-		logger.Info("[订阅获取] 服务器返回错误状态: URL=%s, 状态码=%d, 状态=%s, 响应头=%v, 响应内容=%s",
-			req.URL, resp.StatusCode, resp.Status, resp.Header, bodyPreview)
+		logger.Info("[订阅获取] 服务器返回错误状态",
+			"url", req.URL,
+			"status_code", resp.StatusCode,
+			"status", resp.Status,
+			"response_preview", bodyPreview)
 		writeError(w, http.StatusBadRequest, fmt.Errorf("订阅服务器返回错误状态: %d %s", resp.StatusCode, resp.Status))
 		return
 	}
@@ -1047,7 +1054,7 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		if len(bodyPreview) > 500 {
 			bodyPreview = bodyPreview[:500] + "...(截断)"
 		}
-		logger.Info("[订阅获取] YAML解析失败: URL=%s, 错误=%v, 内容预览=%s", req.URL, err, bodyPreview)
+		logger.Info("[订阅获取] YAML解析失败", "url", req.URL, "error", err, "content_preview", bodyPreview)
 		writeError(w, http.StatusBadRequest, errors.New("解析订阅内容失败: "+err.Error()))
 		return
 	}
@@ -1058,12 +1065,12 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		if len(bodyPreview) > 500 {
 			bodyPreview = bodyPreview[:500] + "...(截断)"
 		}
-		logger.Info("[订阅获取] 订阅中没有找到代理节点: URL=%s, 内容预览=%s", req.URL, bodyPreview)
+		logger.Info("[订阅获取] 订阅中没有找到代理节点", "url", req.URL, "content_preview", bodyPreview)
 		writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
 		return
 	}
 
-	logger.Info("[订阅获取] 成功解析订阅: URL=%s, 节点数量=%d", req.URL, len(clashConfig.Proxies))
+	logger.Info("[订阅获取] 成功解析订阅", "url", req.URL, "node_count", len(clashConfig.Proxies))
 
 	// Convert nil values to empty strings and decode URL-encoded fields in all proxies
 	for _, proxy := range clashConfig.Proxies {

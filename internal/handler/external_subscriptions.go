@@ -137,23 +137,23 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
-		logger.Info("[External Subscription] Failed to create request for %s: %v", name, err)
+		logger.Info("[外部订阅] 创建请求失败", "name", name, "error", err)
 	} else {
 		req.Header.Set("User-Agent", userAgent)
-		logger.Info("[External Subscription] Fetching traffic info for %s with User-Agent: %s", name, userAgent)
+		logger.Info("[外部订阅] 获取流量信息", "name", name, "user_agent", userAgent)
 		resp, err := client.Do(req)
 		if err != nil {
-			logger.Info("[External Subscription] Failed to fetch subscription URL for traffic info: %v", err)
+			logger.Info("[外部订阅] 请求失败", "error", err)
 		} else {
 			defer resp.Body.Close()
-			logger.Info("[External Subscription] Response status for %s: %d", name, resp.StatusCode)
+			logger.Info("[外部订阅] 响应状态", "name", name, "status_code", resp.StatusCode)
 			if resp.StatusCode == http.StatusOK {
 				// Parse subscription-userinfo header for traffic info
 				userInfo := resp.Header.Get("subscription-userinfo")
-				logger.Info("[External Subscription] subscription-userinfo header for %s: %s", name, userInfo)
+				logger.Info("[外部订阅] subscription-userinfo头", "name", name, "header", userInfo)
 				if userInfo != "" {
 					trafficUpload, trafficDownload, trafficTotal, trafficExpire = ParseTrafficInfoHeader(userInfo)
-					logger.Info("[External Subscription] Parsed traffic info: upload=%d, download=%d, total=%d", trafficUpload, trafficDownload, trafficTotal)
+					logger.Info("[外部订阅] 解析流量信息", "upload", trafficUpload, "download", trafficDownload, "total", trafficTotal)
 				}
 			}
 		}
@@ -408,7 +408,7 @@ func NewExternalSubscriptionNodesHandler(repo *storage.TrafficRepository) http.H
 			nodeNames[i] = node.Name
 		}
 
-		logger.Info("[ExternalSubscriptionNodes] 订阅 %s 返回 %d 个节点", sub.Name, len(nodeNames))
+		logger.Info("[外部订阅节点] 返回节点列表", "subscription", sub.Name, "count", len(nodeNames))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

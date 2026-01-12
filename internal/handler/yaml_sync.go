@@ -778,7 +778,7 @@ func batchSyncNodesToYAMLFiles(subscribeDir string, updates []NodeUpdate) error 
 			continue
 		}
 
-		logger.Info("[YAML同步] 批量更新文件: %s", filename)
+		logger.Info("[YAML同步] 批量更新文件", "filename", filename)
 	}
 
 	return nil

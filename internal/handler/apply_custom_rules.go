@@ -160,7 +160,7 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
 				}
 				errorMessages = append(errorMessages, errorMsg)
-				logger.Info("[应用自定义规则] [配置校验] 错误: %s", errorMsg)
+				logger.Info("[应用自定义规则] [配置校验] 错误", "message", errorMsg)
 			}
 		}
 		return nil, nil, fmt.Errorf("配置校验失败: %s", strings.Join(errorMessages, "; "))
@@ -179,7 +179,7 @@ func applyCustomRulesToYaml(ctx context.Context, repo *storage.TrafficRepository
 		// 记录自动修复的警告
 		for _, issue := range validationResult.Issues {
 			if issue.Level == validator.WarningLevel && issue.AutoFixed {
-				logger.Info("[应用自定义规则] [配置校验] 警告(已修复): %s - 位置: %s", issue.Message, issue.Location)
+				logger.Info("[应用自定义规则] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
 			}
 		}
 	}
@@ -477,7 +477,7 @@ func removeDuplicateRulesCaseInsensitive(existing []interface{}, newRules []inte
 
 			// If newRules contains MATCH rule, remove all MATCH rules from existing
 			if hasMatchRule && isMatchRule(ruleStr) {
-				logger.Info("删除重复的MATCH规则: %s", ruleStr)
+				logger.Info("删除重复的MATCH规则", "rule", ruleStr)
 				continue
 			}
 
@@ -485,7 +485,7 @@ func removeDuplicateRulesCaseInsensitive(existing []interface{}, newRules []inte
 			if !newRulesSet[strings.ToLower(key)] {
 				filtered = append(filtered, rule)
 			} else {
-				logger.Info("删除重复规则: %s", ruleStr)
+				logger.Info("删除重复规则", "rule", ruleStr)
 			}
 		} else {
 			// Keep non-string rules as-is
@@ -563,7 +563,7 @@ func removeDuplicateNodesBasedOnNewRules(existing []*yaml.Node, newRules []*yaml
 
 			// If newRules contains MATCH rule, remove all MATCH rules from existing
 			if hasMatchRule && isMatchRule(ruleStr) {
-				logger.Info("删除重复的MATCH规则: %s", ruleStr)
+				logger.Info("删除重复的MATCH规则", "rule", ruleStr)
 				continue
 			}
 
@@ -571,7 +571,7 @@ func removeDuplicateNodesBasedOnNewRules(existing []*yaml.Node, newRules []*yaml
 			if !newRulesSet[strings.ToLower(key)] {
 				filtered = append(filtered, node)
 			} else {
-				logger.Info("删除重复规则: %s", ruleStr)
+				logger.Info("删除重复规则", "rule", ruleStr)
 			}
 		} else {
 			// Keep non-scalar nodes as-is
@@ -686,7 +686,7 @@ func autoAddMissingProxyGroups(docNode *yaml.Node) []string {
 	// Add missing groups
 	if len(missingGroups) > 0 {
 		for _, groupName := range missingGroups {
-			logger.Info("自动添加缺失的代理组: %s", groupName)
+			logger.Info("自动添加缺失的代理组", "group_name", groupName)
 
 			// Create a new proxy group node
 			newGroupNode := &yaml.Node{
