@@ -40,8 +40,18 @@ export function RuleSelector({
   const [isOpen, setIsOpen] = useState(true)
   const { data: categories = [], isLoading, isError } = useProxyGroupCategories()
 
-  // Update selected categories when ruleset changes
+  // Track the previous ruleset to detect changes
+  const [prevRuleSet, setPrevRuleSet] = useState<PredefinedRuleSetType>(ruleSet)
+
+  // Update selected categories only when ruleset actually changes (not on every selectedCategories change)
   useEffect(() => {
+    // Only run when ruleSet actually changes, not when selectedCategories changes
+    if (ruleSet === prevRuleSet) {
+      return
+    }
+
+    setPrevRuleSet(ruleSet)
+
     if (ruleSet !== 'custom') {
       // Calculate preset categories directly to avoid dependency on predefinedRuleSets
       let presetCategories: string[] = []
@@ -52,17 +62,9 @@ export function RuleSelector({
       } else if (ruleSet === 'comprehensive') {
         presetCategories = categories.map((c) => c.name)
       }
-
-      // Only update if the categories are actually different
-      const categoriesChanged =
-        presetCategories.length !== selectedCategories.length ||
-        presetCategories.some((cat, idx) => cat !== selectedCategories[idx])
-
-      if (categoriesChanged) {
-        onCategoriesChange(presetCategories)
-      }
+      onCategoriesChange(presetCategories)
     }
-  }, [ruleSet, categories, selectedCategories, onCategoriesChange])
+  }, [ruleSet, categories, prevRuleSet, onCategoriesChange])
 
   const handleCategoryToggle = (categoryName: string) => {
     if (selectedCategories.includes(categoryName)) {
@@ -152,19 +154,20 @@ export function RuleSelector({
             {!isLoading && !isError && categories.length > 0 && (
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                 {categories.map((category) => (
-                  <div key={category.name} className='flex items-center space-x-2'>
+                  <div
+                    key={category.name}
+                    className='flex cursor-pointer items-center space-x-2'
+                    onClick={() => handleCategoryToggle(category.name)}
+                  >
                     <Checkbox
                       id={`category-${category.name}`}
                       checked={selectedCategories.includes(category.name)}
-                      onCheckedChange={() => handleCategoryToggle(category.name)}
+                      onCheckedChange={() => {}}
                     />
-                    <label
-                      htmlFor={`category-${category.name}`}
-                      className='flex cursor-pointer items-center gap-1.5 text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
-                    >
+                    <div className='flex items-center gap-1.5 text-sm leading-none'>
                       <span>{category.icon}</span>
                       <span>{category.label}</span>
-                    </label>
+                    </div>
                   </div>
                 ))}
               </div>
