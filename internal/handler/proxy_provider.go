@@ -358,6 +358,13 @@ func handleDeleteProxyProviderConfig(w http.ResponseWriter, r *http.Request, rep
 		return
 	}
 
+	// 删除前先清理缓存（如果是MMW模式）
+	config, err := repo.GetProxyProviderConfig(r.Context(), id)
+	if err == nil && config != nil && config.ProcessMode == "mmw" {
+		GetProxyProviderCache().Delete(id)
+		logger.Info("[代理集合] 删除配置时清理缓存", "config_id", id, "name", config.Name)
+	}
+
 	if err := repo.DeleteProxyProviderConfig(r.Context(), id, username); err != nil {
 		if err.Error() == "proxy provider config not found or not owned by user" {
 			writeError(w, http.StatusNotFound, errors.New("proxy provider config not found"))

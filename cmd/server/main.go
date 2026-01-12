@@ -112,6 +112,10 @@ func main() {
 	// 启动时初始化代理集合缓存
 	go handler.InitProxyProviderCacheOnStartup(repo)
 
+	// 启动代理集合定时同步器
+	proxySyncCtx, stopProxySync := context.WithCancel(context.Background())
+	go handler.StartProxyProviderCacheSync(proxySyncCtx, repo)
+
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
 	userRepo := auth.NewRepositoryAdapter(repo)
 
@@ -234,7 +238,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(srv, stopCollector)
+	waitForShutdown(srv, stopCollector, stopProxySync)
 }
 
 func getAddr() string {
@@ -255,7 +259,7 @@ func isAlphanumeric(s string) bool {
 	return true
 }
 
-func waitForShutdown(srv *http.Server, stopCollector context.CancelFunc) {
+func waitForShutdown(srv *http.Server, cancels ...context.CancelFunc) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -265,7 +269,12 @@ func waitForShutdown(srv *http.Server, stopCollector context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stopCollector()
+	// 停止所有后台任务
+	for _, cancelFunc := range cancels {
+		if cancelFunc != nil {
+			cancelFunc()
+		}
+	}
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("优雅关闭失败", "error", err)

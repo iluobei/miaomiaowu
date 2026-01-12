@@ -4099,6 +4099,55 @@ func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.C
 	return configs, nil
 }
 
+// ListMMWProxyProviderConfigs 返回所有妙妙屋模式的代理集合配置
+// 该方法用于定时同步器获取需要自动刷新的代理集合列表
+func (r *TrafficRepository) ListMMWProxyProviderConfigs(ctx context.Context) ([]ProxyProviderConfig, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, username, external_subscription_id, name, type, interval, proxy, size_limit,
+			COALESCE(header, ''), health_check_enabled, health_check_url, health_check_interval,
+			health_check_timeout, health_check_lazy, health_check_expected_status,
+			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
+			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
+		FROM proxy_provider_configs
+		WHERE process_mode = 'mmw'
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list mmw proxy provider configs: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []ProxyProviderConfig
+	for rows.Next() {
+		var config ProxyProviderConfig
+		var healthCheckEnabled, healthCheckLazy int
+		err := rows.Scan(
+			&config.ID, &config.Username, &config.ExternalSubscriptionID, &config.Name, &config.Type,
+			&config.Interval, &config.Proxy, &config.SizeLimit, &config.Header,
+			&healthCheckEnabled, &config.HealthCheckURL, &config.HealthCheckInterval,
+			&config.HealthCheckTimeout, &healthCheckLazy, &config.HealthCheckExpectedStatus,
+			&config.Filter, &config.ExcludeFilter, &config.ExcludeType,
+			&config.GeoIPFilter, &config.Override, &config.ProcessMode, &config.CreatedAt, &config.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan mmw proxy provider config: %w", err)
+		}
+		config.HealthCheckEnabled = healthCheckEnabled != 0
+		config.HealthCheckLazy = healthCheckLazy != 0
+		configs = append(configs, config)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate mmw proxy provider configs: %w", err)
+	}
+
+	return configs, nil
+}
+
 // UpdateProxyProviderConfig updates an existing proxy provider config
 func (r *TrafficRepository) UpdateProxyProviderConfig(ctx context.Context, config *ProxyProviderConfig) error {
 	if r == nil || r.db == nil {
