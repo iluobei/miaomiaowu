@@ -286,6 +286,9 @@ func FetchAndFilterProxiesYAML(sub *storage.ExternalSubscription, config *storag
 	}
 
 	// Encode with 2-space indentation
+	// Sanitize explicit string tags before encoding to prevent !!str from appearing in output
+	sanitizeExplicitStringTags(outputDoc)
+
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)

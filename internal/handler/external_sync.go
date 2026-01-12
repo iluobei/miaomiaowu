@@ -1232,6 +1232,9 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 	}
 
 	// 编码 YAML，使用 2 空格缩进
+	// Sanitize explicit string tags before encoding to prevent !!str from appearing in output
+	sanitizeExplicitStringTags(&rootNode)
+
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)

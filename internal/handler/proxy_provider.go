@@ -738,6 +738,9 @@ func syncProxyProviderModeChange(repo *storage.TrafficRepository, config *storag
 		}
 
 		// 保存文件
+		// Sanitize explicit string tags before encoding to prevent !!str from appearing in output
+		sanitizeExplicitStringTags(&rootNode)
+
 		var buf bytes.Buffer
 		encoder := yaml.NewEncoder(&buf)
 		encoder.SetIndent(2)
