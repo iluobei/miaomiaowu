@@ -402,21 +402,64 @@ function parseShadowsocks(url: string): ProxyNode | null {
     let password = ''
 
     // 格式1: base64(method:password)@server:port
+    // 格式3: method:password@server:port (明文格式)
+    // 格式4: method:base64(password)@server:port (密码部分base64编码)
     if (mainPart.includes('@')) {
-      const [encodedPart, serverPart] = mainPart.split('@')
-      // 修复ss password含有:号, urlencode格式转换
-      const decoded = base64Decode(encodedPart.indexOf('%') == -1 ? encodedPart : decodeURIComponent(encodedPart))
-      const colonIndex = decoded.indexOf(':')
-      const m = decoded.substring(0, colonIndex)
-      const p = decoded.substring(colonIndex + 1)
-      method = m
-      password = p
+      const atIndex = mainPart.lastIndexOf('@')
+      const authPart = mainPart.substring(0, atIndex)
+      const serverPart = mainPart.substring(atIndex + 1)
 
-      // 从最后一个冒号分割，支持IPv6地址
+      // 从最后一个冒号分割服务器地址，支持IPv6
       const lastColonIndex = serverPart.lastIndexOf(':')
       if (lastColonIndex === -1) return null
       server = serverPart.substring(0, lastColonIndex)
       port = parseInt(serverPart.substring(lastColonIndex + 1)) || 0
+
+      // 尝试解析认证部分
+      // 首先检查是否是明文格式 (method:password)，通过检测是否包含已知的加密方法前缀
+      const knownCiphers = [
+        'aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm',
+        'aes-128-cfb', 'aes-192-cfb', 'aes-256-cfb',
+        'aes-128-ctr', 'aes-192-ctr', 'aes-256-ctr',
+        'chacha20-ietf-poly1305', 'xchacha20-ietf-poly1305',
+        'chacha20-ietf', 'chacha20', 'xchacha20',
+        '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm',
+        '2022-blake3-chacha20-poly1305',
+        'rc4-md5', 'none'
+      ]
+
+      // 检查 authPart 是否以已知加密方式开头（明文格式）
+      const matchedCipher = knownCiphers.find(cipher => authPart.startsWith(cipher + ':'))
+
+      if (matchedCipher) {
+        // 格式3 或 格式4: 明文加密方式
+        method = matchedCipher
+        const passwordPart = authPart.substring(matchedCipher.length + 1)
+
+        // 尝试 base64 解码密码，如果解码后是有效字符串则使用解码结果（格式4）
+        // 否则直接使用原始密码（格式3）
+        try {
+          const decodedPassword = base64Decode(passwordPart)
+          // 检查解码结果是否看起来像有效密码（不含乱码）
+          // 如果原始密码本身就是 base64 格式的有效字符串，使用解码后的值
+          if (decodedPassword && /^[\x20-\x7E]+$/.test(decodedPassword)) {
+            password = decodedPassword
+          } else {
+            password = passwordPart
+          }
+        } catch {
+          // base64 解码失败，使用原始密码
+          password = passwordPart
+        }
+      } else {
+        // 格式1: base64(method:password)@server:port
+        const encodedPart = authPart
+        // 修复ss password含有:号, urlencode格式转换
+        const decoded = base64Decode(encodedPart.indexOf('%') == -1 ? encodedPart : decodeURIComponent(encodedPart))
+        const colonIndex = decoded.indexOf(':')
+        method = decoded.substring(0, colonIndex)
+        password = decoded.substring(colonIndex + 1)
+      }
     } else {
       // 格式2: base64(method:password@server:port)
       const decoded = base64Decode(mainPart)
