@@ -807,15 +807,57 @@
     "icon": "🌍",
     "rule_name": "Non-China",
     "group_label": "🌍 非中国",
-    "presets": ["minimal", "balanced", "comprehensive"],
+    "presets": [],
     "site_rules": [
       {
-        "key": "geolocation-!cn",
+        "key": "pttracker",
         "behavior": "domain",
         "type": "http",
-        "format": "mrs",
+        "format": "yaml",
         "url": "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/geolocation-!cn.mrs",
-        "path": "./ruleset/geolocation-!cn.mrs",
+        "path": "./ruleset/pttracker.mrs",
+        "interval": 86400
+      }
+    ],
+    "ip_rules": []
+  },
+  {
+    "name": "pttracker",
+    "label": "PT Tracker",
+    "emoji": "🔗",
+    "icon": "🔗",
+    "rule_name": "PT Tracker",
+    "group_label": "🔗 PT Tracker",
+    "presets": [],
+    "site_rules": [
+      {
+        "key": "pttracker",
+        "behavior": "domain",
+        "type": "http",
+        "format": "yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/Jimleerx/clash-pt-rules/refs/heads/main/pttracker.yaml",
+        "path": "./ruleset/pttracker.yaml",
+        "interval": 86400
+      }
+    ],
+    "ip_rules": []
+  },
+  {
+    "name": "ptdomain",
+    "label": "PT 站点",
+    "emoji": "🎞️",
+    "icon": "🎞️",
+    "rule_name": "🎞️ 站点",
+    "group_label": "🎞️ PT 站点",
+    "presets": [],
+    "site_rules": [
+      {
+        "key": "ptdomain",
+        "behavior": "domain",
+        "type": "http",
+        "format": "yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/Jimleerx/clash-pt-rules/refs/heads/main/ptdomain.yaml",
+        "path": "./ruleset/ptdomain.yaml",
         "interval": 86400
       }
     ],

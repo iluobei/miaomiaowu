@@ -42,10 +42,36 @@ export function RuleSelector({
 
   // Track the previous ruleset to detect changes
   const [prevRuleSet, setPrevRuleSet] = useState<PredefinedRuleSetType>(ruleSet)
+  // Track whether we've initialized
+  const [initialized, setInitialized] = useState(false)
 
-  // Update selected categories only when ruleset actually changes (not on every selectedCategories change)
+  // Initialize selected categories on first load when categories are available
   useEffect(() => {
-    // Only run when ruleSet actually changes, not when selectedCategories changes
+    if (!initialized && categories.length > 0 && ruleSet !== 'custom') {
+      // Calculate preset categories for initial ruleset
+      let presetCategories: string[] = []
+      if (ruleSet === 'minimal') {
+        presetCategories = categories.filter((c) => c.presets.includes('minimal')).map((c) => c.name)
+      } else if (ruleSet === 'balanced') {
+        presetCategories = categories.filter((c) => c.presets.includes('balanced')).map((c) => c.name)
+      } else if (ruleSet === 'comprehensive') {
+        presetCategories = categories.map((c) => c.name)
+      }
+
+      if (presetCategories.length > 0) {
+        onCategoriesChange(presetCategories)
+        setInitialized(true)
+      }
+    }
+  }, [categories, ruleSet, initialized, onCategoriesChange])
+
+  // Update selected categories when ruleset changes (not on initial load)
+  useEffect(() => {
+    // Only run when ruleSet actually changes after initialization
+    if (!initialized) {
+      return
+    }
+
     if (ruleSet === prevRuleSet) {
       return
     }
@@ -64,7 +90,7 @@ export function RuleSelector({
       }
       onCategoriesChange(presetCategories)
     }
-  }, [ruleSet, categories, prevRuleSet, onCategoriesChange])
+  }, [ruleSet, categories, prevRuleSet, initialized, onCategoriesChange])
 
   const handleCategoryToggle = (categoryName: string) => {
     if (selectedCategories.includes(categoryName)) {
