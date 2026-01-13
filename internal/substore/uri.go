@@ -66,7 +66,7 @@ func preprocessProxy(proxy Proxy) Proxy {
 	// Delete tls field for certain protocols
 	proxyType := GetString(processed, "type")
 	if proxyType == "trojan" || proxyType == "tuic" || proxyType == "hysteria" ||
-	   proxyType == "hysteria2" || proxyType == "juicity" {
+		proxyType == "hysteria2" || proxyType == "juicity" {
 		delete(processed, "tls")
 	}
 
@@ -323,9 +323,10 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 	// Network type (frontend line 187-190)
 	network := GetString(proxy, "network")
 	vlessType := network
-	if network == "splithttp" {
+	switch network {
+	case "splithttp":
 		vlessType = "xhttp"
-	} else if network == "ws" {
+	case "ws":
 		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
 			if GetBool(wsOpts, "v2ray-http-upgrade") {
 				vlessType = "httpupgrade"
@@ -378,7 +379,7 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 		}
 	case "xhttp":
 		// Frontend line 204-206: splithttp/xhttp mode
-		if mode := GetString(proxy, "_mode"); mode != "" {
+		if mode := GetString(proxy, "mode"); mode != "" {
 			params.Set("mode", mode)
 		} else {
 			params.Set("mode", "auto")
@@ -397,7 +398,7 @@ func (p *URIProducer) encodeVLESS(proxy Proxy) (string, error) {
 	case "splithttp":
 		params.Set("type", "xhttp")
 		// Frontend line 204-206: splithttp mode
-		if mode := GetString(proxy, "_mode"); mode != "" {
+		if mode := GetString(proxy, "mode"); mode != "" {
 			params.Set("mode", mode)
 		} else {
 			params.Set("mode", "auto")
