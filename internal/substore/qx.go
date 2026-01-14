@@ -2,7 +2,10 @@ package substore
 
 import (
 	"fmt"
+	"strings"
 )
+
+const targetPlatformQX = "QX"
 
 // QXProducer implements QuantumultX format converter
 type QXProducer struct {
@@ -46,11 +49,7 @@ func (p *QXProducer) Produce(proxies []Proxy, outputType string, opts *ProduceOp
 		}
 	}
 
-	output := ""
-	for _, line := range result {
-		output += line + "\n"
-	}
-	return output, nil
+	return strings.Join(result, "\n") + "\n", nil
 }
 
 // produceOne converts a single proxy to QuantumultX format
@@ -59,7 +58,7 @@ func (p *QXProducer) produceOne(proxy Proxy, _ string, _ *ProduceOptions) (strin
 	if GetString(proxy, "network") == "ws" {
 		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
 			if GetBool(wsOpts, "v2ray-http-upgrade") {
-				return "", fmt.Errorf("platform QX does not support network ws with http upgrade")
+				return "", fmt.Errorf("platform %s does not support network %s with http upgrade", targetPlatformQX, "ws")
 			}
 		}
 	}
@@ -85,27 +84,27 @@ func (p *QXProducer) produceOne(proxy Proxy, _ string, _ *ProduceOptions) (strin
 	case "vless":
 		result, err = p.vless(proxy)
 	default:
-		return "", fmt.Errorf("platform QX does not support proxy type: %s", proxyType)
+		return "", fmt.Errorf("platform %s does not support proxy type: %s", targetPlatformQX, proxyType)
 	}
 
 	if err != nil {
 		return "", err
 	}
 
-	// Handle flow validation
+	// Handle flow validation (after producing the base result)
 	if IsPresent(proxy, "flow") {
 		flow := GetString(proxy, "flow")
 		if flow != "" && flow != "xtls-rprx-vision" {
-			return "", fmt.Errorf("platform QX does not support flow %s", flow)
+			return "", fmt.Errorf("platform %s does not support flow %s", targetPlatformQX, flow)
 		}
 	}
 
-	// Handle reality-opts
+	// Handle reality-opts (append to result)
 	if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
 		if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
 			result = fmt.Sprintf("%s,reality-base64-pubkey=%s", result, publicKey)
 		}
-		if shortID := GetString(realityOpts, "short-id"); shortID != "" {
+		if shortID := GetAnyString(realityOpts, "short-id"); shortID != "" {
 			result = fmt.Sprintf("%s,reality-hex-shortid=%s", result, shortID)
 		}
 	}
@@ -122,25 +121,18 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 	}
 
 	// Validate cipher
-	supportedCiphers := []string{
-		"none", "rc4-md5", "rc4-md5-6",
-		"aes-128-cfb", "aes-192-cfb", "aes-256-cfb",
-		"aes-128-ctr", "aes-192-ctr", "aes-256-ctr",
-		"bf-cfb", "cast5-cfb", "des-cfb", "rc2-cfb",
-		"salsa20", "chacha20", "chacha20-ietf",
-		"aes-128-gcm", "aes-192-gcm", "aes-256-gcm",
-		"chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
-		"2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm",
+	supportedCiphers := map[string]bool{
+		"none": true, "rc4-md5": true, "rc4-md5-6": true,
+		"aes-128-cfb": true, "aes-192-cfb": true, "aes-256-cfb": true,
+		"aes-128-ctr": true, "aes-192-ctr": true, "aes-256-ctr": true,
+		"bf-cfb": true, "cast5-cfb": true, "des-cfb": true, "rc2-cfb": true,
+		"salsa20": true, "chacha20": true, "chacha20-ietf": true,
+		"aes-128-gcm": true, "aes-192-gcm": true, "aes-256-gcm": true,
+		"chacha20-ietf-poly1305": true, "xchacha20-ietf-poly1305": true,
+		"2022-blake3-aes-128-gcm": true, "2022-blake3-aes-256-gcm": true,
 	}
 
-	found := false
-	for _, c := range supportedCiphers {
-		if c == cipher {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !supportedCiphers[cipher] {
 		return "", fmt.Errorf("cipher %s is not supported", cipher)
 	}
 
@@ -175,68 +167,35 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 
 		pluginOpts := GetMap(proxy, "plugin-opts")
 		if pluginOpts != nil {
-			if host := GetString(pluginOpts, "host"); host != "" {
-				result.Append(fmt.Sprintf(",obfs-host=%s", host))
-			}
-			if path := GetString(pluginOpts, "path"); path != "" {
-				result.Append(fmt.Sprintf(",obfs-uri=%s", path))
-			}
+			result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(pluginOpts, "host")), "plugin-opts.host")
+			result.AppendIfPresent(fmt.Sprintf(",obfs-uri=%s", GetString(pluginOpts, "path")), "plugin-opts.path")
 		}
 	}
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// udp over tcp
 	if GetBool(proxy, "_ssr_python_uot") {
 		result.Append(",udp-over-tcp=true")
 	} else if GetBool(proxy, "udp-over-tcp") {
 		version := GetInt(proxy, "udp-over-tcp-version")
-		switch version {
-		case 0, 1:
+		if version == 0 || version == 1 {
 			result.Append(",udp-over-tcp=sp.v1")
-		case 2:
+		} else if version == 2 {
 			result.Append(",udp-over-tcp=sp.v2")
 		}
 	}
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -253,32 +212,20 @@ func (p *QXProducer) shadowsocksr(proxy Proxy) (string, error) {
 
 	// ssr protocol
 	result.Append(fmt.Sprintf(",ssr-protocol=%s", GetString(proxy, "protocol")))
-	if val := GetString(proxy, "protocol-param"); val != "" {
-		result.Append(fmt.Sprintf(",ssr-protocol-param=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",ssr-protocol-param=%s", GetString(proxy, "protocol-param")), "protocol-param")
 
 	// obfs
-	if val := GetString(proxy, "obfs"); val != "" {
-		result.Append(fmt.Sprintf(",obfs=%s", val))
-	}
-	if val := GetString(proxy, "obfs-param"); val != "" {
-		result.Append(fmt.Sprintf(",obfs-host=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",obfs=%s", GetString(proxy, "obfs")), "obfs")
+	result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(proxy, "obfs-param")), "obfs-param")
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -304,65 +251,33 @@ func (p *QXProducer) trojan(proxy Proxy) (string, error) {
 
 			wsOpts := GetMap(proxy, "ws-opts")
 			if wsOpts != nil {
-				if path := GetString(wsOpts, "path"); path != "" {
-					result.Append(fmt.Sprintf(",obfs-uri=%s", path))
-				}
+				result.AppendIfPresent(fmt.Sprintf(",obfs-uri=%s", GetString(wsOpts, "path")), "ws-opts.path")
 				if headers := GetMap(wsOpts, "headers"); headers != nil {
-					if host := GetString(headers, "Host"); host != "" {
-						result.Append(fmt.Sprintf(",obfs-host=%s", host))
-					}
+					result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(headers, "Host")), "ws-opts.headers.Host")
 				}
 			}
-		} else {
+		} else if network != "tcp" {
 			return "", fmt.Errorf("network %s is unsupported", network)
 		}
 	}
 
-	// over tls
+	// over tls (when not using ws network)
 	if GetString(proxy, "network") != "ws" && p.needTLS(proxy) {
 		result.Append(",over-tls=true")
 	}
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -402,6 +317,8 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 			}
 		case "http":
 			result.Append(",obfs=http")
+		case "tcp":
+			// tcp network is supported, no obfs needed unless tls
 		default:
 			return "", fmt.Errorf("network %s is unsupported", network)
 		}
@@ -410,60 +327,28 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 		networkOpts := GetMap(proxy, network+"-opts")
 		if networkOpts != nil {
 			transportPath := networkOpts["path"]
-			var path string
-			if pathSlice, ok := transportPath.([]interface{}); ok && len(pathSlice) > 0 {
-				path = fmt.Sprintf("%v", pathSlice[0])
-			} else if pathStr, ok := transportPath.(string); ok {
-				path = pathStr
-			}
+			path := p.getFirstStringValue(transportPath)
 			if path != "" {
 				result.Append(fmt.Sprintf(",obfs-uri=%s", path))
 			}
 
 			if headers := GetMap(networkOpts, "headers"); headers != nil {
 				transportHost := headers["Host"]
-				var host string
-				if hostSlice, ok := transportHost.([]interface{}); ok && len(hostSlice) > 0 {
-					host = fmt.Sprintf("%v", hostSlice[0])
-				} else if hostStr, ok := transportHost.(string); ok {
-					host = hostStr
-				}
+				host := p.getFirstStringValue(transportHost)
 				if host != "" {
 					result.Append(fmt.Sprintf(",obfs-host=%s", host))
 				}
 			}
 		}
 	} else {
-		// over-tls
+		// over-tls (when no network specified)
 		if GetBool(proxy, "tls") {
 			result.Append(",obfs=over-tls")
 		}
 	}
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
 
 	// AEAD
@@ -474,19 +359,13 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -495,8 +374,9 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 }
 
 func (p *QXProducer) vless(proxy Proxy) (string, error) {
-	if IsPresent(proxy, "flow") || IsPresent(proxy, "reality-opts") {
-		return "", fmt.Errorf("VLESS XTLS/REALITY is not supported")
+	// Check encryption
+	if encryption := GetString(proxy, "encryption"); encryption != "" && encryption != "none" {
+		return "", fmt.Errorf("VLESS encryption is not supported")
 	}
 
 	result := NewResult(proxy)
@@ -504,8 +384,7 @@ func (p *QXProducer) vless(proxy Proxy) (string, error) {
 	result.Append(fmt.Sprintf("vless=%s:%d", GetString(proxy, "server"), GetInt(proxy, "port")))
 
 	// The method field for vless should be none
-	cipher := "none"
-	result.Append(fmt.Sprintf(",method=%s", cipher))
+	result.Append(",method=none")
 
 	result.Append(fmt.Sprintf(",password=%s", GetString(proxy, "uuid")))
 
@@ -515,19 +394,20 @@ func (p *QXProducer) vless(proxy Proxy) (string, error) {
 	}
 	if IsPresent(proxy, "network") {
 		network := GetString(proxy, "network")
-		if network == "ws" {
+		switch network {
+		case "ws":
 			if GetBool(proxy, "tls") {
 				result.Append(",obfs=wss")
 			} else {
 				result.Append(",obfs=ws")
 			}
-		} else if network == "http" {
+		case "http":
 			result.Append(",obfs=http")
-		} else if network == "tcp" {
+		case "tcp":
 			if GetBool(proxy, "tls") {
 				result.Append(",obfs=over-tls")
 			}
-		} else if network != "tcp" {
+		default:
 			return "", fmt.Errorf("network %s is unsupported", network)
 		}
 
@@ -535,76 +415,41 @@ func (p *QXProducer) vless(proxy Proxy) (string, error) {
 		networkOpts := GetMap(proxy, network+"-opts")
 		if networkOpts != nil {
 			transportPath := networkOpts["path"]
-			var path string
-			if pathSlice, ok := transportPath.([]interface{}); ok && len(pathSlice) > 0 {
-				path = fmt.Sprintf("%v", pathSlice[0])
-			} else if pathStr, ok := transportPath.(string); ok {
-				path = pathStr
-			}
+			path := p.getFirstStringValue(transportPath)
 			if path != "" {
 				result.Append(fmt.Sprintf(",obfs-uri=%s", path))
 			}
 
 			if headers := GetMap(networkOpts, "headers"); headers != nil {
 				transportHost := headers["Host"]
-				var host string
-				if hostSlice, ok := transportHost.([]interface{}); ok && len(hostSlice) > 0 {
-					host = fmt.Sprintf("%v", hostSlice[0])
-				} else if hostStr, ok := transportHost.(string); ok {
-					host = hostStr
-				}
+				host := p.getFirstStringValue(transportHost)
 				if host != "" {
 					result.Append(fmt.Sprintf(",obfs-host=%s", host))
 				}
 			}
 		}
 	} else {
-		// over-tls
+		// over-tls (when no network specified)
 		if GetBool(proxy, "tls") {
 			result.Append(",obfs=over-tls")
 		}
 	}
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
+
+	// vless-flow
+	result.AppendIfPresent(fmt.Sprintf(",vless-flow=%s", GetString(proxy, "flow")), "flow")
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -617,61 +462,27 @@ func (p *QXProducer) http(proxy Proxy) (string, error) {
 
 	result.Append(fmt.Sprintf("http=%s:%d", GetString(proxy, "server"), GetInt(proxy, "port")))
 
-	if val := GetString(proxy, "username"); val != "" {
-		result.Append(fmt.Sprintf(",username=%s", val))
-	}
-	if val := GetString(proxy, "password"); val != "" {
-		result.Append(fmt.Sprintf(",password=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",username=%s", GetString(proxy, "username")), "username")
+	result.AppendIfPresent(fmt.Sprintf(",password=%s", GetString(proxy, "password")), "password")
 
 	// tls
 	if p.needTLS(proxy) {
 		proxy["tls"] = true
 	}
-	if IsPresent(proxy, "tls") {
-		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")), "tls")
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -684,61 +495,27 @@ func (p *QXProducer) socks5(proxy Proxy) (string, error) {
 
 	result.Append(fmt.Sprintf("socks5=%s:%d", GetString(proxy, "server"), GetInt(proxy, "port")))
 
-	if val := GetString(proxy, "username"); val != "" {
-		result.Append(fmt.Sprintf(",username=%s", val))
-	}
-	if val := GetString(proxy, "password"); val != "" {
-		result.Append(fmt.Sprintf(",password=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",username=%s", GetString(proxy, "username")), "username")
+	result.AppendIfPresent(fmt.Sprintf(",password=%s", GetString(proxy, "password")), "password")
 
 	// tls
 	if p.needTLS(proxy) {
 		proxy["tls"] = true
 	}
-	if IsPresent(proxy, "tls") {
-		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")), "tls")
 
 	if p.needTLS(proxy) {
-		if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
-		}
-		if val := GetString(proxy, "tls-alpn"); val != "" {
-			result.Append(fmt.Sprintf(",tls-alpn=%s", val))
-		}
-		if IsPresent(proxy, "tls-no-session-ticket") {
-			result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
-		}
-		if IsPresent(proxy, "tls-no-session-reuse") {
-			result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
-		}
-		// tls fingerprint
-		if val := GetString(proxy, "tls-fingerprint"); val != "" {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
-		}
-		// tls verification
-		if IsPresent(proxy, "skip-cert-verify") {
-			result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
-		}
-		if val := GetString(proxy, "servername"); val != "" {
-			result.Append(fmt.Sprintf(",tls-host=%s", val))
-		}
+		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
 
 	// udp
-	if IsPresent(proxy, "udp") {
-		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
 
 	// server_check_url
-	if val := GetString(proxy, "test-url"); val != "" {
-		result.Append(fmt.Sprintf(",server_check_url=%s", val))
-	}
+	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -749,4 +526,48 @@ func (p *QXProducer) socks5(proxy Proxy) (string, error) {
 // needTLS checks if TLS is needed for the proxy
 func (p *QXProducer) needTLS(proxy Proxy) bool {
 	return GetBool(proxy, "tls")
+}
+
+// appendTLSOptions appends common TLS options to the result
+func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
+	result.AppendIfPresent(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")), "tls-pubkey-sha256")
+	result.AppendIfPresent(fmt.Sprintf(",tls-alpn=%s", GetString(proxy, "tls-alpn")), "tls-alpn")
+
+	if IsPresent(proxy, "tls-no-session-ticket") {
+		result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
+	}
+	if IsPresent(proxy, "tls-no-session-reuse") {
+		result.Append(fmt.Sprintf(",tls-no-session-reuse=%v", GetBool(proxy, "tls-no-session-reuse")))
+	}
+
+	// tls fingerprint
+	result.AppendIfPresent(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")), "tls-fingerprint")
+
+	// tls verification
+	if IsPresent(proxy, "skip-cert-verify") {
+		result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
+	}
+
+	// sni (JS uses 'sni' field directly)
+	result.AppendIfPresent(fmt.Sprintf(",tls-host=%s", GetString(proxy, "sni")), "sni")
+}
+
+// getFirstStringValue extracts the first string value from a value that could be a string or array
+func (p *QXProducer) getFirstStringValue(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case []interface{}:
+		if len(v) > 0 {
+			return fmt.Sprintf("%v", v[0])
+		}
+	case []string:
+		if len(v) > 0 {
+			return v[0]
+		}
+	}
+	return ""
 }
