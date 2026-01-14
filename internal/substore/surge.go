@@ -72,6 +72,15 @@ func (p *SurgeProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 
 // ProduceOne converts a single proxy to Surge format
 func (p *SurgeProducer) ProduceOne(proxy Proxy, outputType string, opts *ProduceOptions) (string, error) {
+	// Check for unsupported ws network with v2ray-http-upgrade
+	if GetString(proxy, "network") == "ws" {
+		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+			if GetBool(wsOpts, "v2ray-http-upgrade") {
+				return "", fmt.Errorf("platform Surge does not support network ws with http upgrade")
+			}
+		}
+	}
+
 	// Clean proxy name
 	name := p.helper.GetProxyName(proxy)
 	name = strings.ReplaceAll(name, "=", "")
@@ -106,12 +115,24 @@ func (p *SurgeProducer) ProduceOne(proxy Proxy, outputType string, opts *Produce
 	case "wireguard-surge":
 		return p.wireguardSurge(proxy)
 	case "hysteria2":
-		return p.hysteria2(proxy)
+		return p.hysteria2(proxy, includeUnsupported)
 	case "ssh":
 		return p.ssh(proxy)
 	case "wireguard":
 		if includeUnsupported {
 			return p.wireguard(proxy)
+		}
+		return "", fmt.Errorf("platform Surge does not support proxy type: %s", proxyType)
+	case "anytls":
+		if includeUnsupported {
+			network := GetString(proxy, "network")
+			if network != "" && network != "tcp" {
+				return "", fmt.Errorf("platform Surge does not support proxy type %s with network or reality", proxyType)
+			}
+			if network == "tcp" && IsPresent(proxy, "reality-opts") {
+				return "", fmt.Errorf("platform Surge does not support proxy type %s with network or reality", proxyType)
+			}
+			return p.anytls(proxy)
 		}
 		return "", fmt.Errorf("platform Surge does not support proxy type: %s", proxyType)
 	default:
@@ -202,6 +223,23 @@ func (p *SurgeProducer) trojan(proxy Proxy) (string, error) {
 	return result.String(), nil
 }
 
+func (p *SurgeProducer) anytls(proxy Proxy) (string, error) {
+	result := &Result{Proxy: proxy}
+	result.Append(fmt.Sprintf("%s=%s,%s,%d",
+		GetString(proxy, "name"),
+		GetString(proxy, "type"),
+		GetString(proxy, "server"),
+		GetInt(proxy, "port")))
+
+	result.AppendIfPresent(`,password="%s"`, "password")
+	p.appendIPVersion(result, proxy)
+	p.appendCommonOptions(result, proxy)
+	p.appendTLS(result, proxy)
+	result.AppendIfPresent(`,reuse=%v`, "reuse")
+
+	return result.String(), nil
+}
+
 func (p *SurgeProducer) vmess(proxy Proxy, includeUnsupported bool) (string, error) {
 	result := &Result{Proxy: proxy}
 	result.Append(fmt.Sprintf("%s=%s,%s,%d",
@@ -281,7 +319,21 @@ func (p *SurgeProducer) socks5(proxy Proxy) (string, error) {
 	result.AppendIfPresent(`,username="%s"`, "username")
 	result.AppendIfPresent(`,password="%s"`, "password")
 	p.appendIPVersion(result, proxy)
-	p.appendCommonOptions(result, proxy)
+
+	// Note: tfo is not supported by Surge for socks5, so we skip it here
+	result.AppendIfPresent(`,no-error-alert=%v`, "no-error-alert")
+	result.AppendIfPresent(`,udp-relay=%v`, "udp")
+	result.AppendIfPresent(`,test-url=%s`, "test-url")
+	result.AppendIfPresent(`,test-timeout=%d`, "test-timeout")
+	result.AppendIfPresent(`,test-udp=%s`, "test-udp")
+	result.AppendIfPresent(`,hybrid=%s`, "hybrid")
+	result.AppendIfPresent(`,tos=%s`, "tos")
+	result.AppendIfPresent(`,allow-other-interface=%s`, "allow-other-interface")
+	result.AppendIfPresent(`,interface=%s`, "interface-name")
+	result.AppendIfPresent(`,interface=%s`, "interface")
+	result.AppendIfPresent(`,block-quic=%s`, "block-quic")
+	result.AppendIfPresent(`,underlying-proxy=%s`, "underlying-proxy")
+
 	p.appendTLS(result, proxy)
 	p.appendShadowTLS(result, proxy)
 
@@ -357,9 +409,31 @@ func (p *SurgeProducer) tuic(proxy Proxy) (string, error) {
 	result.AppendIfPresent(`,port-hopping-interval=%s`, "hop-interval")
 
 	p.appendIPVersion(result, proxy)
-	p.appendCommonOptions(result, proxy)
+
+	// Common options except tfo (we handle it separately below)
+	result.AppendIfPresent(`,no-error-alert=%v`, "no-error-alert")
+	result.AppendIfPresent(`,udp-relay=%v`, "udp")
+	result.AppendIfPresent(`,test-url=%s`, "test-url")
+	result.AppendIfPresent(`,test-timeout=%d`, "test-timeout")
+	result.AppendIfPresent(`,test-udp=%s`, "test-udp")
+	result.AppendIfPresent(`,hybrid=%s`, "hybrid")
+	result.AppendIfPresent(`,tos=%s`, "tos")
+	result.AppendIfPresent(`,allow-other-interface=%s`, "allow-other-interface")
+	result.AppendIfPresent(`,interface=%s`, "interface-name")
+	result.AppendIfPresent(`,interface=%s`, "interface")
+	result.AppendIfPresent(`,block-quic=%s`, "block-quic")
+	result.AppendIfPresent(`,underlying-proxy=%s`, "underlying-proxy")
+
 	p.appendTLS(result, proxy)
 	p.appendShadowTLS(result, proxy)
+
+	// tfo: prefer tfo, fallback to fast-open
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",tfo=%v", GetBool(proxy, "tfo")))
+	} else if IsPresent(proxy, "fast-open") {
+		result.Append(fmt.Sprintf(",tfo=%v", GetBool(proxy, "fast-open")))
+	}
+
 	result.AppendIfPresent(`,ecn=%v`, "ecn")
 
 	return result.String(), nil
@@ -499,9 +573,16 @@ func (p *SurgeProducer) wireguardSurge(proxy Proxy) (string, error) {
 	return result.String(), nil
 }
 
-func (p *SurgeProducer) hysteria2(proxy Proxy) (string, error) {
-	if IsPresent(proxy, "obfs") || IsPresent(proxy, "obfs-password") {
-		return "", fmt.Errorf("obfs is unsupported")
+func (p *SurgeProducer) hysteria2(proxy Proxy, includeUnsupported bool) (string, error) {
+	// Check obfs support
+	if includeUnsupported {
+		if IsPresent(proxy, "obfs-password") && GetString(proxy, "obfs") != "salamander" {
+			return "", fmt.Errorf("only salamander obfs is supported")
+		}
+	} else {
+		if IsPresent(proxy, "obfs") || IsPresent(proxy, "obfs-password") {
+			return "", fmt.Errorf("obfs is unsupported")
+		}
 	}
 
 	result := &Result{Proxy: proxy}
@@ -519,6 +600,11 @@ func (p *SurgeProducer) hysteria2(proxy Proxy) (string, error) {
 		result.Append(fmt.Sprintf(`,port-hopping="%s"`, ports))
 	}
 	result.AppendIfPresent(`,port-hopping-interval=%s`, "hop-interval")
+
+	// salamander obfs
+	if IsPresent(proxy, "obfs-password") && GetString(proxy, "obfs") == "salamander" {
+		result.Append(fmt.Sprintf(`,salamander-password="%s"`, GetString(proxy, "obfs-password")))
+	}
 
 	p.appendIPVersion(result, proxy)
 	p.appendCommonOptions(result, proxy)
@@ -580,6 +666,7 @@ func (p *SurgeProducer) appendCommonOptions(result *Result, _ Proxy) {
 	result.AppendIfPresent(`,tos=%s`, "tos")
 	result.AppendIfPresent(`,allow-other-interface=%s`, "allow-other-interface")
 	result.AppendIfPresent(`,interface=%s`, "interface-name")
+	result.AppendIfPresent(`,interface=%s`, "interface")
 	result.AppendIfPresent(`,block-quic=%s`, "block-quic")
 	result.AppendIfPresent(`,underlying-proxy=%s`, "underlying-proxy")
 }
@@ -604,8 +691,13 @@ func (p *SurgeProducer) appendShadowTLS(result *Result, proxy Proxy) {
 				if host := GetString(pluginOpts, "host"); host != "" {
 					result.Append(fmt.Sprintf(",shadow-tls-sni=%s", host))
 				}
-				if version := GetInt(pluginOpts, "version"); version >= 2 {
-					result.Append(fmt.Sprintf(",shadow-tls-version=%d", version))
+				if version := GetInt(pluginOpts, "version"); version > 0 {
+					if version < 2 {
+						// Note: version < 2 is not supported, but we don't error here
+						// to match JS behavior which just doesn't add the version field
+					} else {
+						result.Append(fmt.Sprintf(",shadow-tls-version=%d", version))
+					}
 				}
 				result.AppendIfPresent(`,udp-port=%d`, "udp-port")
 			}
@@ -637,7 +729,9 @@ func (p *SurgeProducer) handleTransport(result *Result, proxy Proxy, includeUnsu
 		}
 	} else if network == "http" && includeUnsupported {
 		// Include unsupported: network http -> tcp
-	} else if network != "" {
+	} else if network == "tcp" && IsPresent(proxy, "reality-opts") {
+		return fmt.Errorf("reality is unsupported")
+	} else if network != "" && network != "tcp" {
 		return fmt.Errorf("network %s is unsupported", network)
 	}
 

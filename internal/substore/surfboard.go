@@ -49,6 +49,15 @@ func (p *SurfboardProducer) Produce(proxies []Proxy, outputType string, opts *Pr
 
 // produceSingle converts a single proxy to Surfboard format string
 func (p *SurfboardProducer) produceSingle(proxy Proxy) (string, error) {
+	// Check for unsupported ws network with v2ray-http-upgrade
+	if GetString(proxy, "network") == "ws" {
+		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+			if GetBool(wsOpts, "v2ray-http-upgrade") {
+				return "", fmt.Errorf("platform Surfboard does not support network ws with http upgrade")
+			}
+		}
+	}
+
 	// Clean proxy name (remove = and , characters)
 	name := GetString(proxy, "name")
 	name = strings.ReplaceAll(name, "=", "")

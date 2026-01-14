@@ -2,6 +2,8 @@ package substore
 
 import (
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -42,10 +44,33 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 
 		// Filter unsupported types
 		if !opts.IncludeUnsupportedProxy {
+			// Snell v4+
 			if proxyType == "snell" && GetInt(proxy, "version") >= 4 {
 				continue
 			}
-			if proxyType == "mieru" {
+			// Unsupported types
+			if proxyType == "mieru" || proxyType == "sudoku" || proxyType == "naive" {
+				continue
+			}
+			// VLESS with non-none encryption
+			if proxyType == "vless" {
+				encryption := GetString(proxy, "encryption")
+				if encryption != "" && encryption != "none" {
+					continue
+				}
+			}
+			// anytls with unsupported network
+			if proxyType == "anytls" {
+				network := GetString(proxy, "network")
+				if network != "" && network != "tcp" {
+					continue
+				}
+				if network == "tcp" && IsPresent(proxy, "reality-opts") {
+					continue
+				}
+			}
+			// xhttp network (not supported by Shadowrocket unless enabled)
+			if GetString(proxy, "network") == "xhttp" {
 				continue
 			}
 		}
@@ -174,6 +199,22 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			}
 		}
 
+		// SS shadow-tls transformations
+		if proxyType == "ss" {
+			if IsPresent(transformed, "shadow-tls-password") && !IsPresent(transformed, "plugin") {
+				transformed["plugin"] = "shadow-tls"
+				pluginOpts := make(map[string]interface{})
+				pluginOpts["host"] = GetString(transformed, "shadow-tls-sni")
+				pluginOpts["password"] = GetString(transformed, "shadow-tls-password")
+				pluginOpts["version"] = GetInt(transformed, "shadow-tls-version")
+				transformed["plugin-opts"] = pluginOpts
+
+				delete(transformed, "shadow-tls-password")
+				delete(transformed, "shadow-tls-sni")
+				delete(transformed, "shadow-tls-version")
+			}
+		}
+
 		// Handle HTTP network options for VMess/VLESS
 		network := GetString(transformed, "network")
 		if (proxyType == "vmess" || proxyType == "vless") && network == "http" {
@@ -258,10 +299,65 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			}
 		}
 
+		// Handle WS network early data
+		if network == "ws" {
+			wsOpts := GetMap(transformed, "ws-opts")
+			if wsOpts == nil {
+				wsOpts = make(map[string]interface{})
+				transformed["ws-opts"] = wsOpts
+			}
+
+			path := GetString(wsOpts, "path")
+			if path != "" {
+				// Extract early data from path
+				re := regexp.MustCompile(`^(.*?)(?:\?ed=(\d+))?$`)
+				matches := re.FindStringSubmatch(path)
+				if len(matches) > 0 {
+					wsOpts["path"] = matches[1]
+					if len(matches) > 2 && matches[2] != "" {
+						wsOpts["early-data-header-name"] = "Sec-WebSocket-Protocol"
+						ed, _ := strconv.Atoi(matches[2])
+						wsOpts["max-early-data"] = ed
+					}
+				}
+			} else {
+				wsOpts["path"] = "/"
+			}
+		}
+
 		// Handle plugin-opts TLS
 		if pluginOpts := GetMap(transformed, "plugin-opts"); pluginOpts != nil {
 			if GetBool(pluginOpts, "tls") && IsPresent(transformed, "skip-cert-verify") {
 				pluginOpts["skip-cert-verify"] = GetBool(transformed, "skip-cert-verify")
+			}
+		}
+
+		// Delete tls for certain proxy types
+		deleteTLSTypes := map[string]bool{
+			"trojan": true, "tuic": true, "hysteria": true,
+			"hysteria2": true, "juicity": true, "anytls": true,
+			"naive": true,
+		}
+		if deleteTLSTypes[proxyType] {
+			delete(transformed, "tls")
+		}
+
+		// Handle tls-fingerprint -> fingerprint
+		if IsPresent(transformed, "tls-fingerprint") {
+			transformed["fingerprint"] = GetString(transformed, "tls-fingerprint")
+		}
+		delete(transformed, "tls-fingerprint")
+
+		// Handle underlying-proxy -> dialer-proxy
+		if IsPresent(transformed, "underlying-proxy") {
+			transformed["dialer-proxy"] = GetString(transformed, "underlying-proxy")
+		}
+		delete(transformed, "underlying-proxy")
+
+		// Remove invalid tls field
+		if IsPresent(transformed, "tls") {
+			if _, ok := transformed["tls"].(bool); !ok {
+				delete(transformed, "tls")
 			}
 		}
 

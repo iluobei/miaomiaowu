@@ -103,8 +103,8 @@ func (p *ClashMetaProducer) Produce(proxies []Proxy, outputType string, opts *Pr
 				}
 			}
 
-			// Skip juicity
-			if proxyType == "juicity" {
+			// Skip juicity and naive (不被 ClashMeta 支持)
+			if proxyType == "juicity" || proxyType == "naive" {
 				continue
 			}
 
@@ -141,6 +141,13 @@ func (p *ClashMetaProducer) Produce(proxies []Proxy, outputType string, opts *Pr
 	for _, proxy := range filtered {
 		transformed := p.helper.CloneProxy(proxy)
 		proxyType := p.helper.GetProxyType(transformed)
+
+		// Set default client-fingerprint for trojan, vmess, vless
+		if proxyType == "trojan" || proxyType == "vmess" || proxyType == "vless" {
+			if !IsPresent(transformed, "client-fingerprint") {
+				transformed["client-fingerprint"] = "chrome"
+			}
+		}
 
 		// Type-specific transformations
 		switch proxyType {
@@ -362,6 +369,7 @@ func (p *ClashMetaProducer) Produce(proxies []Proxy, outputType string, opts *Pr
 		deleteTLSTypes := map[string]bool{
 			"trojan": true, "tuic": true, "hysteria": true,
 			"hysteria2": true, "juicity": true, "anytls": true,
+			"naive": true,
 		}
 		if deleteTLSTypes[proxyType] {
 			delete(transformed, "tls")

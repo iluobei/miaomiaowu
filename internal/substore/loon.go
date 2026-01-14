@@ -64,6 +64,15 @@ func (p *LoonProducer) Produce(proxies []Proxy, outputType string, opts *Produce
 
 // ProduceOne converts a single proxy to Loon format
 func (p *LoonProducer) ProduceOne(proxy Proxy, outputType string, opts *ProduceOptions) (string, error) {
+	// Check for unsupported ws network with v2ray-http-upgrade
+	if GetString(proxy, "network") == "ws" {
+		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+			if GetBool(wsOpts, "v2ray-http-upgrade") {
+				return "", fmt.Errorf("platform Loon does not support network ws with http upgrade")
+			}
+		}
+	}
+
 	// Clean proxy name
 	name := p.helper.GetProxyName(proxy)
 	name = strings.ReplaceAll(name, "=", "")

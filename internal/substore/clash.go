@@ -100,6 +100,16 @@ func (p *ClashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 				}
 			}
 
+			// Check ws network with v2ray-http-upgrade (not supported by Clash)
+			network := GetString(proxy, "network")
+			if network == "ws" {
+				if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+					if GetBool(wsOpts, "v2ray-http-upgrade") {
+						continue
+					}
+				}
+			}
+
 			// Check dialer proxy
 			if IsPresent(proxy, "underlying-proxy") || IsPresent(proxy, "dialer-proxy") {
 				// Clash doesn't support dialer proxy, skip this node
@@ -284,6 +294,7 @@ func (p *ClashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 		deleteTLSTypes := map[string]bool{
 			"trojan": true, "tuic": true, "hysteria": true,
 			"hysteria2": true, "juicity": true, "anytls": true,
+			"naive": true,
 		}
 		if deleteTLSTypes[proxyType] {
 			delete(transformed, "tls")

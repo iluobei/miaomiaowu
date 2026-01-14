@@ -143,6 +143,15 @@ func (p *EgernProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 			}
 		}
 
+		// Check ws + v2ray-http-upgrade
+		if GetString(proxy, "network") == "ws" {
+			if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+				if GetBool(wsOpts, "v2ray-http-upgrade") {
+					continue
+				}
+			}
+		}
+
 		// Set default SNI
 		if GetBool(proxy, "tls") && !IsPresent(proxy, "sni") {
 			proxy["sni"] = GetString(proxy, "server")

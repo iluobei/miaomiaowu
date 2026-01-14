@@ -111,6 +111,50 @@ func (p *StashProducer) Produce(proxies []Proxy, outputType string, opts *Produc
 			}
 		}
 
+		// Check anytls: requires include-unsupported-proxy
+		if proxyType == "anytls" && !opts.IncludeUnsupportedProxy {
+			shouldSkip = true
+			logger.Info("[Stash] 跳过anytls节点(需要启用include-unsupported-proxy)", "name", GetString(proxy, "name"))
+		}
+
+		// Check anytls network
+		if proxyType == "anytls" {
+			network := GetString(proxy, "network")
+			if network != "" && network != "tcp" {
+				shouldSkip = true
+				logger.Info("[Stash] 跳过anytls节点(不支持的network)", "name", GetString(proxy, "name"), "network", network)
+			}
+			if network == "tcp" && IsPresent(proxy, "reality-opts") {
+				shouldSkip = true
+				logger.Info("[Stash] 跳过anytls节点(tcp+reality不支持)", "name", GetString(proxy, "name"))
+			}
+		}
+
+		// Check xhttp network
+		if GetString(proxy, "network") == "xhttp" {
+			shouldSkip = true
+			logger.Info("[Stash] 跳过xhttp网络节点", "name", GetString(proxy, "name"))
+		}
+
+		// Check VLESS encryption
+		if proxyType == "vless" {
+			encryption := GetString(proxy, "encryption")
+			if encryption != "" && encryption != "none" {
+				shouldSkip = true
+				logger.Info("[Stash] 跳过VLESS节点(encryption必须为none)", "name", GetString(proxy, "name"), "encryption", encryption)
+			}
+		}
+
+		// Check ws + v2ray-http-upgrade
+		if GetString(proxy, "network") == "ws" {
+			if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+				if GetBool(wsOpts, "v2ray-http-upgrade") {
+					shouldSkip = true
+					logger.Info("[Stash] 跳过ws+v2ray-http-upgrade节点", "name", GetString(proxy, "name"))
+				}
+			}
+		}
+
 		if shouldSkip {
 			continue
 		}
@@ -727,7 +771,7 @@ func (p *StashProducer) isSupportedType(proxyType string) bool {
 	supportedTypes := []string{
 		"ss", "ssr", "vmess", "socks5", "http", "snell",
 		"trojan", "tuic", "vless", "wireguard",
-		"hysteria", "hysteria2", "ssh", "juicity",
+		"hysteria", "hysteria2", "ssh", "juicity", "anytls",
 	}
 
 	for _, t := range supportedTypes {

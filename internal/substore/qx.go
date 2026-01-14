@@ -55,26 +55,62 @@ func (p *QXProducer) Produce(proxies []Proxy, outputType string, opts *ProduceOp
 
 // produceOne converts a single proxy to QuantumultX format
 func (p *QXProducer) produceOne(proxy Proxy, _ string, _ *ProduceOptions) (string, error) {
+	// Check for unsupported ws network with v2ray-http-upgrade
+	if GetString(proxy, "network") == "ws" {
+		if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
+			if GetBool(wsOpts, "v2ray-http-upgrade") {
+				return "", fmt.Errorf("platform QX does not support network ws with http upgrade")
+			}
+		}
+	}
+
 	proxyType := p.helper.GetProxyType(proxy)
+
+	var result string
+	var err error
 
 	switch proxyType {
 	case "ss":
-		return p.shadowsocks(proxy)
+		result, err = p.shadowsocks(proxy)
 	case "ssr":
-		return p.shadowsocksr(proxy)
+		result, err = p.shadowsocksr(proxy)
 	case "trojan":
-		return p.trojan(proxy)
+		result, err = p.trojan(proxy)
 	case "vmess":
-		return p.vmess(proxy)
+		result, err = p.vmess(proxy)
 	case "http":
-		return p.http(proxy)
+		result, err = p.http(proxy)
 	case "socks5":
-		return p.socks5(proxy)
+		result, err = p.socks5(proxy)
 	case "vless":
-		return p.vless(proxy)
+		result, err = p.vless(proxy)
 	default:
 		return "", fmt.Errorf("platform QX does not support proxy type: %s", proxyType)
 	}
+
+	if err != nil {
+		return "", err
+	}
+
+	// Handle flow validation
+	if IsPresent(proxy, "flow") {
+		flow := GetString(proxy, "flow")
+		if flow != "" && flow != "xtls-rprx-vision" {
+			return "", fmt.Errorf("platform QX does not support flow %s", flow)
+		}
+	}
+
+	// Handle reality-opts
+	if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
+		if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
+			result = fmt.Sprintf("%s,reality-base64-pubkey=%s", result, publicKey)
+		}
+		if shortID := GetString(realityOpts, "short-id"); shortID != "" {
+			result = fmt.Sprintf("%s,reality-hex-shortid=%s", result, shortID)
+		}
+	}
+
+	return result, nil
 }
 
 func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
