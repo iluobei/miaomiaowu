@@ -167,8 +167,12 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 
 		pluginOpts := GetMap(proxy, "plugin-opts")
 		if pluginOpts != nil {
-			result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(pluginOpts, "host")), "plugin-opts.host")
-			result.AppendIfPresent(fmt.Sprintf(",obfs-uri=%s", GetString(pluginOpts, "path")), "plugin-opts.path")
+			if host := GetString(pluginOpts, "host"); host != "" {
+				result.Append(fmt.Sprintf(",obfs-host=%s", host))
+			}
+			if path := GetString(pluginOpts, "path"); path != "" {
+				result.Append(fmt.Sprintf(",obfs-uri=%s", path))
+			}
 		}
 	}
 
@@ -177,10 +181,14 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// udp over tcp
 	if GetBool(proxy, "_ssr_python_uot") {
@@ -195,7 +203,9 @@ func (p *QXProducer) shadowsocks(proxy Proxy) (string, error) {
 	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -212,20 +222,32 @@ func (p *QXProducer) shadowsocksr(proxy Proxy) (string, error) {
 
 	// ssr protocol
 	result.Append(fmt.Sprintf(",ssr-protocol=%s", GetString(proxy, "protocol")))
-	result.AppendIfPresent(fmt.Sprintf(",ssr-protocol-param=%s", GetString(proxy, "protocol-param")), "protocol-param")
+	if protocolParam := GetString(proxy, "protocol-param"); protocolParam != "" {
+		result.Append(fmt.Sprintf(",ssr-protocol-param=%s", protocolParam))
+	}
 
 	// obfs
-	result.AppendIfPresent(fmt.Sprintf(",obfs=%s", GetString(proxy, "obfs")), "obfs")
-	result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(proxy, "obfs-param")), "obfs-param")
+	if obfs := GetString(proxy, "obfs"); obfs != "" {
+		result.Append(fmt.Sprintf(",obfs=%s", obfs))
+	}
+	if obfsParam := GetString(proxy, "obfs-param"); obfsParam != "" {
+		result.Append(fmt.Sprintf(",obfs-host=%s", obfsParam))
+	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -251,9 +273,13 @@ func (p *QXProducer) trojan(proxy Proxy) (string, error) {
 
 			wsOpts := GetMap(proxy, "ws-opts")
 			if wsOpts != nil {
-				result.AppendIfPresent(fmt.Sprintf(",obfs-uri=%s", GetString(wsOpts, "path")), "ws-opts.path")
+				if path := GetString(wsOpts, "path"); path != "" {
+					result.Append(fmt.Sprintf(",obfs-uri=%s", path))
+				}
 				if headers := GetMap(wsOpts, "headers"); headers != nil {
-					result.AppendIfPresent(fmt.Sprintf(",obfs-host=%s", GetString(headers, "Host")), "ws-opts.headers.Host")
+					if host := GetString(headers, "Host"); host != "" {
+						result.Append(fmt.Sprintf(",obfs-host=%s", host))
+					}
 				}
 			}
 		} else if network != "tcp" {
@@ -271,13 +297,19 @@ func (p *QXProducer) trojan(proxy Proxy) (string, error) {
 	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -359,13 +391,19 @@ func (p *QXProducer) vmess(proxy Proxy) (string, error) {
 	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -440,16 +478,24 @@ func (p *QXProducer) vless(proxy Proxy) (string, error) {
 	}
 
 	// vless-flow
-	result.AppendIfPresent(fmt.Sprintf(",vless-flow=%s", GetString(proxy, "flow")), "flow")
+	if flow := GetString(proxy, "flow"); flow != "" {
+		result.Append(fmt.Sprintf(",vless-flow=%s", flow))
+	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -462,27 +508,39 @@ func (p *QXProducer) http(proxy Proxy) (string, error) {
 
 	result.Append(fmt.Sprintf("http=%s:%d", GetString(proxy, "server"), GetInt(proxy, "port")))
 
-	result.AppendIfPresent(fmt.Sprintf(",username=%s", GetString(proxy, "username")), "username")
-	result.AppendIfPresent(fmt.Sprintf(",password=%s", GetString(proxy, "password")), "password")
+	if username := GetString(proxy, "username"); username != "" {
+		result.Append(fmt.Sprintf(",username=%s", username))
+	}
+	if password := GetString(proxy, "password"); password != "" {
+		result.Append(fmt.Sprintf(",password=%s", password))
+	}
 
 	// tls
 	if p.needTLS(proxy) {
 		proxy["tls"] = true
 	}
-	result.AppendIfPresent(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")), "tls")
+	if IsPresent(proxy, "tls") {
+		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
+	}
 
 	if p.needTLS(proxy) {
 		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -495,27 +553,39 @@ func (p *QXProducer) socks5(proxy Proxy) (string, error) {
 
 	result.Append(fmt.Sprintf("socks5=%s:%d", GetString(proxy, "server"), GetInt(proxy, "port")))
 
-	result.AppendIfPresent(fmt.Sprintf(",username=%s", GetString(proxy, "username")), "username")
-	result.AppendIfPresent(fmt.Sprintf(",password=%s", GetString(proxy, "password")), "password")
+	if username := GetString(proxy, "username"); username != "" {
+		result.Append(fmt.Sprintf(",username=%s", username))
+	}
+	if password := GetString(proxy, "password"); password != "" {
+		result.Append(fmt.Sprintf(",password=%s", password))
+	}
 
 	// tls
 	if p.needTLS(proxy) {
 		proxy["tls"] = true
 	}
-	result.AppendIfPresent(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")), "tls")
+	if IsPresent(proxy, "tls") {
+		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
+	}
 
 	if p.needTLS(proxy) {
 		p.appendTLSOptions(result, proxy)
 	}
 
 	// tfo
-	result.AppendIfPresent(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")), "tfo")
+	if IsPresent(proxy, "tfo") {
+		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
+	}
 
 	// udp
-	result.AppendIfPresent(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")), "udp")
+	if IsPresent(proxy, "udp") {
+		result.Append(fmt.Sprintf(",udp-relay=%v", GetBool(proxy, "udp")))
+	}
 
 	// server_check_url
-	result.AppendIfPresent(fmt.Sprintf(",server_check_url=%s", GetString(proxy, "test-url")), "test-url")
+	if testURL := GetString(proxy, "test-url"); testURL != "" {
+		result.Append(fmt.Sprintf(",server_check_url=%s", testURL))
+	}
 
 	// tag
 	result.Append(fmt.Sprintf(",tag=%s", GetString(proxy, "name")))
@@ -530,8 +600,12 @@ func (p *QXProducer) needTLS(proxy Proxy) bool {
 
 // appendTLSOptions appends common TLS options to the result
 func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
-	result.AppendIfPresent(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")), "tls-pubkey-sha256")
-	result.AppendIfPresent(fmt.Sprintf(",tls-alpn=%s", GetString(proxy, "tls-alpn")), "tls-alpn")
+	if val := GetString(proxy, "tls-pubkey-sha256"); val != "" {
+		result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", val))
+	}
+	if val := GetString(proxy, "tls-alpn"); val != "" {
+		result.Append(fmt.Sprintf(",tls-alpn=%s", val))
+	}
 
 	if IsPresent(proxy, "tls-no-session-ticket") {
 		result.Append(fmt.Sprintf(",tls-no-session-ticket=%v", GetBool(proxy, "tls-no-session-ticket")))
@@ -541,7 +615,9 @@ func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
 	}
 
 	// tls fingerprint
-	result.AppendIfPresent(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")), "tls-fingerprint")
+	if val := GetString(proxy, "tls-fingerprint"); val != "" {
+		result.Append(fmt.Sprintf(",tls-cert-sha256=%s", val))
+	}
 
 	// tls verification
 	if IsPresent(proxy, "skip-cert-verify") {
@@ -549,18 +625,20 @@ func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
 	}
 
 	// sni (JS uses 'sni' field directly)
-	result.AppendIfPresent(fmt.Sprintf(",tls-host=%s", GetString(proxy, "sni")), "sni")
+	if sni := GetString(proxy, "sni"); sni != "" {
+		result.Append(fmt.Sprintf(",tls-host=%s", sni))
+	}
 }
 
 // getFirstStringValue extracts the first string value from a value that could be a string or array
-func (p *QXProducer) getFirstStringValue(value interface{}) string {
+func (p *QXProducer) getFirstStringValue(value any) string {
 	if value == nil {
 		return ""
 	}
 	switch v := value.(type) {
 	case string:
 		return v
-	case []interface{}:
+	case []any:
 		if len(v) > 0 {
 			return fmt.Sprintf("%v", v[0])
 		}
