@@ -2581,8 +2581,8 @@ function SubscriptionGeneratorPage() {
                 <div className='mt-4 rounded-lg border bg-muted/50 p-4'>
                   <h3 className='mb-2 font-semibold'>使用说明</h3>
                   <ul className='space-y-1 text-sm text-muted-foreground'>
-                    <li>• 点击"下载"按钮下载为 clash-config.yaml 文件</li>
-                    <li>• 将配置文件导入 Clash 客户端即可使用</li>
+                    <li>• 点击"保存为订阅"按钮保存为clash yaml格式配置文件</li>
+                    <li>• 在订阅链接将订阅地址导入 Clash 客户端即可使用</li>
                     <li>• 支持 Clash、Clash Meta、Mihomo 等客户端</li>
                   </ul>
                 </div>
