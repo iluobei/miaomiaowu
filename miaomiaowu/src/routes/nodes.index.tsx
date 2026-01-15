@@ -1512,9 +1512,10 @@ function NodesPage() {
 
       // 保存外部订阅链接
       try {
-        // 使用 defaultTag（优先从 Content-Disposition 提取，其次使用域名）
+        // 优先使用用户输入的标签，如果没有则使用 defaultTag（从 Content-Disposition 提取或域名）
+        const finalTag = subscriptionTag.trim() || defaultTag
         await api.post('/api/user/external-subscriptions', {
-          name: defaultTag,
+          name: finalTag,
           url: variables.url,
           user_agent: variables.userAgent, // 保存 User-Agent
         })
