@@ -989,6 +989,12 @@ func (h *subscribeFilesHandler) initializeCustomRuleApplications(ctx context.Con
 // syncMMWProxyProvidersToFile 同步 MMW 模式代理集合的节点到指定文件
 // 保存配置文件后调用，将 proxy-groups 中 use 引用的 MMW 模式代理集合节点直接写入配置
 func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filename string) {
+	SyncMMWProxyProvidersToFile(h.repo, subscribeDir, filename)
+}
+
+// SyncMMWProxyProvidersToFile 同步 MMW 模式代理集合的节点到指定文件（公共版本）
+// 可由 subscription.go 调用，确保获取订阅时包含最新的代理集合节点
+func SyncMMWProxyProvidersToFile(repo *storage.TrafficRepository, subscribeDir, filename string) {
 	filePath := filepath.Join(subscribeDir, filename)
 
 	// 1. 读取刚保存的 YAML 文件
@@ -1008,39 +1014,36 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 	// 3. 查找 proxy-groups，收集 use 引用的代理集合名称
 	providerNames := collectUsedProviderNames(&rootNode)
 	if len(providerNames) == 0 {
-		logger.Info("[MMW同步] 文件没有使用代理集合", "filename", filename)
 		return
 	}
 
-	logger.Info("[MMW同步] 文件使用代理集合", "filename", filename, "count", len(providerNames), "providers", providerNames)
+	// 获取现有节点数量用于比较
+	existingNodes := collectExistingProxyNodes(&rootNode)
+	logger.Info("[MMW同步] 文件使用代理集合", "filename", filename, "count", len(providerNames), "providers", providerNames, "existing_nodes", len(existingNodes))
 
 	ctx := context.Background()
 	syncedCount := 0
 
 	// 4. 根据名称查找代理集合配置，筛选 MMW 模式
 	for _, providerName := range providerNames {
-		config, err := h.repo.GetProxyProviderConfigByName(ctx, providerName)
+		config, err := repo.GetProxyProviderConfigByName(ctx, providerName)
 		if err != nil {
 			logger.Info("[MMW同步] 查询代理集合配置失败", "provider_name", providerName, "error", err)
 			continue
 		}
 		if config == nil {
-			logger.Info("[MMW同步] 代理集合配置不存在", "provider_name", providerName)
 			continue
 		}
 		if config.ProcessMode != "mmw" {
-			logger.Info("[MMW同步] 代理集合不是妙妙屋模式，跳过", "provider_name", providerName, "mode", config.ProcessMode)
 			continue
 		}
-
-		logger.Info("[MMW同步] 处理妙妙屋模式代理集合", "provider_name", providerName)
 
 		// 5. 从缓存获取节点数据
 		cache := GetProxyProviderCache()
 		entry, ok := cache.Get(config.ID)
 		if !ok || cache.IsExpired(entry) {
 			// 缓存不存在或过期，尝试刷新
-			sub, err := h.repo.GetExternalSubscription(ctx, config.ExternalSubscriptionID, config.Username)
+			sub, err := repo.GetExternalSubscription(ctx, config.ExternalSubscriptionID, config.Username)
 			if err != nil || sub.ID == 0 {
 				logger.Info("[MMW同步] 获取代理集合的外部订阅失败", "provider_name", providerName, "error", err)
 				continue
@@ -1057,9 +1060,7 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 			continue
 		}
 
-		logger.Info("[MMW同步] 代理集合获取到节点", "provider_name", providerName, "node_count", len(entry.Nodes))
-
-		// 6. 为节点添加前缀
+		// 6. 为节点添加前缀（使用名称前缀，即第一个 - 之前的部分）
 		namePrefix := config.Name
 		if idx := strings.Index(config.Name, "-"); idx > 0 {
 			namePrefix = config.Name[:idx]
@@ -1085,8 +1086,10 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 			continue
 		}
 
-		syncedCount++
+		// 记录同步完成（详细的 old_count/new_count 日志已在 external_sync.go 中输出）
 		logger.Info("[MMW同步] 代理集合同步完成", "provider_name", providerName, "node_count", len(nodeNames))
+
+		syncedCount++
 	}
 
 	if syncedCount > 0 {
@@ -1094,7 +1097,56 @@ func (h *subscribeFilesHandler) syncMMWProxyProvidersToFile(subscribeDir, filena
 	}
 }
 
-// collectUsedProviderNames 从 YAML 中收集所有 proxy-groups 的 use 引用
+// collectExistingProxyNodes 从 YAML 中收集现有的 proxies 节点名称
+func collectExistingProxyNodes(rootNode *yaml.Node) []string {
+	nodeNames := make([]string, 0)
+
+	if rootNode.Kind != yaml.DocumentNode || len(rootNode.Content) == 0 {
+		return nodeNames
+	}
+
+	docContent := rootNode.Content[0]
+	if docContent.Kind != yaml.MappingNode {
+		return nodeNames
+	}
+
+	// 查找 proxies 节点
+	var proxiesNode *yaml.Node
+	for i := 0; i < len(docContent.Content)-1; i += 2 {
+		keyNode := docContent.Content[i]
+		valueNode := docContent.Content[i+1]
+		if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "proxies" {
+			proxiesNode = valueNode
+			break
+		}
+	}
+
+	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
+		return nodeNames
+	}
+
+	// 遍历 proxies，收集 name 字段
+	for _, proxyNode := range proxiesNode.Content {
+		if proxyNode.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i < len(proxyNode.Content)-1; i += 2 {
+			keyNode := proxyNode.Content[i]
+			valueNode := proxyNode.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "name" && valueNode.Kind == yaml.ScalarNode {
+				nodeNames = append(nodeNames, valueNode.Value)
+				break
+			}
+		}
+	}
+
+	return nodeNames
+}
+
+// collectUsedProviderNames 从 YAML 中收集所有 proxy-groups 的代理集合引用
+// 支持两种模式：
+// 1. 客户端模式：从 use 字段收集 provider 名称
+// 2. 妙妙屋模式：从 proxy-group 的 name 字段收集（MMW模式下 proxy-group 名称与代理集合名称相同）
 func collectUsedProviderNames(rootNode *yaml.Node) []string {
 	providerNames := make([]string, 0)
 	seen := make(map[string]bool)
@@ -1123,27 +1175,46 @@ func collectUsedProviderNames(rootNode *yaml.Node) []string {
 		return providerNames
 	}
 
-	// 遍历 proxy-groups，收集 use 字段的值
+	// 遍历 proxy-groups
 	for _, groupNode := range proxyGroupsNode.Content {
 		if groupNode.Kind != yaml.MappingNode {
 			continue
 		}
 
+		var groupName string
+		var hasUse bool
+
 		for i := 0; i < len(groupNode.Content)-1; i += 2 {
 			keyNode := groupNode.Content[i]
 			valueNode := groupNode.Content[i+1]
-			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "use" {
-				if valueNode.Kind == yaml.SequenceNode {
-					for _, useItem := range valueNode.Content {
-						if useItem.Kind == yaml.ScalarNode && useItem.Value != "" {
-							if !seen[useItem.Value] {
-								seen[useItem.Value] = true
-								providerNames = append(providerNames, useItem.Value)
+
+			if keyNode.Kind == yaml.ScalarNode {
+				switch keyNode.Value {
+				case "name":
+					if valueNode.Kind == yaml.ScalarNode {
+						groupName = valueNode.Value
+					}
+				case "use":
+					hasUse = true
+					// 客户端模式：收集 use 字段的值
+					if valueNode.Kind == yaml.SequenceNode {
+						for _, useItem := range valueNode.Content {
+							if useItem.Kind == yaml.ScalarNode && useItem.Value != "" {
+								if !seen[useItem.Value] {
+									seen[useItem.Value] = true
+									providerNames = append(providerNames, useItem.Value)
+								}
 							}
 						}
 					}
 				}
 			}
+		}
+
+		// 妙妙屋模式：如果没有 use 字段，使用 proxy-group 的 name
+		if !hasUse && groupName != "" && !seen[groupName] {
+			seen[groupName] = true
+			providerNames = append(providerNames, groupName)
 		}
 	}
 

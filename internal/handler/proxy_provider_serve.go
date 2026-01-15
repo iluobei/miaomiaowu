@@ -43,6 +43,11 @@ type subscriptionCacheEntry struct {
 
 var subscriptionCache = sync.Map{} // map[string]*subscriptionCacheEntry (url -> entry)
 
+// InvalidateSubscriptionContentCache 失效指定URL的订阅内容缓存
+func InvalidateSubscriptionContentCache(url string) {
+	subscriptionCache.Delete(url)
+}
+
 // getGeoIPCountryCode 查询 IP 的国家代码
 func getGeoIPCountryCode(ipOrHost string) string {
 	if ipOrHost == "" {

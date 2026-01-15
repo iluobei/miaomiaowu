@@ -269,6 +269,17 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// 同步 MMW 模式代理集合的节点到订阅文件
+	// 这样可以确保获取订阅时包含最新的代理集合节点
+	if h.repo != nil {
+		SyncMMWProxyProvidersToFile(h.repo, h.baseDir, cleanedName)
+		// 重新读取更新后的文件
+		updatedData, err := os.ReadFile(resolvedPath)
+		if err == nil {
+			data = updatedData
+		}
+	}
+
 	// Check if force sync external subscriptions is enabled and sync only referenced subscriptions
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
@@ -754,11 +765,41 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 				return usedURLs, fmt.Errorf("failed to list nodes: %w", err)
 			}
 
-			// Find matching nodes and collect their raw_url
+			// 收集使用到的外部订阅标签（节点的 Tag 字段）
+			usedTags := make(map[string]bool)
+
+			// Find matching nodes and collect their raw_url and tags
 			for _, node := range nodes {
-				if proxyNames[node.NodeName] && node.RawURL != "" {
-					usedURLs[node.RawURL] = true
-					logger.Info("[Subscription] 从节点找到外部订阅URL", "node_name", node.NodeName, "url", node.RawURL)
+				if proxyNames[node.NodeName] {
+					// 如果节点有 RawURL，直接使用
+					if node.RawURL != "" {
+						usedURLs[node.RawURL] = true
+						logger.Info("[Subscription] 从节点找到外部订阅URL", "node_name", node.NodeName, "url", node.RawURL)
+					}
+					// 如果节点有 Tag（外部订阅名称），记录下来
+					if node.Tag != "" && node.Tag != "手动输入" {
+						usedTags[node.Tag] = true
+						logger.Info("[Subscription] 节点来自外部订阅", "node_name", node.NodeName, "tag", node.Tag)
+					}
+				}
+			}
+
+			// 妙妙屋模式：通过节点的 Tag（外部订阅名称）找到外部订阅URL
+			if len(usedTags) > 0 {
+				logger.Info("[Subscription] 发现使用外部订阅的节点", "tag_count", len(usedTags))
+
+				// 获取所有外部订阅
+				externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
+				if err != nil {
+					logger.Info("[Subscription] 获取外部订阅列表失败", "error", err)
+				} else {
+					// 根据 Tag（外部订阅名称）找到对应的 URL
+					for _, sub := range externalSubs {
+						if usedTags[sub.Name] {
+							usedURLs[sub.URL] = true
+							logger.Info("[Subscription] 从节点Tag找到外部订阅URL", "tag", sub.Name, "url", sub.URL)
+						}
+					}
 				}
 			}
 		}
@@ -767,44 +808,115 @@ func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username
 	// Also check proxy-groups for 'use' field referencing proxy provider configs
 	// This handles the case where proxy-providers + use is used instead of direct proxies
 	if proxyGroups, ok := yamlContent["proxy-groups"].([]any); ok {
+		logger.Info("[Subscription] 检查 proxy-groups", "group_count", len(proxyGroups))
 		providerNames := make(map[string]bool)
+		groupNames := make(map[string]bool) // 妙妙屋模式：收集 proxy-group 的名称
 		for _, group := range proxyGroups {
 			if groupMap, ok := group.(map[string]any); ok {
+				// 收集 proxy-group 名称（妙妙屋模式会创建同名的 proxy-group）
+				if groupName, ok := groupMap["name"].(string); ok && groupName != "" {
+					groupNames[groupName] = true
+				}
+
+				// 收集 use 字段中的 provider 名称（客户端模式）
 				if useList, ok := groupMap["use"].([]any); ok {
 					for _, use := range useList {
 						if useName, ok := use.(string); ok && useName != "" {
 							providerNames[useName] = true
+							logger.Info("[Subscription] 找到 proxy-group 使用的 provider", "provider_name", useName)
 						}
 					}
 				}
 			}
 		}
 
-		if len(providerNames) > 0 {
-			logger.Info("[Subscription] 找到代理集合引用", "count", len(providerNames))
+		// 合并两种模式的名称
+		allNames := make(map[string]bool)
+		for name := range providerNames {
+			allNames[name] = true
+		}
+		for name := range groupNames {
+			allNames[name] = true
+		}
+
+		if len(allNames) > 0 {
+			logger.Info("[Subscription] 找到代理集合引用", "count", len(allNames), "from_use", len(providerNames), "from_groups", len(groupNames))
 
 			// Get all proxy provider configs for this user
 			configs, err := repo.ListProxyProviderConfigs(ctx, username)
 			if err != nil {
 				logger.Info("[Subscription] 查询代理集合配置失败", "error", err)
 			} else {
+				logger.Info("[Subscription] 查询到用户的代理集合配置", "count", len(configs))
 				// Get external subscriptions to map config -> URL
 				externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
 				if err != nil {
 					logger.Info("[Subscription] 获取外部订阅列表失败", "error", err)
 				} else {
+					logger.Info("[Subscription] 查询到用户的外部订阅", "count", len(externalSubs))
 					// Build external subscription ID -> URL map
 					subIDToURL := make(map[int64]string)
 					for _, sub := range externalSubs {
 						subIDToURL[sub.ID] = sub.URL
 					}
 
-					// Find configs that match the provider names and get their external subscription URLs
+					// Find configs that match the names and get their external subscription URLs
 					for _, config := range configs {
-						if providerNames[config.Name] {
+						logger.Info("[Subscription] 检查配置", "config_name", config.Name, "external_sub_id", config.ExternalSubscriptionID, "process_mode", config.ProcessMode)
+						if allNames[config.Name] {
 							if url, ok := subIDToURL[config.ExternalSubscriptionID]; ok {
 								usedURLs[url] = true
-								logger.Info("[Subscription] 从代理集合配置找到外部订阅URL", "config_name", config.Name, "url", url)
+								logger.Info("[Subscription] 从代理集合配置找到外部订阅URL", "config_name", config.Name, "mode", config.ProcessMode, "url", url)
+							} else {
+								logger.Info("[Subscription] 配置的外部订阅ID未找到对应URL", "config_name", config.Name, "external_sub_id", config.ExternalSubscriptionID)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			logger.Info("[Subscription] proxy-groups 中未找到引用")
+		}
+	} else {
+		logger.Info("[Subscription] YAML 中未找到 proxy-groups")
+	}
+
+	// 检查 proxy-providers 部分（用于客户端模式的代理集合配置）
+	// 当处理模式为客户端模式时，YAML 文件中包含 proxy-providers 配置，URL 为内部 API 端点
+	if proxyProviders, ok := yamlContent["proxy-providers"].(map[string]any); ok {
+		logger.Info("[Subscription] 找到 proxy-providers 配置", "count", len(proxyProviders))
+
+		// 构建配置 ID -> 外部订阅 URL 映射
+		configIDToURL := make(map[int64]string)
+		configs, err := repo.ListProxyProviderConfigs(ctx, username)
+		if err == nil {
+			externalSubs, err := repo.ListExternalSubscriptions(ctx, username)
+			if err == nil {
+				// 构建外部订阅 ID -> URL 映射
+				subIDToURL := make(map[int64]string)
+				for _, sub := range externalSubs {
+					subIDToURL[sub.ID] = sub.URL
+				}
+				// 将配置 ID 映射到外部订阅 URL
+				for _, config := range configs {
+					if url, ok := subIDToURL[config.ExternalSubscriptionID]; ok {
+						configIDToURL[config.ID] = url
+					}
+				}
+			}
+		}
+
+		// 解析每个 provider 的 URL，查找内部 API 端点
+		for providerName, provider := range proxyProviders {
+			if providerMap, ok := provider.(map[string]any); ok {
+				if urlStr, ok := providerMap["url"].(string); ok && urlStr != "" {
+					// 检查是否为内部 API 端点：/api/proxy-provider/{id}
+					if configIDStr, found := strings.CutPrefix(urlStr, "/api/proxy-provider/"); found {
+						if configID, err := strconv.ParseInt(configIDStr, 10, 64); err == nil {
+							if url, ok := configIDToURL[configID]; ok {
+								usedURLs[url] = true
+								logger.Info("[Subscription] 从 proxy-providers 找到外部订阅URL",
+									"provider_name", providerName, "config_id", configID, "url", url)
 							}
 						}
 					}
@@ -859,6 +971,43 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	}
 
 	logger.Info("[Subscription] 同步完成", "total_nodes", totalNodesSynced, "subscription_count", len(subsToSync))
+
+	// 同步完成后，失效相关缓存：
+	// 1. 失效外部订阅内容缓存（proxy_provider_serve.go 中的 5 分钟缓存）
+	// 2. 失效代理集合节点缓存
+	// 这样下次获取订阅时会使用最新的节点数据
+	syncedSubIDs := make(map[int64]bool)
+	syncedSubURLs := make(map[string]bool)
+	for _, sub := range subsToSync {
+		syncedSubIDs[sub.ID] = true
+		syncedSubURLs[sub.URL] = true
+	}
+
+	// 失效外部订阅内容缓存
+	for url := range syncedSubURLs {
+		InvalidateSubscriptionContentCache(url)
+		logger.Info("[Subscription] 失效外部订阅内容缓存", "url", url)
+	}
+
+	// 获取所有代理集合配置，失效引用了这些外部订阅的代理集合缓存
+	configs, err := repo.ListProxyProviderConfigs(ctx, username)
+	if err == nil {
+		cache := GetProxyProviderCache()
+		invalidatedCount := 0
+		for _, config := range configs {
+			// 检查是否引用了刚刚同步的外部订阅
+			if syncedSubIDs[config.ExternalSubscriptionID] {
+				cache.Delete(config.ID)
+				invalidatedCount++
+				logger.Info("[Subscription] 失效代理集合缓存", "config_name", config.Name, "config_id", config.ID)
+			}
+		}
+		if invalidatedCount > 0 {
+			logger.Info("[Subscription] 代理集合缓存失效完成", "count", invalidatedCount)
+		}
+	} else {
+		logger.Info("[Subscription] 获取代理集合配置失败，无法失效缓存", "error", err)
+	}
 
 	return nil
 }

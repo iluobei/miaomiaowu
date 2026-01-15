@@ -1095,6 +1095,27 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		logger.Info("[代理集合同步] 代理组 更新完成: 添加了代理组 的引用", "value", groupName, "param", providerName)
 	}
 
+	// 妙妙屋模式：检查是否存在与代理集合同名的 proxy-group
+	// 如果存在，直接更新它（不需要 use 字段）
+	if !needCreateNewGroup {
+		for _, groupNode := range proxyGroupsNode.Content {
+			if groupNode.Kind != yaml.MappingNode {
+				continue
+			}
+			name := util.GetNodeFieldValue(groupNode, "name")
+			if name == providerName {
+				// 找到同名的 proxy-group，这是妙妙屋模式
+				needCreateNewGroup = true
+				modified = true
+				logger.Info("[代理集合同步] 妙妙屋模式：找到同名代理组", "name", providerName)
+				break
+			}
+		}
+	}
+
+	// 用于存储当前代理组中的旧节点名称（处理节点减少时删除顶层 proxies 中的旧配置）
+	var oldNodeNamesInGroup map[string]bool
+
 	// 创建或更新以代理集合名称命名的新代理组
 	if needCreateNewGroup {
 		// 检查是否已存在同名代理组
@@ -1121,6 +1142,17 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 				}
 			}
 
+			// 先收集旧节点名称，用于后续删除顶层 proxies 中的旧配置
+			oldNodeNamesInGroup = make(map[string]bool)
+			if existingProxiesNode != nil && existingProxiesNode.Kind == yaml.SequenceNode {
+				for _, p := range existingProxiesNode.Content {
+					if p.Kind == yaml.ScalarNode && strings.HasPrefix(p.Value, prefix) {
+						oldNodeNamesInGroup[p.Value] = true
+					}
+				}
+			}
+			oldCount := len(oldNodeNamesInGroup)
+
 			if existingProxiesNode == nil {
 				existingProxiesNode = &yaml.Node{Kind: yaml.SequenceNode, Content: make([]*yaml.Node, 0)}
 				existingGroupNode.Content = append(existingGroupNode.Content,
@@ -1141,7 +1173,7 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 				newContent = append(newContent, &yaml.Node{Kind: yaml.ScalarNode, Value: nodeName})
 			}
 			existingProxiesNode.Content = newContent
-			logger.Info("[代理集合同步] 更新已存在的代理组", "name", providerName, "node_count", len(nodeNames))
+			logger.Info("[代理集合同步] 更新已存在的代理组", "name", providerName, "old_count", oldCount, "new_count", len(nodeNames))
 		} else {
 			// 创建新代理组（类型为 url-test）
 			newGroupNode := &yaml.Node{Kind: yaml.MappingNode}
@@ -1189,12 +1221,25 @@ func updateYAMLFileWithProxyProviderNodes(subscribeDir, filename, providerName, 
 		}, docContent.Content...)
 	}
 
-	// 移除旧的代理集合节点（以 prefix 开头的）
+	// 构建新节点名称集合，用于精确匹配删除
+	newNodeNameSet := make(map[string]bool)
+	for _, name := range nodeNames {
+		newNodeNameSet[name] = true
+	}
+
+	// 移除属于当前代理集合的旧节点配置
+	// 使用代理组中收集的旧节点名称列表
+	// 同时也删除新节点名称，以便后面重新添加最新配置
 	newProxiesContent := make([]*yaml.Node, 0)
 	for _, p := range proxiesNode.Content {
 		if p.Kind == yaml.MappingNode {
 			name := util.GetNodeFieldValue(p, "name")
-			if strings.HasPrefix(name, prefix) {
+			// 如果节点名称在旧节点列表中，则删除（处理节点减少的情况）
+			if oldNodeNamesInGroup != nil && oldNodeNamesInGroup[name] {
+				continue
+			}
+			// 如果节点名称在新节点列表中，也删除（后面会重新添加最新配置）
+			if newNodeNameSet[name] {
 				continue
 			}
 		}
