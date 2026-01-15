@@ -204,6 +204,10 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 }
 
 func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 性能监测：记录总开始时间
+	requestStart := time.Now()
+	var stepStart time.Time
+
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, errors.New("only GET is supported"))
 		return
@@ -218,6 +222,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// Get username from context
 	username := auth.UsernameFromContext(r.Context())
 
+	// 文件查找
+	stepStart = time.Now()
 	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
 	var subscribeFile storage.SubscribeFile
 	var displayName string
@@ -250,6 +256,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		filename = link.RuleFilename
 		displayName = link.Name
 	}
+	logger.Info("[⏱️ 耗时监测] 文件查找完成", "step", "file_lookup", "duration_ms", time.Since(stepStart).Milliseconds(), "filename", filename)
 
 	cleanedName := filepath.Clean(filename)
 	if strings.HasPrefix(cleanedName, "..") {
@@ -259,6 +266,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	resolvedPath := filepath.Join(h.baseDir, cleanedName)
 
+	// 文件读取
+	stepStart = time.Now()
 	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -268,7 +277,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		return
 	}
+	logger.Info("[⏱️ 耗时监测] 文件读取完成", "step", "file_read", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
 
+	// MMW 同步
+	stepStart = time.Now()
 	// 同步 MMW 模式代理集合的节点到订阅文件
 	// 这样可以确保获取订阅时包含最新的代理集合节点
 	if h.repo != nil {
@@ -279,7 +291,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			data = updatedData
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] MMW 同步完成", "step", "mmw_sync", "duration_ms", time.Since(stepStart).Milliseconds())
 
+	// 外部订阅同步
+	stepStart = time.Now()
 	// Check if force sync external subscriptions is enabled and sync only referenced subscriptions
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
@@ -367,13 +382,16 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] 外部订阅同步完成", "step", "external_sync", "duration_ms", time.Since(stepStart).Milliseconds())
 
+	// 流量信息收集
+	stepStart = time.Now()
 	// 在转换订阅格式之前，先收集探针服务器和外部订阅流量信息
 	// 这样可以确保无论订阅被转换成什么格式，都能正确收集信息
 	externalTrafficLimit, externalTrafficUsed := int64(0), int64(0)
-	usesProbeNodes := false                      // 是否使用了探针节点
-	probeBindingEnabled := false                 // 是否开启了探针服务器绑定
-	var usedProbeServers map[string]struct{}     // 订阅文件中使用的探针服务器列表
+	usesProbeNodes := false                  // 是否使用了探针节点
+	probeBindingEnabled := false             // 是否开启了探针服务器绑定
+	var usedProbeServers map[string]struct{} // 订阅文件中使用的探针服务器列表
 
 	if username != "" && h.repo != nil {
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
@@ -478,7 +496,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] 流量信息收集完成", "step", "traffic_info", "duration_ms", time.Since(stepStart).Milliseconds())
 
+	// 节点排序
+	stepStart = time.Now()
 	// 获取用户的节点排序配置，需要在转换之前使用
 	var nodeOrder []int64
 	if username != "" && h.repo != nil {
@@ -523,7 +544,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] 节点排序完成", "step", "node_order", "duration_ms", time.Since(stepStart).Milliseconds())
 
+	// 格式转换
+	stepStart = time.Now()
 	// 根据参数t的类型调用substore的转换代码
 	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
 	// 默认浏览器打开时直接输入文本, 不再下载问卷
@@ -567,15 +591,21 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ext = ".yaml"
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] 格式转换完成", "step", "format_convert", "duration_ms", time.Since(stepStart).Milliseconds(), "client_type", clientType)
 
+	// 流量统计获取
+	stepStart = time.Now()
 	// 尝试获取流量信息，如果探针报错则跳过流量统计，不影响订阅输出
 	// 如果开启了探针绑定，只统计订阅文件中使用的节点绑定的探针服务器流量
 	totalLimit, _, totalUsed, err := h.summary.fetchTotals(r.Context(), username, usedProbeServers)
 	hasTrafficInfo := err == nil
+	logger.Info("[⏱️ 耗时监测] 流量统计获取完成", "step", "traffic_fetch", "duration_ms", time.Since(stepStart).Milliseconds())
 
 	// 使用订阅名称
 	attachmentName := url.PathEscape(displayName)
 
+	// YAML 重排序
+	stepStart = time.Now()
 	// 对于 YAML 格式的数据，重新排序以将 rule-providers 放在最后
 	// 注意：节点排序已经在转换之前完成，这里只处理其他的YAML重排需求
 	if contentType == "text/yaml; charset=utf-8" || contentType == "text/yaml; charset=utf-8; charset=UTF-8" {
@@ -645,6 +675,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	logger.Info("[⏱️ 耗时监测] YAML 重排序完成", "step", "yaml_reorder", "duration_ms", time.Since(stepStart).Milliseconds())
 
 	w.Header().Set("Content-Type", contentType)
 	// 只有在有流量信息时才添加 subscription-userinfo 头
@@ -685,6 +716,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+	logger.Info("[⏱️ 耗时监测] 请求处理完成", "total_duration_ms", time.Since(requestStart).Milliseconds(), "username", username, "filename", filename)
 }
 
 func (h *SubscriptionHandler) resolveSubscription(ctx context.Context, name string) (storage.SubscriptionLink, error) {
@@ -952,9 +984,10 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	totalNodesSynced := 0
 
 	for _, sub := range subsToSync {
+		subSyncStart := time.Now()
 		nodeCount, updatedSub, err := syncSingleExternalSubscription(ctx, client, repo, subscribeDir, username, sub, userSettings)
 		if err != nil {
-			logger.Info("[Subscription] 同步订阅失败", "name", sub.Name, "url", sub.URL, "error", err)
+			logger.Info("[⏱️ 耗时监测] 同步订阅失败", "name", sub.Name, "url", sub.URL, "error", err, "duration_ms", time.Since(subSyncStart).Milliseconds())
 			continue
 		}
 
@@ -968,6 +1001,7 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
 			logger.Info("[Subscription] 更新订阅同步时间失败", "name", sub.Name, "error", err)
 		}
+		logger.Info("[⏱️ 耗时监测] 外部订阅同步完成", "name", sub.Name, "node_count", nodeCount, "duration_ms", time.Since(subSyncStart).Milliseconds())
 	}
 
 	logger.Info("[Subscription] 同步完成", "total_nodes", totalNodesSynced, "subscription_count", len(subsToSync))
@@ -1356,7 +1390,7 @@ func sortProxiesByNodeOrder(ctx context.Context, repo *storage.TrafficRepository
 	if proxiesNode == nil || proxiesNode.Kind != yaml.SequenceNode {
 		return errors.New("invalid proxies node")
 	}
-	
+
 	if len(nodeOrder) == 0 || len(proxiesNode.Content) == 0 {
 		return nil
 	}
@@ -1382,7 +1416,7 @@ func sortProxiesByNodeOrder(ctx context.Context, repo *storage.TrafficRepository
 	// 创建 proxy 节点的排序信息
 	type proxyWithOrder struct {
 		node     *yaml.Node
-		position int  // 在 nodeOrder 中的位置，-1 表示不在 nodeOrder 中
+		position int // 在 nodeOrder 中的位置，-1 表示不在 nodeOrder 中
 		name     string
 	}
 
