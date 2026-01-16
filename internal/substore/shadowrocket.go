@@ -69,10 +69,10 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 					continue
 				}
 			}
-			// xhttp network (not supported by Shadowrocket unless enabled)
-			if GetString(proxy, "network") == "xhttp" {
-				continue
-			}
+			// xhttp is now support
+			// if GetString(proxy, "network") == "xhttp" {
+			// continue
+			// }
 		}
 
 		transformed := p.helper.CloneProxy(proxy)
