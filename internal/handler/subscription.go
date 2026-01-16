@@ -340,7 +340,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			logger.Info("[Subscription] 用户启用强制同步", "user", username, "cache_expire_minutes", settings.CacheExpireMinutes)
 
 			// Get external subscriptions referenced in current file
-			usedExternalSubs, err := getExternalSubscriptionsFromFile(r.Context(), data, username, h.repo)
+			usedExternalSubs, err := GetExternalSubscriptionsFromFile(r.Context(), data, username, h.repo)
 			if err != nil {
 				logger.Info("[Subscription] 获取文件中的外部订阅失败", "error", err)
 			} else if len(usedExternalSubs) > 0 {
@@ -807,10 +807,10 @@ func getKeys(m map[string]bool) []string {
 	return keys
 }
 
-// getExternalSubscriptionsFromFile extracts external subscription URLs from YAML file content
+// GetExternalSubscriptionsFromFile extracts external subscription URLs from YAML file content
 // by analyzing proxies and querying the database for their raw_url (external subscription links)
 // Also checks proxy-providers for proxy provider configs that reference external subscriptions
-func getExternalSubscriptionsFromFile(ctx context.Context, data []byte, username string, repo *storage.TrafficRepository) (map[string]bool, error) {
+func GetExternalSubscriptionsFromFile(ctx context.Context, data []byte, username string, repo *storage.TrafficRepository) (map[string]bool, error) {
 	usedURLs := make(map[string]bool)
 
 	// Parse YAML content

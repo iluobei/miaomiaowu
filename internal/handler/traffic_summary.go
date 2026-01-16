@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -1098,7 +1100,7 @@ func (h *TrafficSummaryHandler) loadHistory(ctx context.Context, days int) ([]tr
 	return usages, nil
 }
 
-// fetchExternalSubscriptionTraffic fetches traffic from external subscriptions
+// fetchExternalSubscriptionTraffic fetches traffic from external subscriptions that are actually used in subscription files
 // Returns totalLimit and totalUsed from non-expired subscriptions (or long-term subscriptions without expire date)
 func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Context, username string) (int64, int64) {
 	// Check if sync_traffic is enabled
@@ -1106,6 +1108,44 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 	if err != nil || !settings.SyncTraffic {
 		return 0, 0
 	}
+
+	// Get all subscription files for this user
+	subscribeFiles, err := h.repo.ListSubscribeFiles(ctx)
+	if err != nil {
+		logger.Info("[流量] 获取订阅文件列表失败", "error", err)
+		return 0, 0
+	}
+
+	// Collect all external subscription URLs used across all subscription files
+	usedExternalURLs := make(map[string]bool)
+	for _, file := range subscribeFiles {
+		// Read subscription file content
+		filePath := filepath.Join("subscribes", file.Filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			logger.Info("[流量] 读取订阅文件失败", "filename", file.Filename, "error", err)
+			continue
+		}
+
+		// Get external subscription URLs referenced in this file
+		fileURLs, err := GetExternalSubscriptionsFromFile(ctx, data, username, h.repo)
+		if err != nil {
+			logger.Info("[流量] 解析订阅文件失败", "filename", file.Filename, "error", err)
+			continue
+		}
+
+		// Merge into used URLs
+		for url := range fileURLs {
+			usedExternalURLs[url] = true
+		}
+	}
+
+	if len(usedExternalURLs) == 0 {
+		logger.Info("[流量] 未找到使用中的外部订阅")
+		return 0, 0
+	}
+
+	logger.Info("[流量] 找到使用中的外部订阅", "count", len(usedExternalURLs))
 
 	// Get all external subscriptions
 	subs, err := h.repo.ListExternalSubscriptions(ctx, username)
@@ -1119,6 +1159,11 @@ func (h *TrafficSummaryHandler) fetchExternalSubscriptionTraffic(ctx context.Con
 	now := time.Now()
 
 	for _, sub := range subs {
+		// Skip if this subscription is not used in any subscription file
+		if !usedExternalURLs[sub.URL] {
+			continue
+		}
+
 		// Skip if subscription is expired
 		// If Expire is nil, it's a long-term subscription and should not be skipped
 		if sub.Expire != nil && sub.Expire.Before(now) {
