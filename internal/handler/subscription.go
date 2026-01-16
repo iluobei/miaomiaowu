@@ -741,7 +741,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		logger.Info("[Subscription] 外部订阅流量", "limit_bytes", externalTrafficLimit, "limit_gb", float64(externalTrafficLimit)/(1024*1024*1024), "used_bytes", externalTrafficUsed, "used_gb", float64(externalTrafficUsed)/(1024*1024*1024))
 		logger.Info("[Subscription] 总流量", "limit_bytes", finalLimit, "limit_gb", float64(finalLimit)/(1024*1024*1024), "used_bytes", finalUsed, "used_gb", float64(finalUsed)/(1024*1024*1024))
 
-		headerValue := buildSubscriptionHeader(finalLimit, finalUsed)
+		var expireAt *time.Time
+		if hasSubscribeFile {
+			expireAt = subscribeFile.ExpireAt
+		}
+		headerValue := buildSubscriptionHeader(finalLimit, finalUsed, expireAt)
 		w.Header().Set("subscription-userinfo", headerValue)
 		logger.Info("[Subscription] 设置订阅用户信息头", "header", headerValue)
 	}
@@ -784,10 +788,14 @@ func (h *SubscriptionHandler) resolveSubscription(ctx context.Context, name stri
 	return h.repo.GetFirstSubscriptionLink(ctx)
 }
 
-func buildSubscriptionHeader(totalLimit, totalUsed int64) string {
+func buildSubscriptionHeader(totalLimit, totalUsed int64, expireAt *time.Time) string {
 	download := strconv.FormatInt(totalUsed, 10)
 	total := strconv.FormatInt(totalLimit, 10)
-	return "upload=0; download=" + download + "; total=" + total + "; expire="
+	expire := ""
+	if expireAt != nil {
+		expire = strconv.FormatInt(expireAt.Unix(), 10)
+	}
+	return "upload=0; download=" + download + "; total=" + total + "; expire=" + expire
 }
 
 // getKeys returns the keys of a map as a slice
