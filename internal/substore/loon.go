@@ -2,6 +2,7 @@ package substore
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -151,12 +152,8 @@ func (p *LoonProducer) shadowsocks(proxy Proxy) (string, error) {
 					return "", fmt.Errorf("%s %s is not supported", cipher, plugin)
 				}
 				result.Append(fmt.Sprintf(",obfs-name=%s", mode))
-				if host := GetString(pluginOpts, "host"); host != "" {
-					result.Append(fmt.Sprintf(",obfs-host=%s", host))
-				}
-				if path := GetString(pluginOpts, "path"); path != "" {
-					result.Append(fmt.Sprintf(",obfs-uri=%s", path))
-				}
+				result.AppendIfPresent(",obfs-host=%s", "plugin-opts.host")
+				result.AppendIfPresent(",obfs-uri=%s", "plugin-opts.path")
 			}
 		} else if plugin != "shadow-tls" {
 			return "", fmt.Errorf("plugin %s is not supported", plugin)
@@ -164,17 +161,12 @@ func (p *LoonProducer) shadowsocks(proxy Proxy) (string, error) {
 	}
 
 	// shadow-tls
-	p.appendShadowTLS(result, proxy)
-
-	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
+	if err := p.appendShadowTLS(result, proxy); err != nil {
+		return "", err
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -201,30 +193,19 @@ func (p *LoonProducer) shadowsocksr(proxy Proxy) (string, error) {
 
 	// ssr protocol
 	result.Append(fmt.Sprintf(",protocol=%s", GetString(proxy, "protocol")))
-	if IsPresent(proxy, "protocol-param") {
-		result.Append(fmt.Sprintf(",protocol-param=%s", GetString(proxy, "protocol-param")))
-	}
+	result.AppendIfPresent(",protocol-param=%s", "protocol-param")
 
 	// obfs
-	if IsPresent(proxy, "obfs") {
-		result.Append(fmt.Sprintf(",obfs=%s", GetString(proxy, "obfs")))
-	}
-	if IsPresent(proxy, "obfs-param") {
-		result.Append(fmt.Sprintf(",obfs-param=%s", GetString(proxy, "obfs-param")))
-	}
+	result.AppendIfPresent(",obfs=%s", "obfs")
+	result.AppendIfPresent(",obfs-param=%s", "obfs-param")
 
 	// shadow-tls
-	p.appendShadowTLS(result, proxy)
-
-	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
+	if err := p.appendShadowTLS(result, proxy); err != nil {
+		return "", err
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -251,49 +232,29 @@ func (p *LoonProducer) trojan(proxy Proxy) (string, error) {
 	network := GetString(proxy, "network")
 	if network == "tcp" {
 		delete(proxy, "network")
-		network = ""
 	}
 
 	// transport
-	if IsPresent(proxy, "network") && network != "" {
-		switch network {
-		case "ws":
+	if IsPresent(proxy, "network") {
+		if proxy["network"] == "ws" {
 			result.Append(",transport=ws")
-			if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
-				if path := GetString(wsOpts, "path"); path != "" {
-					result.Append(fmt.Sprintf(",path=%s", path))
-				}
-				if headers := GetMap(wsOpts, "headers"); headers != nil {
-					if host := GetString(headers, "Host"); host != "" {
-						result.Append(fmt.Sprintf(",host=%s", host))
-					}
-				}
-			}
-		default:
-			return "", fmt.Errorf("network %s is unsupported", network)
+			result.AppendIfPresent(",path=%s", "ws-opts.path")
+			result.AppendIfPresent(",host=%s", "ws-opts.headers.Host")
+		} else {
+			return "", fmt.Errorf("network %s is unsupported", GetString(proxy, "network"))
 		}
 	}
 
 	// tls verification
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
-	}
-	if IsPresent(proxy, "tls-fingerprint") {
-		result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
-	}
-	if IsPresent(proxy, "tls-pubkey-sha256") {
-		result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")))
-	}
+	result.AppendIfPresent(",tls-name=%s", "sni")
+	result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
+	result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -323,24 +284,15 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 	network := GetString(proxy, "network")
 	if network == "tcp" {
 		delete(proxy, "network")
-		network = ""
 	}
 
 	// transport
-	if IsPresent(proxy, "network") && network != "" {
-		switch network {
+	if IsPresent(proxy, "network") {
+		switch proxy["network"] {
 		case "ws":
 			result.Append(",transport=ws")
-			if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
-				if path := GetString(wsOpts, "path"); path != "" {
-					result.Append(fmt.Sprintf(",path=%s", path))
-				}
-				if headers := GetMap(wsOpts, "headers"); headers != nil {
-					if host := GetString(headers, "Host"); host != "" {
-						result.Append(fmt.Sprintf(",host=%s", host))
-					}
-				}
-			}
+			result.AppendIfPresent(",path=%s", "ws-opts.path")
+			result.AppendIfPresent(",host=%s", "ws-opts.headers.Host")
 		case "http":
 			result.Append(",transport=http")
 			if httpOpts := GetMap(proxy, "http-opts"); httpOpts != nil {
@@ -371,45 +323,27 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 				}
 			}
 		default:
-			return "", fmt.Errorf("network %s is unsupported", network)
+			return "", fmt.Errorf("network %s is unsupported", GetString(proxy, "network"))
 		}
 	} else {
 		result.Append(",transport=tcp")
 	}
 
 	// tls
-	if IsPresent(proxy, "tls") {
-		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
-	}
+	result.AppendIfPresent(",over-tls=%v", "tls")
 
 	// tls verification
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	if isReality {
-		if IsPresent(proxy, "servername") {
-			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
-		}
-		if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
-			if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
-				result.Append(fmt.Sprintf(",public-key=\"%s\"", publicKey))
-			}
-			if shortID := GetString(realityOpts, "short-id"); shortID != "" {
-				result.Append(fmt.Sprintf(",short-id=%s", shortID))
-			}
-		}
+		result.AppendIfPresent(",sni=%s", "sni")
+		result.AppendIfPresent(",public-key=\"%s\"", "reality-opts.public-key")
+		result.AppendIfPresent(",short-id=%s", "reality-opts.short-id")
 	} else {
 		// sni
-		if IsPresent(proxy, "servername") {
-			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
-		}
-		if IsPresent(proxy, "tls-fingerprint") {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
-		}
-		if IsPresent(proxy, "tls-pubkey-sha256") {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")))
-		}
+		result.AppendIfPresent(",tls-name=%s", "sni")
+		result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
+		result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 	}
 
 	// AEAD
@@ -424,9 +358,7 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -443,6 +375,11 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 }
 
 func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
+	// Check encryption
+	if IsPresent(proxy, "encryption") && GetString(proxy, "encryption") != "none" {
+		return "", fmt.Errorf("VLESS encryption is not supported")
+	}
+
 	isXtls := false
 	isReality := IsPresent(proxy, "reality-opts")
 
@@ -465,24 +402,15 @@ func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
 	network := GetString(proxy, "network")
 	if network == "tcp" {
 		delete(proxy, "network")
-		network = ""
 	}
 
 	// transport
-	if IsPresent(proxy, "network") && network != "" {
-		switch network {
+	if IsPresent(proxy, "network") {
+		switch proxy["network"] {
 		case "ws":
 			result.Append(",transport=ws")
-			if wsOpts := GetMap(proxy, "ws-opts"); wsOpts != nil {
-				if path := GetString(wsOpts, "path"); path != "" {
-					result.Append(fmt.Sprintf(",path=%s", path))
-				}
-				if headers := GetMap(wsOpts, "headers"); headers != nil {
-					if host := GetString(headers, "Host"); host != "" {
-						result.Append(fmt.Sprintf(",host=%s", host))
-					}
-				}
-			}
+			result.AppendIfPresent(",path=%s", "ws-opts.path")
+			result.AppendIfPresent(",host=%s", "ws-opts.headers.Host")
 		case "http":
 			result.Append(",transport=http")
 			if httpOpts := GetMap(proxy, "http-opts"); httpOpts != nil {
@@ -513,57 +441,35 @@ func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
 				}
 			}
 		default:
-			return "", fmt.Errorf("network %s is unsupported", network)
+			return "", fmt.Errorf("network %s is unsupported", GetString(proxy, "network"))
 		}
 	} else {
 		result.Append(",transport=tcp")
 	}
 
 	// tls
-	if IsPresent(proxy, "tls") {
-		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
-	}
+	result.AppendIfPresent(",over-tls=%v", "tls")
 
 	// tls verification
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	if isXtls {
-		if IsPresent(proxy, "flow") {
-			result.Append(fmt.Sprintf(",flow=%s", GetString(proxy, "flow")))
-		}
+		result.AppendIfPresent(",flow=%s", "flow")
 	}
 
 	if isReality {
-		if IsPresent(proxy, "servername") {
-			result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
-		}
-		if realityOpts := GetMap(proxy, "reality-opts"); realityOpts != nil {
-			if publicKey := GetString(realityOpts, "public-key"); publicKey != "" {
-				result.Append(fmt.Sprintf(",public-key=\"%s\"", publicKey))
-			}
-			if shortID := GetString(realityOpts, "short-id"); shortID != "" {
-				result.Append(fmt.Sprintf(",short-id=%s", shortID))
-			}
-		}
+		result.AppendIfPresent(",sni=%s", "sni")
+		result.AppendIfPresent(",public-key=\"%s\"", "reality-opts.public-key")
+		result.AppendIfPresent(",short-id=%s", "reality-opts.short-id")
 	} else {
 		// sni
-		if IsPresent(proxy, "servername") {
-			result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
-		}
-		if IsPresent(proxy, "tls-fingerprint") {
-			result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
-		}
-		if IsPresent(proxy, "tls-pubkey-sha256") {
-			result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")))
-		}
+		result.AppendIfPresent(",tls-name=%s", "sni")
+		result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
+		result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -592,27 +498,17 @@ func (p *LoonProducer) http(proxy Proxy) (string, error) {
 		GetString(proxy, "server"),
 		GetInt(proxy, "port")))
 
-	if IsPresent(proxy, "username") {
-		result.Append(fmt.Sprintf(",%s", GetString(proxy, "username")))
-	}
-	if IsPresent(proxy, "password") {
-		result.Append(fmt.Sprintf(",\"%s\"", GetString(proxy, "password")))
-	}
+	result.AppendIfPresent(",%s", "username")
+	result.AppendIfPresent(",\"%s\"", "password")
 
 	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
-	}
+	result.AppendIfPresent(",sni=%s", "sni")
 
 	// tls verification
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",tfo=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",tfo=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -630,32 +526,20 @@ func (p *LoonProducer) socks5(proxy Proxy) (string, error) {
 		GetString(proxy, "server"),
 		GetInt(proxy, "port")))
 
-	if IsPresent(proxy, "username") {
-		result.Append(fmt.Sprintf(",%s", GetString(proxy, "username")))
-	}
-	if IsPresent(proxy, "password") {
-		result.Append(fmt.Sprintf(",\"%s\"", GetString(proxy, "password")))
-	}
+	result.AppendIfPresent(",%s", "username")
+	result.AppendIfPresent(",\"%s\"", "password")
 
 	// tls
-	if IsPresent(proxy, "tls") {
-		result.Append(fmt.Sprintf(",over-tls=%v", GetBool(proxy, "tls")))
-	}
+	result.AppendIfPresent(",over-tls=%v", "tls")
 
 	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",sni=%s", GetString(proxy, "servername")))
-	}
+	result.AppendIfPresent(",sni=%s", "sni")
 
 	// tls verification
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",tfo=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",tfo=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -689,60 +573,46 @@ func (p *LoonProducer) wireguard(proxy Proxy) (string, error) {
 	result := NewResult(proxy)
 	result.Append(fmt.Sprintf("%s=wireguard", GetString(proxy, "name")))
 
-	if IsPresent(proxy, "ip") {
-		result.Append(fmt.Sprintf(",interface-ip=%s", GetString(proxy, "ip")))
-	}
-	if IsPresent(proxy, "ipv6") {
-		result.Append(fmt.Sprintf(",interface-ipv6=%s", GetString(proxy, "ipv6")))
-	}
+	result.AppendIfPresent(",interface-ip=%s", "ip")
+	result.AppendIfPresent(",interface-ipv6=%s", "ipv6")
 
-	if IsPresent(proxy, "private-key") {
-		result.Append(fmt.Sprintf(",private-key=\"%s\"", GetString(proxy, "private-key")))
-	}
-	if IsPresent(proxy, "mtu") {
-		result.Append(fmt.Sprintf(",mtu=%d", GetInt(proxy, "mtu")))
-	}
+	result.AppendIfPresent(",private-key=\"%s\"", "private-key")
+	result.AppendIfPresent(",mtu=%d", "mtu")
 
 	// DNS handling
 	if IsPresent(proxy, "dns") {
 		dns := proxy["dns"]
-		var dnsStr string
-		var dnsv6Str string
-
 		if dnsSlice, ok := dns.([]interface{}); ok {
+			var dnsv6 string
+			var dnsStr string
 			for _, d := range dnsSlice {
 				dStr := fmt.Sprintf("%v", d)
 				if IsIPv6(dStr) {
-					dnsv6Str = dStr
-				} else if IsIPv4(dStr) && dnsStr == "" {
-					dnsStr = dStr
-				} else if dnsStr == "" && !IsIPv4(dStr) && !IsIPv6(dStr) {
-					dnsStr = dStr
+					dnsv6 = dStr
+				} else if IsIPv4(dStr) {
+					if dnsStr == "" {
+						dnsStr = dStr
+					}
+				} else {
+					if dnsStr == "" {
+						dnsStr = dStr
+					}
 				}
 			}
-		} else if dnsString, ok := dns.(string); ok {
-			dnsStr = dnsString
-		}
-
-		if dnsStr != "" {
-			result.Append(fmt.Sprintf(",dns=%s", dnsStr))
-		}
-		if dnsv6Str != "" {
-			proxy["dnsv6"] = dnsv6Str
+			if dnsStr != "" {
+				proxy["dns"] = dnsStr
+			}
+			if dnsv6 != "" {
+				proxy["dnsv6"] = dnsv6
+			}
 		}
 	}
-
-	if IsPresent(proxy, "dnsv6") {
-		result.Append(fmt.Sprintf(",dnsv6=%s", GetString(proxy, "dnsv6")))
-	}
+	result.AppendIfPresent(",dns=%s", "dns")
+	result.AppendIfPresent(",dnsv6=%s", "dnsv6")
 
 	// keepalive
-	if IsPresent(proxy, "persistent-keepalive") {
-		result.Append(fmt.Sprintf(",keepalive=%d", GetInt(proxy, "persistent-keepalive")))
-	}
-	if IsPresent(proxy, "keepalive") {
-		result.Append(fmt.Sprintf(",keepalive=%d", GetInt(proxy, "keepalive")))
-	}
+	result.AppendIfPresent(",keepalive=%d", "persistent-keepalive")
+	result.AppendIfPresent(",keepalive=%d", "keepalive")
 
 	// allowed-ips
 	allowedIps := "0.0.0.0/0,::/0"
@@ -811,23 +681,13 @@ func (p *LoonProducer) hysteria2(proxy Proxy) (string, error) {
 		GetString(proxy, "server"),
 		GetInt(proxy, "port")))
 
-	if IsPresent(proxy, "password") {
-		result.Append(fmt.Sprintf(",\"%s\"", GetString(proxy, "password")))
-	}
+	result.AppendIfPresent(",\"%s\"", "password")
 
 	// sni
-	if IsPresent(proxy, "servername") {
-		result.Append(fmt.Sprintf(",tls-name=%s", GetString(proxy, "servername")))
-	}
-	if IsPresent(proxy, "tls-fingerprint") {
-		result.Append(fmt.Sprintf(",tls-cert-sha256=%s", GetString(proxy, "tls-fingerprint")))
-	}
-	if IsPresent(proxy, "tls-pubkey-sha256") {
-		result.Append(fmt.Sprintf(",tls-pubkey-sha256=%s", GetString(proxy, "tls-pubkey-sha256")))
-	}
-	if IsPresent(proxy, "skip-cert-verify") {
-		result.Append(fmt.Sprintf(",skip-cert-verify=%v", GetBool(proxy, "skip-cert-verify")))
-	}
+	result.AppendIfPresent(",tls-name=%s", "sni")
+	result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
+	result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
+	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	// salamander obfs
 	if IsPresent(proxy, "obfs-password") && GetString(proxy, "obfs") == "salamander" {
@@ -835,9 +695,7 @@ func (p *LoonProducer) hysteria2(proxy Proxy) (string, error) {
 	}
 
 	// tfo
-	if IsPresent(proxy, "tfo") {
-		result.Append(fmt.Sprintf(",fast-open=%v", GetBool(proxy, "tfo")))
-	}
+	result.AppendIfPresent(",fast-open=%v", "tfo")
 
 	// block-quic
 	p.appendBlockQuic(result, proxy)
@@ -850,22 +708,16 @@ func (p *LoonProducer) hysteria2(proxy Proxy) (string, error) {
 	// download-bandwidth
 	if IsPresent(proxy, "down") {
 		down := GetString(proxy, "down")
-		// Extract digits from down string
-		var bandwidth string
-		for _, c := range down {
-			if c >= '0' && c <= '9' {
-				bandwidth += string(c)
-			}
+		// Extract digits from down string (matches /\d+/ in JS)
+		re := regexp.MustCompile(`\d+`)
+		matches := re.FindString(down)
+		if matches == "" {
+			matches = "0"
 		}
-		if bandwidth == "" {
-			bandwidth = "0"
-		}
-		result.Append(fmt.Sprintf(",download-bandwidth=%s", bandwidth))
+		result.Append(fmt.Sprintf(",download-bandwidth=%s", matches))
 	}
 
-	if IsPresent(proxy, "ecn") {
-		result.Append(fmt.Sprintf(",ecn=%v", GetBool(proxy, "ecn")))
-	}
+	result.AppendIfPresent(",ecn=%v", "ecn")
 
 	// ip-version
 	p.appendIPVersion(result, proxy)
@@ -896,19 +748,12 @@ func (p *LoonProducer) appendBlockQuic(result *Result, proxy Proxy) {
 	}
 }
 
-func (p *LoonProducer) appendShadowTLS(result *Result, proxy Proxy) {
+func (p *LoonProducer) appendShadowTLS(result *Result, proxy Proxy) error {
 	if IsPresent(proxy, "shadow-tls-password") {
 		result.Append(fmt.Sprintf(",shadow-tls-password=%s", GetString(proxy, "shadow-tls-password")))
-
-		if IsPresent(proxy, "shadow-tls-version") {
-			result.Append(fmt.Sprintf(",shadow-tls-version=%d", GetInt(proxy, "shadow-tls-version")))
-		}
-		if IsPresent(proxy, "shadow-tls-sni") {
-			result.Append(fmt.Sprintf(",shadow-tls-sni=%s", GetString(proxy, "shadow-tls-sni")))
-		}
-		if IsPresent(proxy, "udp-port") {
-			result.Append(fmt.Sprintf(",udp-port=%d", GetInt(proxy, "udp-port")))
-		}
+		result.AppendIfPresent(",shadow-tls-version=%d", "shadow-tls-version")
+		result.AppendIfPresent(",shadow-tls-sni=%s", "shadow-tls-sni")
+		result.AppendIfPresent(",udp-port=%d", "udp-port")
 	} else if GetString(proxy, "plugin") == "shadow-tls" {
 		if pluginOpts := GetMap(proxy, "plugin-opts"); pluginOpts != nil {
 			password := GetString(pluginOpts, "password")
@@ -922,17 +767,14 @@ func (p *LoonProducer) appendShadowTLS(result *Result, proxy Proxy) {
 				version := GetInt(pluginOpts, "version")
 				if version > 0 {
 					if version < 2 {
-						// Note: We append but TypeScript throws error
-						// For consistency, we just skip adding if version < 2
-					} else {
-						result.Append(fmt.Sprintf(",shadow-tls-version=%d", version))
+						return fmt.Errorf("shadow-tls version %d is not supported", version)
 					}
+					result.Append(fmt.Sprintf(",shadow-tls-version=%d", version))
 				}
 
-				if IsPresent(proxy, "udp-port") {
-					result.Append(fmt.Sprintf(",udp-port=%d", GetInt(proxy, "udp-port")))
-				}
+				result.AppendIfPresent(",udp-port=%d", "udp-port")
 			}
 		}
 	}
+	return nil
 }
