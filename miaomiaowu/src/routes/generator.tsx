@@ -1142,8 +1142,8 @@ function SubscriptionGeneratorPage() {
       toast.error('请先生成配置')
       return
     }
-    // 使用模板模式时，必须先手动分组
-    if (ruleMode === 'template' && !hasManuallyGrouped) {
+    // 使用旧模板系统时，必须先手动分组
+    if (ruleMode === 'template' && !hasManuallyGrouped && !useNewTemplateSystem) {
       toast.error('请先手动分组节点')
       return
     }
