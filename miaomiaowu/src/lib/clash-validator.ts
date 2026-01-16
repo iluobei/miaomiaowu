@@ -407,22 +407,84 @@ export function formatValidationIssues(issues: ValidationIssue[]): string {
 
   let message = ''
 
-  if (errors.length > 0) {
-    message += `❌ 发现 ${errors.length} 个错误:\n`
-    errors.forEach((issue, idx) => {
-      message += `  ${idx + 1}. ${issue.message}\n`
-      if (issue.location) {
-        message += `     位置: ${issue.location}\n`
+  // 辅助函数：提取错误消息的模式（去掉引号中的内容）
+  const extractPattern = (msg: string): string => {
+    return msg.replace(/"[^"]+"/g, '"{name}"')
+  }
+
+  // 辅助函数：从消息中提取名称
+  const extractName = (msg: string): string | null => {
+    const match = msg.match(/"([^"]+)"/)
+    return match ? match[1] : null
+  }
+
+  // 辅助函数：格式化分组的问题
+  const formatGroupedIssues = (issueList: ValidationIssue[], maxDisplay = 3): string => {
+    // 按错误模式分组
+    const grouped = new Map<string, ValidationIssue[]>()
+
+    issueList.forEach(issue => {
+      const pattern = extractPattern(issue.message)
+      if (!grouped.has(pattern)) {
+        grouped.set(pattern, [])
+      }
+      grouped.get(pattern)!.push(issue)
+    })
+
+    let result = ''
+    let itemIndex = 1
+
+    grouped.forEach((items, pattern) => {
+      if (items.length === 1) {
+        // 单个错误，直接显示
+        const issue = items[0]
+        result += `  ${itemIndex}. ${issue.message}`
+        if (issue.location) {
+          result += ` (位置: ${issue.location})`
+        }
+        result += '\n'
+        itemIndex++
+      } else {
+        // 多个相同模式的错误，合并显示
+        const names = items.map(i => extractName(i.message)).filter(Boolean)
+
+        // 重建消息，将第一个名称替换为计数
+        let baseMessage = pattern.replace('"{name}"', `${items.length} 个项目`)
+
+        // 如果是关于"name字段位置"的警告，简化描述
+        if (baseMessage.includes('name字段不是第一个字段')) {
+          baseMessage = `${items.length} 个代理组的 name 字段位置需要调整`
+        }
+
+        result += `  ${itemIndex}. ${baseMessage}\n`
+
+        // 只显示前几个受影响的项目名称
+        if (names.length > 0) {
+          const displayNames = names.slice(0, maxDisplay)
+          const remaining = names.length - maxDisplay
+          result += `     受影响: ${displayNames.join(', ')}`
+          if (remaining > 0) {
+            result += ` 等 ${remaining} 个`
+          }
+          result += '\n'
+        }
+
+        itemIndex++
       }
     })
+
+    return result
+  }
+
+  if (errors.length > 0) {
+    message += `❌ 发现 ${errors.length} 个错误:\n`
+    message += formatGroupedIssues(errors, 5)
   }
 
   if (warnings.length > 0) {
     if (message) message += '\n'
     message += `⚠️ 发现 ${warnings.length} 个警告:\n`
-    warnings.forEach((issue, idx) => {
-      message += `  ${idx + 1}. ${issue.message}\n`
-    })
+    message += formatGroupedIssues(warnings, 5)
   }
 
   if (autoFixed.length > 0) {

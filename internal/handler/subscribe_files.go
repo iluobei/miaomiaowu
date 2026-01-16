@@ -873,7 +873,14 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// 验证YAML格式
+	// 验证YAML格式，使用 Node API 保持顺序
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal([]byte(req.Content), &rootNode); err != nil {
+		writeError(w, http.StatusBadRequest, errors.New("内容不是有效的YAML格式: "+err.Error()))
+		return
+	}
+
+	// 转换为 map 进行基本校验（只检查错误，不做修复）
 	var yamlCheck map[string]any
 	if err := yaml.Unmarshal([]byte(req.Content), &yamlCheck); err != nil {
 		writeError(w, http.StatusBadRequest, errors.New("内容不是有效的YAML格式: "+err.Error()))
@@ -899,21 +906,13 @@ func (h *subscribeFilesHandler) handleUpdateContent(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// 如果有自动修复，使用修复后的配置
+	// 直接保存前端发送的内容（已经过前端修复，保持字段顺序）
 	contentToSave := RemoveUnicodeEscapeQuotes(req.Content)
-	if validationResult.FixedConfig != nil {
-		fixedYAML, err := MarshalWithIndent(validationResult.FixedConfig)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
-			return
-		}
-		contentToSave = RemoveUnicodeEscapeQuotes(string(fixedYAML))
 
-		// 记录自动修复的警告
-		for _, issue := range validationResult.Issues {
-			if issue.Level == validator.WarningLevel && issue.AutoFixed {
-				logger.Info("[更新订阅文件] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
-			}
+	// 记录警告信息（如果有）
+	for _, issue := range validationResult.Issues {
+		if issue.Level == validator.WarningLevel {
+			logger.Info("[更新订阅文件] [配置校验] 警告(前端已修复)", "message", issue.Message, "location", issue.Location)
 		}
 	}
 

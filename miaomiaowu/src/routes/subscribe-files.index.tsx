@@ -1409,14 +1409,48 @@ function SubscribeFilesPage() {
 
   const handleSaveConfig = () => {
     if (!editingConfigFile) return
+
+    let parsed: any
     try {
-      parseYAML(configContent || '')
+      parsed = parseYAML(configContent || '')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'YAML 解析失败'
       toast.error('保存失败，YAML 格式错误：' + message)
       return
     }
-    saveConfigMutation.mutate({ filename: editingConfigFile.filename, content: configContent })
+
+    // 校验配置有效性
+    const clashValidationResult = validateClashConfig(parsed)
+
+    if (!clashValidationResult.valid) {
+      // 有错误级别的问题，阻止保存
+      const errorMessage = formatValidationIssues(clashValidationResult.issues)
+      toast.error('配置校验失败', {
+        description: errorMessage,
+        duration: 10000
+      })
+      console.error('Clash配置校验失败:', clashValidationResult.issues)
+      return
+    }
+
+    // 准备保存的内容
+    let contentToSave = configContent
+
+    // 如果有自动修复的内容，使用修复后的配置
+    if (clashValidationResult.fixedConfig) {
+      contentToSave = dumpYAML(clashValidationResult.fixedConfig, { lineWidth: -1, noRefs: true })
+
+      // 显示修复提示
+      const warningIssues = clashValidationResult.issues.filter(i => i.level === 'warning')
+      if (warningIssues.length > 0) {
+        toast.warning('配置已自动修复', {
+          description: formatValidationIssues(warningIssues),
+          duration: 8000
+        })
+      }
+    }
+
+    saveConfigMutation.mutate({ filename: editingConfigFile.filename, content: contentToSave })
   }
 
   const handleToggleAutoSync = (id: number, enabled: boolean) => {
