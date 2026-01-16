@@ -41,7 +41,7 @@ func GenerateClashProxyGroups(groups []ACLProxyGroup, allProxyNames []string) st
 		lines = append(lines, fmt.Sprintf("  - name: %s", g.Name))
 		lines = append(lines, fmt.Sprintf("    type: %s", g.Type))
 
-		if g.Type == "url-test" || g.Type == "fallback" {
+		if g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance" {
 			url := g.URL
 			if url == "" {
 				url = "http://www.gstatic.com/generate_204"
@@ -141,7 +141,7 @@ func GenerateSurgeProxyGroups(groups []ACLProxyGroup, enableIncludeAll bool) str
 
 		var line string
 
-		if g.Type == "url-test" || g.Type == "fallback" {
+		if g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance" {
 			url := g.URL
 			if url == "" {
 				url = "http://www.gstatic.com/generate_204"
@@ -183,7 +183,7 @@ func GenerateSurgeProxyGroups(groups []ACLProxyGroup, enableIncludeAll bool) str
 					g.Name, g.Type, strings.Join(proxies, ", "), url, interval, tolerance)
 			}
 		} else {
-			// select, load-balance and other types
+			// select and other types
 			if len(regexFilters) > 0 {
 				// When regex patterns exist, force include-all-proxies
 				filter := ExtractSurgeRegexFilter(regexFilters)
