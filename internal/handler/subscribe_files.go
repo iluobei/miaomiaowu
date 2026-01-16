@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/logger"
 	"net/http"
 	"net/url"
@@ -641,6 +642,21 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		return
 	}
 
+	// 获取当前用户名和设置，判断是否需要校验
+	username := auth.UsernameFromContext(r.Context())
+	shouldValidate := true // 默认进行校验
+	if username != "" {
+		// 获取用户设置
+		settings, err := h.repo.GetUserSettings(r.Context(), username)
+		if err == nil {
+			// 只有在使用新模板系统时才进行校验
+			shouldValidate = settings.UseNewTemplateSystem
+			logger.Info("[创建订阅文件] 用户设置", "username", username, "use_new_template_system", settings.UseNewTemplateSystem, "should_validate", shouldValidate)
+		} else if !errors.Is(err, storage.ErrUserSettingsNotFound) {
+			logger.Info("[创建订阅文件] 获取用户设置失败，使用默认行为(进行校验)", "username", username, "error", err)
+		}
+	}
+
 	// 设置默认文件名
 	filename := req.Filename
 	if filename == "" {
@@ -660,56 +676,61 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		return
 	}
 
-	// 校验配置内容
-	var configMap map[string]interface{}
-	var tempBuf bytes.Buffer
-	tempEncoder := yaml.NewEncoder(&tempBuf)
-	tempEncoder.SetIndent(2)
-	if err := tempEncoder.Encode(&rootNode); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("编码配置用于校验失败"))
-		return
-	}
-	if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("解析配置用于校验失败"))
-		return
-	}
+	// 只有在使用新模板系统时才进行配置校验
+	if shouldValidate {
+		// 校验配置内容
+		var configMap map[string]interface{}
+		var tempBuf bytes.Buffer
+		tempEncoder := yaml.NewEncoder(&tempBuf)
+		tempEncoder.SetIndent(2)
+		if err := tempEncoder.Encode(&rootNode); err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("编码配置用于校验失败"))
+			return
+		}
+		if err := yaml.Unmarshal(tempBuf.Bytes(), &configMap); err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("解析配置用于校验失败"))
+			return
+		}
 
-	validationResult := validator.ValidateClashConfig(configMap)
-	if !validationResult.Valid {
-		logger.Info("[创建订阅文件] [配置校验] 校验失败", "filename", filename)
-		var errorMessages []string
-		for _, issue := range validationResult.Issues {
-			if issue.Level == validator.ErrorLevel {
-				errorMsg := issue.Message
-				if issue.Location != "" {
-					errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+		validationResult := validator.ValidateClashConfig(configMap)
+		if !validationResult.Valid {
+			logger.Info("[创建订阅文件] [配置校验] 校验失败", "filename", filename)
+			var errorMessages []string
+			for _, issue := range validationResult.Issues {
+				if issue.Level == validator.ErrorLevel {
+					errorMsg := issue.Message
+					if issue.Location != "" {
+						errorMsg = fmt.Sprintf("%s (位置: %s)", errorMsg, issue.Location)
+					}
+					errorMessages = append(errorMessages, errorMsg)
+					logger.Info("[创建订阅文件] [配置校验] 错误", "message", errorMsg)
 				}
-				errorMessages = append(errorMessages, errorMsg)
-				logger.Info("[创建订阅文件] [配置校验] 错误", "message", errorMsg)
 			}
-		}
-		writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
-		return
-	}
-
-	// 如果有自动修复，使用修复后的配置
-	if validationResult.FixedConfig != nil {
-		fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
-			return
-		}
-		if err := yaml.Unmarshal(fixedYAML, &rootNode); err != nil {
-			writeError(w, http.StatusInternalServerError, errors.New("解析修复配置失败"))
+			writeError(w, http.StatusBadRequest, errors.New("配置校验失败: "+strings.Join(errorMessages, "; ")))
 			return
 		}
 
-		// 记录自动修复的警告
-		for _, issue := range validationResult.Issues {
-			if issue.Level == validator.WarningLevel && issue.AutoFixed {
-				logger.Info("[创建订阅文件] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
+		// 如果有自动修复，使用修复后的配置
+		if validationResult.FixedConfig != nil {
+			fixedYAML, err := yaml.Marshal(validationResult.FixedConfig)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, errors.New("序列化修复配置失败"))
+				return
+			}
+			if err := yaml.Unmarshal(fixedYAML, &rootNode); err != nil {
+				writeError(w, http.StatusInternalServerError, errors.New("解析修复配置失败"))
+				return
+			}
+
+			// 记录自动修复的警告
+			for _, issue := range validationResult.Issues {
+				if issue.Level == validator.WarningLevel && issue.AutoFixed {
+					logger.Info("[创建订阅文件] [配置校验] 警告(已修复)", "message", issue.Message, "location", issue.Location)
+				}
 			}
 		}
+	} else {
+		logger.Info("[创建订阅文件] 使用旧模板系统，跳过配置校验", "filename", filename)
 	}
 
 	// 修复short-id字段，确保使用双引号

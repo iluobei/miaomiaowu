@@ -935,43 +935,47 @@ function SubscriptionGeneratorPage() {
         // 应用规则失败不影响主流程，继续使用原配置
       }
 
-      // 校验配置有效性
-      try {
-        const parsedConfig = yaml.load(finalConfig) as any
-        const validationResult = validateClashConfig(parsedConfig)
+      // 校验配置有效性（只在使用新模板系统时校验）
+      if (useNewTemplateSystem) {
+        try {
+          const parsedConfig = yaml.load(finalConfig) as any
+          const validationResult = validateClashConfig(parsedConfig)
 
-        if (!validationResult.valid) {
-          // 有错误级别的问题，阻止保存
-          const errorMessage = formatValidationIssues(validationResult.issues)
-          toast.error('配置校验失败', {
-            description: errorMessage,
-            duration: 10000
-          })
-          console.error('Clash配置校验失败:', validationResult.issues)
+          if (!validationResult.valid) {
+            // 有错误级别的问题，阻止保存
+            const errorMessage = formatValidationIssues(validationResult.issues)
+            toast.error('配置校验失败', {
+              description: errorMessage,
+              duration: 10000
+            })
+            console.error('Clash配置校验失败:', validationResult.issues)
+            return
+          }
+
+          // 如果有自动修复的内容，使用修复后的配置
+          if (validationResult.fixedConfig) {
+            finalConfig = yaml.dump(validationResult.fixedConfig, {
+              indent: 2,
+              lineWidth: -1,
+              noRefs: true
+            })
+
+            // 显示修复提示
+            const warningIssues = validationResult.issues.filter(i => i.level === 'warning')
+            if (warningIssues.length > 0) {
+              toast.warning('配置已自动修复', {
+                description: formatValidationIssues(warningIssues),
+                duration: 8000
+              })
+            }
+          }
+        } catch (error) {
+          console.error('配置校验异常:', error)
+          toast.error('配置校验时发生错误: ' + (error instanceof Error ? error.message : '未知错误'))
           return
         }
-
-        // 如果有自动修复的内容，使用修复后的配置
-        if (validationResult.fixedConfig) {
-          finalConfig = yaml.dump(validationResult.fixedConfig, {
-            indent: 2,
-            lineWidth: -1,
-            noRefs: true
-          })
-
-          // 显示修复提示
-          const warningIssues = validationResult.issues.filter(i => i.level === 'warning')
-          if (warningIssues.length > 0) {
-            toast.warning('配置已自动修复', {
-              description: formatValidationIssues(warningIssues),
-              duration: 8000
-            })
-          }
-        }
-      } catch (error) {
-        console.error('配置校验异常:', error)
-        toast.error('配置校验时发生错误: ' + (error instanceof Error ? error.message : '未知错误'))
-        return
+      } else {
+        console.log('使用旧模板系统，跳过配置校验')
       }
 
       setClashConfig(finalConfig)
