@@ -230,6 +230,7 @@ type SubscribeFile struct {
 	Filename             string
 	FileShortCode        string // 3-character code for file identification in composite short links
 	AutoSyncCustomRules  bool   // Whether to automatically sync custom rules to this file
+	ExpireAt             *time.Time // Optional expiration timestamp
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -637,6 +638,7 @@ CREATE TABLE IF NOT EXISTS subscribe_files (
     url TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('create','import','upload')),
     filename TEXT NOT NULL,
+    expire_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(name)
@@ -790,6 +792,11 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 
 	// Add file_short_code column to subscribe_files table (3-character code)
 	if err := r.ensureSubscribeFileColumn("file_short_code", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
+	// Add expire_at column to subscribe_files table
+	if err := r.ensureSubscribeFileColumn("expire_at", "TIMESTAMP"); err != nil {
 		return err
 	}
 
@@ -3033,7 +3040,7 @@ func (r *TrafficRepository) GetUserSubscriptions(ctx context.Context, username s
 	}
 
 	const stmt = `
-		SELECT s.id, s.name, COALESCE(s.description, ''), COALESCE(s.url, ''), s.type, s.filename, COALESCE(s.file_short_code, ''), COALESCE(s.auto_sync_custom_rules, 0), s.created_at, s.updated_at
+		SELECT s.id, s.name, COALESCE(s.description, ''), COALESCE(s.url, ''), s.type, s.filename, COALESCE(s.file_short_code, ''), COALESCE(s.auto_sync_custom_rules, 0), s.expire_at, s.created_at, s.updated_at
 		FROM subscribe_files s
 		INNER JOIN user_subscriptions us ON s.id = us.subscription_id
 		WHERE us.username = ?
@@ -3049,10 +3056,14 @@ func (r *TrafficRepository) GetUserSubscriptions(ctx context.Context, username s
 	for rows.Next() {
 		var sub SubscribeFile
 		var autoSync int
-		if err := rows.Scan(&sub.ID, &sub.Name, &sub.Description, &sub.URL, &sub.Type, &sub.Filename, &sub.FileShortCode, &autoSync, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+		var expireAt sql.NullTime
+		if err := rows.Scan(&sub.ID, &sub.Name, &sub.Description, &sub.URL, &sub.Type, &sub.Filename, &sub.FileShortCode, &autoSync, &expireAt, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
 		}
 		sub.AutoSyncCustomRules = autoSync != 0
+		if expireAt.Valid {
+			sub.ExpireAt = &expireAt.Time
+		}
 		subscriptions = append(subscriptions, sub)
 	}
 
@@ -3864,7 +3875,7 @@ func (r *TrafficRepository) GetSubscribeFilesWithAutoSync(ctx context.Context) (
 		return nil, errors.New("traffic repository not initialized")
 	}
 
-	const query = `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), auto_sync_custom_rules, created_at, updated_at
+	const query = `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), auto_sync_custom_rules, expire_at, created_at, updated_at
 		FROM subscribe_files
 		WHERE auto_sync_custom_rules = 1
 		ORDER BY created_at DESC`
@@ -3879,10 +3890,14 @@ func (r *TrafficRepository) GetSubscribeFilesWithAutoSync(ctx context.Context) (
 	for rows.Next() {
 		var file SubscribeFile
 		var autoSync int
-		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.CreatedAt, &file.UpdatedAt); err != nil {
+		var expireAt sql.NullTime
+		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &expireAt, &file.CreatedAt, &file.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscribe file: %w", err)
 		}
 		file.AutoSyncCustomRules = autoSync != 0
+		if expireAt.Valid {
+			file.ExpireAt = &expireAt.Time
+		}
 		files = append(files, file)
 	}
 

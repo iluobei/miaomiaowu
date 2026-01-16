@@ -76,6 +76,7 @@ type SubscribeFile = {
   type: string
   filename: string
   file_short_code?: string
+  expire_at?: string | null
   created_at: string
   updated_at: string
   latest_version?: number
@@ -245,7 +246,20 @@ function SubscriptionPage() {
                   </div>
                 </CardHeader>
                 <CardContent className='space-y-4'>
-                  <div className='flex items-center justify-end gap-2'>
+                  <div className='flex items-center justify-end gap-2 flex-wrap'>
+                    {file.expire_at ? (
+                      new Date(file.expire_at) < new Date() ? (
+                        <Badge variant='destructive'>已过期</Badge>
+                      ) : (
+                        <Badge variant='outline'>
+                          到期: {dateFormatter.format(new Date(file.expire_at))}
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge variant='outline' className='text-muted-foreground'>
+                        永久有效
+                      </Badge>
+                    )}
                     {updatedLabel ? (
                       <p className='text-xs text-muted-foreground'>
                         {updatedLabel}

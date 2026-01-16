@@ -79,6 +79,8 @@ rules:
 socks-port: 7891
 `
 
+const tokenInvalidFilename = "token_invalid.yaml"
+
 // Context key for token invalid flag
 type ContextKey string
 
@@ -228,6 +230,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	var subscribeFile storage.SubscribeFile
 	var displayName string
 	var err error
+	var hasSubscribeFile bool
 
 	if filename != "" {
 		subscribeFile, err = h.repo.GetSubscribeFileByFilename(r.Context(), filename)
@@ -240,6 +243,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		displayName = subscribeFile.Name
+		hasSubscribeFile = true
 	} else {
 		// TODO: 订阅链接已经配置到客户端，管理员修改文件名后，原订阅链接无法使用
 		// 1.0 版本时改为与表里的ID关联，暂时先不改
@@ -255,16 +259,50 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		filename = link.RuleFilename
 		displayName = link.Name
+		if h.repo != nil {
+			subscribeFile, err = h.repo.GetSubscribeFileByFilename(r.Context(), filename)
+			if err == nil {
+				hasSubscribeFile = true
+			} else if !errors.Is(err, storage.ErrSubscribeFileNotFound) {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
 	}
 	logger.Info("[⏱️ 耗时监测] 文件查找完成", "step", "file_lookup", "duration_ms", time.Since(stepStart).Milliseconds(), "filename", filename)
 
 	cleanedName := filepath.Clean(filename)
-	if strings.HasPrefix(cleanedName, "..") {
+	if strings.HasPrefix(cleanedName, "..") || filepath.IsAbs(cleanedName) {
 		writeError(w, http.StatusBadRequest, errors.New("invalid rule filename"))
 		return
 	}
 
 	resolvedPath := filepath.Join(h.baseDir, cleanedName)
+
+	// Verify resolved path is within baseDir to prevent path traversal
+	absBase, err := filepath.Abs(h.baseDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	absResolved, err := filepath.Abs(resolvedPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !strings.HasPrefix(absResolved, absBase+string(filepath.Separator)) && absResolved != absBase {
+		writeError(w, http.StatusBadRequest, errors.New("invalid rule filename"))
+		return
+	}
+
+	if hasSubscribeFile && subscribeFile.ExpireAt != nil {
+		now := time.Now()
+		if !subscribeFile.ExpireAt.After(now) {
+			logger.Info("[Subscription] 订阅已过期", "filename", filename, "expire_at", subscribeFile.ExpireAt.Format("2006-01-02 15:04:05"))
+			h.serveTokenInvalidResponse(w, r)
+			return
+		}
+	}
 
 	// 文件读取
 	stepStart = time.Now()
@@ -1046,9 +1084,24 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 	return nil
 }
 
+func (h *SubscriptionHandler) loadTokenInvalidContent() []byte {
+	tokenPath := filepath.Join("data", tokenInvalidFilename)
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		logger.Info("[Token Invalid] 读取data/token_invalid.yaml失败，使用内置默认内容", "path", tokenPath, "error", err)
+		return []byte(tokenInvalidYAML)
+	}
+	if len(data) == 0 {
+		logger.Info("[Token Invalid] data/token_invalid.yaml为空，使用内置默认内容", "path", tokenPath)
+		return []byte(tokenInvalidYAML)
+	}
+	logger.Info("[Token Invalid] 使用自定义token_invalid.yaml", "path", tokenPath)
+	return data
+}
+
 // serveTokenInvalidResponse serves the token invalid YAML content with client type conversion
 func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r *http.Request) {
-	data := []byte(tokenInvalidYAML)
+	data := h.loadTokenInvalidContent()
 
 	// 根据参数t的类型调用substore的转换代码
 	clientType := strings.TrimSpace(r.URL.Query().Get("t"))

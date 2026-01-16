@@ -4,6 +4,7 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
 import { toast } from 'sonner'
+import { format } from 'date-fns'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -26,8 +27,11 @@ import { Progress } from '@/components/ui/progress'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
-import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -52,6 +56,7 @@ type SubscribeFile = {
   type: 'create' | 'import' | 'upload'
   filename: string
   auto_sync_custom_rules: boolean
+  expire_at?: string | null
   created_at: string
   updated_at: string
   latest_version?: number
@@ -317,6 +322,7 @@ function SubscribeFilesPage() {
     name: '',
     description: '',
     filename: '',
+    expire: undefined as Date | undefined,
   })
 
   // 外部订阅卡片折叠状态 - 默认折叠
@@ -1364,6 +1370,7 @@ function SubscribeFilesPage() {
       name: file.name,
       description: file.description,
       filename: file.filename,
+      expire: file.expire_at ? new Date(file.expire_at) : undefined,
     })
     setEditMetadataDialogOpen(true)
   }
@@ -1380,7 +1387,18 @@ function SubscribeFilesPage() {
     }
     updateMetadataMutation.mutate({
       id: editingMetadata.id,
-      data: metadataForm,
+      data: {
+        name: metadataForm.name,
+        description: metadataForm.description,
+        filename: metadataForm.filename,
+        expire_at: metadataForm.expire
+          ? (() => {
+              const endOfDay = new Date(metadataForm.expire)
+              endOfDay.setHours(23, 59, 59, 999)
+              return endOfDay.toISOString()
+            })()
+          : '',
+      },
     })
   }
 
@@ -3676,7 +3694,7 @@ function SubscribeFilesPage() {
         setEditMetadataDialogOpen(open)
         if (!open) {
           setEditingMetadata(null)
-          setMetadataForm({ name: '', description: '', filename: '' })
+          setMetadataForm({ name: '', description: '', filename: '', expire: undefined })
         }
       }}>
         <DialogContent className='sm:max-w-lg'>
@@ -3716,6 +3734,34 @@ function SubscribeFilesPage() {
               />
               <p className='text-xs text-muted-foreground'>
                 修改文件名后需确保该文件在 subscribes 目录中存在
+              </p>
+            </div>
+            <div className='space-y-2'>
+              <Label>过期时间（可选）</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='outline'
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !metadataForm.expire && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className='mr-2 h-4 w-4' />
+                    {metadataForm.expire ? format(metadataForm.expire, 'PPP') : <span>无过期时间</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-auto p-0' align='start'>
+                  <Calendar
+                    mode='single'
+                    selected={metadataForm.expire}
+                    onSelect={(date) => setMetadataForm({ ...metadataForm, expire: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className='text-xs text-muted-foreground'>
+                设置订阅链接的过期时间，过期后链接将失效
               </p>
             </div>
           </div>

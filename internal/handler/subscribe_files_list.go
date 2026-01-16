@@ -42,6 +42,7 @@ func (h *subscribeFilesListHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			Description: file.Description,
 			Type:        file.Type,
 			Filename:    file.Filename,
+			ExpireAt:    file.ExpireAt,
 			CreatedAt:   file.CreatedAt,
 			UpdatedAt:   file.UpdatedAt,
 		})

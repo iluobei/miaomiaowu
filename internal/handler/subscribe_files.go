@@ -116,6 +116,13 @@ func (h *subscribeFilesHandler) handleCreate(w http.ResponseWriter, r *http.Requ
 		Filename:    req.Filename,
 	}
 
+	expireAt, err := parseExpireAt(req.ExpireAt)
+	if err != nil {
+		writeBadRequest(w, "过期时间格式不正确，需为 RFC3339")
+		return
+	}
+	file.ExpireAt = expireAt
+
 	created, err := h.repo.CreateSubscribeFile(r.Context(), file)
 	if err != nil {
 		if errors.Is(err, storage.ErrSubscribeFileExists) {
@@ -383,6 +390,14 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	if req.AutoSyncCustomRules != nil {
 		existing.AutoSyncCustomRules = *req.AutoSyncCustomRules
 	}
+	if req.ExpireAt != nil {
+		expireAt, parseErr := parseExpireAt(req.ExpireAt)
+		if parseErr != nil {
+			writeBadRequest(w, "过期时间格式不正确，需为 RFC3339")
+			return
+		}
+		existing.ExpireAt = expireAt
+	}
 
 	// 处理文件名更新
 	oldFilename := existing.Filename
@@ -524,24 +539,26 @@ func parseFilenameFromContentDisposition(header string) string {
 }
 
 type subscribeFileRequest struct {
-	Name                string `json:"name"`
-	Description         string `json:"description"`
-	URL                 string `json:"url"`
-	Type                string `json:"type"`
-	Filename            string `json:"filename"`
-	AutoSyncCustomRules *bool  `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
+	Name                string  `json:"name"`
+	Description         string  `json:"description"`
+	URL                 string  `json:"url"`
+	Type                string  `json:"type"`
+	Filename            string  `json:"filename"`
+	AutoSyncCustomRules *bool   `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
+	ExpireAt            *string `json:"expire_at,omitempty"`
 }
 
 type subscribeFileDTO struct {
-	ID                  int64     `json:"id"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	Type                string    `json:"type"`
-	Filename            string    `json:"filename"`
-	AutoSyncCustomRules bool      `json:"auto_sync_custom_rules"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
-	LatestVersion       int64     `json:"latest_version,omitempty"`
+	ID                  int64      `json:"id"`
+	Name                string     `json:"name"`
+	Description         string     `json:"description"`
+	Type                string     `json:"type"`
+	Filename            string     `json:"filename"`
+	ExpireAt            *time.Time `json:"expire_at,omitempty"`
+	AutoSyncCustomRules bool       `json:"auto_sync_custom_rules"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	LatestVersion       int64      `json:"latest_version,omitempty"`
 }
 
 func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
@@ -551,6 +568,7 @@ func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 		Description:         file.Description,
 		Type:                file.Type,
 		Filename:            file.Filename,
+		ExpireAt:            file.ExpireAt,
 		AutoSyncCustomRules: file.AutoSyncCustomRules,
 		CreatedAt:           file.CreatedAt,
 		UpdatedAt:           file.UpdatedAt,
@@ -578,6 +596,26 @@ func (h *subscribeFilesHandler) convertSubscribeFilesWithVersions(ctx context.Co
 		result = append(result, dto)
 	}
 	return result
+}
+
+func parseExpireAt(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		return nil, nil
+	}
+	// Try RFC3339 first (without milliseconds)
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		// Fallback to RFC3339Nano (with milliseconds/nanoseconds)
+		parsed, err = time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &parsed, nil
 }
 
 // handleCreateFromConfig 保存生成的配置为订阅文件

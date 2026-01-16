@@ -424,14 +424,15 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 		}
 
 		type item struct {
-			ID            int64     `json:"id"`
-			Name          string    `json:"name"`
-			Description   string    `json:"description"`
-			Filename      string    `json:"filename"`
-			Type          string    `json:"type"`
-			FileShortCode string    `json:"file_short_code,omitempty"`
-			UpdatedAt     time.Time `json:"updated_at"`
-			LatestVersion int64     `json:"latest_version,omitempty"`
+			ID            int64      `json:"id"`
+			Name          string     `json:"name"`
+			Description   string     `json:"description"`
+			Filename      string     `json:"filename"`
+			Type          string     `json:"type"`
+			FileShortCode string     `json:"file_short_code,omitempty"`
+			ExpireAt      *time.Time `json:"expire_at,omitempty"`
+			UpdatedAt     time.Time  `json:"updated_at"`
+			LatestVersion int64      `json:"latest_version,omitempty"`
 		}
 
 		payload := make([]item, 0, len(files))
@@ -455,6 +456,7 @@ func NewSubscriptionListHandler(repo *storage.TrafficRepository) http.Handler {
 				Filename:      file.Filename,
 				Type:          file.Type,
 				FileShortCode: fileShortCode,
+				ExpireAt:      file.ExpireAt,
 				UpdatedAt:     file.UpdatedAt,
 				LatestVersion: latestVersion,
 			})
