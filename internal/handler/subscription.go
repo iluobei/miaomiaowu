@@ -56,7 +56,7 @@ log-level: info
 mode: rule
 port: 7890
 proxies:
-  - name: ⚠️ Token已过期
+  - name: ⚠️ 订阅已过期
     type: ss
     server: test.example.com.cn
     port: 443
@@ -72,7 +72,7 @@ proxy-groups:
   - name: 🚀 节点选择
     type: select
     proxies:
-      - Token已过期
+      - 订阅已过期
       - 请联系管理员
 rules:
   - MATCH,DIRECT
