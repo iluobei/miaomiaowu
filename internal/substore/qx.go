@@ -628,6 +628,11 @@ func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
 	if sni := GetString(proxy, "sni"); sni != "" {
 		result.Append(fmt.Sprintf(",tls-host=%s", sni))
 	}
+
+	// sni (JS uses 'sni' field directly)
+	if servername := GetString(proxy, "servername"); servername != "" {
+		result.Append(fmt.Sprintf(",tls-host=%s", servername))
+	}
 }
 
 // getFirstStringValue extracts the first string value from a value that could be a string or array
