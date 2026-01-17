@@ -186,17 +186,29 @@ export class ClashConfigBuilder {
       // Use group_label from category, fallback to translated rule_name
       const groupName = category.group_label || translateOutbound(category.rule_name)
 
-      groups.push({
-        name: groupName,
-        type: 'select',
-        proxies: [
-          translateOutbound('Node Select'),
-          'DIRECT',
-          'REJECT',
-          translateOutbound('Auto Select'),
-          ...proxyNames,
-        ],
-      })
+      // 国内服务 DIRECT放在顶部
+      if (groupName === "🔒 国内服务") {
+        groups.push({
+          name: groupName,
+          type: 'select',
+          proxies: [
+            'DIRECT',
+            translateOutbound('Node Select')
+          ],
+        })
+      } else {
+        groups.push({
+          name: groupName,
+          type: 'select',
+          proxies: [
+            translateOutbound('Node Select'),
+            'DIRECT',
+            'REJECT',
+            translateOutbound('Auto Select'),
+            ...proxyNames,
+          ],
+        })
+      }
     }
 
     // 4. Custom rule groups

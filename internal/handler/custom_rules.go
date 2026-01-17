@@ -463,6 +463,21 @@ func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.Tra
 				addedGroups[groupName] = true
 				needsUpdate = true
 
+				// Determine default proxies order based on group name
+				// For domestic service group, DIRECT should be first
+				var defaultProxies []*yaml.Node
+				if groupName == "🔒 国内服务" {
+					defaultProxies = []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "DIRECT"},
+						{Kind: yaml.ScalarNode, Value: "🚀 节点选择"},
+					}
+				} else {
+					defaultProxies = []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "🚀 节点选择"},
+						{Kind: yaml.ScalarNode, Value: "DIRECT"},
+					}
+				}
+
 				// Create new proxy group node
 				newGroupNode := &yaml.Node{
 					Kind: yaml.MappingNode,
@@ -473,11 +488,8 @@ func checkAndAddMissingProxyGroupsForRule(ctx context.Context, repo *storage.Tra
 						{Kind: yaml.ScalarNode, Value: "select"},
 						{Kind: yaml.ScalarNode, Value: "proxies"},
 						{
-							Kind: yaml.SequenceNode,
-							Content: []*yaml.Node{
-								{Kind: yaml.ScalarNode, Value: "🚀 节点选择"},
-								{Kind: yaml.ScalarNode, Value: "DIRECT"},
-							},
+							Kind:    yaml.SequenceNode,
+							Content: defaultProxies,
 						},
 					},
 				}
