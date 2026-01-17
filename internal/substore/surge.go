@@ -674,7 +674,12 @@ func (p *SurgeProducer) appendCommonOptions(result *Result, _ Proxy) {
 func (p *SurgeProducer) appendTLS(result *Result, _ Proxy) {
 	result.AppendIfPresent(`,tls=%v`, "tls")
 	result.AppendIfPresent(`,server-cert-fingerprint-sha256=%s`, "tls-fingerprint")
-	result.AppendIfPresent(`,sni=%s`, "sni")
+
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(result.Proxy); sni != "" {
+		result.Append(fmt.Sprintf(",sni=%s", sni))
+	}
+
 	result.AppendIfPresent(`,skip-cert-verify=%v`, "skip-cert-verify")
 }
 

@@ -248,8 +248,10 @@ func (p *LoonProducer) trojan(proxy Proxy) (string, error) {
 	// tls verification
 	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
-	// sni
-	result.AppendIfPresent(",tls-name=%s", "sni")
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(proxy); sni != "" {
+		result.Append(fmt.Sprintf(",tls-name=%s", sni))
+	}
 	result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
 	result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 
@@ -336,12 +338,17 @@ func (p *LoonProducer) vmess(proxy Proxy, _ bool) (string, error) {
 	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
 
 	if isReality {
-		result.AppendIfPresent(",sni=%s", "sni")
+		// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+		if sni := GetSNI(proxy); sni != "" {
+			result.Append(fmt.Sprintf(",sni=%s", sni))
+		}
 		result.AppendIfPresent(",public-key=\"%s\"", "reality-opts.public-key")
 		result.AppendIfPresent(",short-id=%s", "reality-opts.short-id")
 	} else {
-		// sni
-		result.AppendIfPresent(",tls-name=%s", "sni")
+		// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+		if sni := GetSNI(proxy); sni != "" {
+			result.Append(fmt.Sprintf(",tls-name=%s", sni))
+		}
 		result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
 		result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 	}
@@ -458,12 +465,17 @@ func (p *LoonProducer) vless(proxy Proxy, _ bool) (string, error) {
 	}
 
 	if isReality {
-		result.AppendIfPresent(",sni=%s", "sni")
+		// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+		if sni := GetSNI(proxy); sni != "" {
+			result.Append(fmt.Sprintf(",sni=%s", sni))
+		}
 		result.AppendIfPresent(",public-key=\"%s\"", "reality-opts.public-key")
 		result.AppendIfPresent(",short-id=%s", "reality-opts.short-id")
 	} else {
-		// sni
-		result.AppendIfPresent(",tls-name=%s", "sni")
+		// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+		if sni := GetSNI(proxy); sni != "" {
+			result.Append(fmt.Sprintf(",tls-name=%s", sni))
+		}
 		result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
 		result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 	}
@@ -501,8 +513,10 @@ func (p *LoonProducer) http(proxy Proxy) (string, error) {
 	result.AppendIfPresent(",%s", "username")
 	result.AppendIfPresent(",\"%s\"", "password")
 
-	// sni
-	result.AppendIfPresent(",sni=%s", "sni")
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(proxy); sni != "" {
+		result.Append(fmt.Sprintf(",sni=%s", sni))
+	}
 
 	// tls verification
 	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
@@ -532,8 +546,10 @@ func (p *LoonProducer) socks5(proxy Proxy) (string, error) {
 	// tls
 	result.AppendIfPresent(",over-tls=%v", "tls")
 
-	// sni
-	result.AppendIfPresent(",sni=%s", "sni")
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(proxy); sni != "" {
+		result.Append(fmt.Sprintf(",sni=%s", sni))
+	}
 
 	// tls verification
 	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")
@@ -683,8 +699,10 @@ func (p *LoonProducer) hysteria2(proxy Proxy) (string, error) {
 
 	result.AppendIfPresent(",\"%s\"", "password")
 
-	// sni
-	result.AppendIfPresent(",tls-name=%s", "sni")
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(proxy); sni != "" {
+		result.Append(fmt.Sprintf(",tls-name=%s", sni))
+	}
 	result.AppendIfPresent(",tls-cert-sha256=%s", "tls-fingerprint")
 	result.AppendIfPresent(",tls-pubkey-sha256=%s", "tls-pubkey-sha256")
 	result.AppendIfPresent(",skip-cert-verify=%v", "skip-cert-verify")

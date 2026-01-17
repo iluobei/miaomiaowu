@@ -352,3 +352,18 @@ func ArrayToString(arr interface{}) string {
 		return fmt.Sprintf("%v", arr)
 	}
 }
+
+// GetSNI retrieves the SNI (Server Name Indication) value from proxy
+// Compatible with both SubStore's "sni" field and miaomiaowu's "servername" field
+// Priority: sni > servername
+func GetSNI(proxy Proxy) string {
+	// First try SubStore standard field "sni"
+	if sni := GetString(proxy, "sni"); sni != "" {
+		return sni
+	}
+	// Fallback to miaomiaowu's "servername" field (imported from Clash)
+	if servername := GetString(proxy, "servername"); servername != "" {
+		return servername
+	}
+	return ""
+}

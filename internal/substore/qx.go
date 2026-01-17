@@ -624,14 +624,9 @@ func (p *QXProducer) appendTLSOptions(result *Result, proxy Proxy) {
 		result.Append(fmt.Sprintf(",tls-verification=%v", !GetBool(proxy, "skip-cert-verify")))
 	}
 
-	// sni (JS uses 'sni' field directly)
-	if sni := GetString(proxy, "sni"); sni != "" {
+	// SNI - compatible with both SubStore's "sni" and miaomiaowu's "servername"
+	if sni := GetSNI(proxy); sni != "" {
 		result.Append(fmt.Sprintf(",tls-host=%s", sni))
-	}
-
-	// sni (JS uses 'sni' field directly)
-	if servername := GetString(proxy, "servername"); servername != "" {
-		result.Append(fmt.Sprintf(",tls-host=%s", servername))
 	}
 }
 
