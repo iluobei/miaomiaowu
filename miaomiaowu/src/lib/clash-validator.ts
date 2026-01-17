@@ -95,10 +95,11 @@ function validateProxies(proxies: any[]): { issues: ValidationIssue[]; fixed?: a
     // 检查name是否重复
     if (seenNames.has(name)) {
       issues.push({
-        level: 'error',
-        message: `代理节点名称重复: "${name}"`,
+        level: 'warning',
+        message: `代理节点名称重复: "${name}"，已自动移除`,
         location,
-        field: 'name'
+        field: 'name',
+        autoFixed: true
       })
       // 重复的节点不添加到fixed数组
       continue

@@ -132,10 +132,11 @@ func validateProxies(proxies []interface{}) *ProxyValidationResult {
 		// 检查name重复
 		if seenNames[name] {
 			result.Issues = append(result.Issues, ValidationIssue{
-				Level:    ErrorLevel,
-				Message:  fmt.Sprintf("代理节点名称重复: \"%s\"", name),
-				Location: fmt.Sprintf("proxies[%d]", i),
-				Field:    "name",
+				Level:     WarningLevel,
+				Message:   fmt.Sprintf("代理节点名称重复: \"%s\"，已自动移除", name),
+				Location:  fmt.Sprintf("proxies[%d]", i),
+				Field:     "name",
+				AutoFixed: true,
 			})
 			continue
 		}
