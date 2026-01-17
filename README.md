@@ -250,6 +250,14 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.4.5 (2026-01-17)
+- 🌈 增加简单订阅过期功能
+- 🛠️ fix:代理集合的节点未更新[#49](https://github.com/Jimleerx/miaomiaowu/issues/49)
+- 🛠️ fix:订阅流量统计错误[#50](https://github.com/Jimleerx/miaomiaowu/issues/50)
+- 🛠️ fix:模板中负载均衡类型的代理组未解析url
+- 🛠️ fix:导入外部订阅节点时保存的外部订阅名称没有使用用户输入的标签
+- 🛠️ fix:使用旧模板时因为格式检查无法生成
+- 🛠️ fix:使用新模板错误提示必须手动分组
 ### v0.4.4 (2026-01-14)
 - 🌈 增加默认pt代理组
 - 🛠️ fix:xhttp转换v2ray丢失mode参数
