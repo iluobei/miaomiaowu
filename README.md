@@ -250,6 +250,13 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.4.6 (2026-01-17)
+- 🛠️ fix代理节点重复时自动去重
+- 🛠️ fix:国内服务没有把DIRECT放在第一位
+- 🛠️ fix:规则不允许修改类型[#40](https://github.com/Jimleerx/miaomiaowu/issues/40)
+- 🛠️ fix:surge loon 协议sni参数处理
+- 🛠️ fix:qx vless协议缺少tls-host参数
+- 🛠️ fix:代理组配置校验缺少filter与Include-all
 ### v0.4.5 (2026-01-17)
 - 🌈 增加简单订阅过期功能
 - 🛠️ fix:代理集合的节点未更新[#49](https://github.com/Jimleerx/miaomiaowu/issues/49)
@@ -261,7 +268,7 @@ MIT License
 ### v0.4.4 (2026-01-14)
 - 🌈 增加默认pt代理组
 - 🛠️ fix:xhttp转换v2ray丢失mode参数
-- 🛠️ 🛠️ fix:qx支持reality
+- 🛠️ fix:qx支持reality
 - 🛠️ fix:外部订阅为base64编码时导入报错
 ### v0.4.3 (2026-01-12)
 - 🌈 增加简单日志功能，用于用户提供日志
