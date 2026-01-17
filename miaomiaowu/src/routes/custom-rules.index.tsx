@@ -688,6 +688,7 @@ function CustomRulesPage() {
 										// Reset selected template when changing type
 										setSelectedTemplate(null)
 									}}
+									disabled={!!editingRule}
 								>
 									<SelectTrigger id='type'>
 										<SelectValue />
