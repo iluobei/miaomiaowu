@@ -259,14 +259,21 @@ func validateProxyGroups(groups []interface{}, proxies []interface{}) *GroupVali
 			})
 		}
 
-		// 检查proxies和use字段
+		// 检查proxies、use、filter和include-all字段
 		groupProxies, hasProxies := groupMap["proxies"].([]interface{})
 		groupUse, hasUse := groupMap["use"].([]interface{})
+		groupFilter, hasFilter := groupMap["filter"].(string)
+		groupIncludeAll, hasIncludeAll := groupMap["include-all"].(bool)
 
-		if (!hasProxies || len(groupProxies) == 0) && (!hasUse || len(groupUse) == 0) {
+		hasValidProxies := hasProxies && len(groupProxies) > 0
+		hasValidUse := hasUse && len(groupUse) > 0
+		hasValidFilter := hasFilter && strings.TrimSpace(groupFilter) != ""
+		hasValidIncludeAll := hasIncludeAll && groupIncludeAll
+
+		if !hasValidProxies && !hasValidUse && !hasValidFilter && !hasValidIncludeAll {
 			result.Issues = append(result.Issues, ValidationIssue{
 				Level:    ErrorLevel,
-				Message:  fmt.Sprintf("代理组 \"%s\" 的proxies和use字段都为空或不存在", name),
+				Message:  fmt.Sprintf("代理组 \"%s\" 的proxies、use、filter和include-all字段都为空或不存在", name),
 				Location: fmt.Sprintf("proxy-groups[%d]", i),
 				Field:    "proxies",
 			})
@@ -274,7 +281,7 @@ func validateProxyGroups(groups []interface{}, proxies []interface{}) *GroupVali
 		}
 
 		// 校验proxies引用
-		if hasProxies {
+		if hasValidProxies {
 			validProxies := []interface{}{}
 			seenProxies := make(map[string]bool)
 			hasDuplicates := false

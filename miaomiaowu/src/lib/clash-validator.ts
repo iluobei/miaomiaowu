@@ -201,14 +201,16 @@ function validateProxyGroups(
       })
     }
 
-    // 检查proxies和use字段
+    // 检查proxies、use、filter和include-all字段
     const hasProxies = Array.isArray(group.proxies) && group.proxies.length > 0
     const hasUse = Array.isArray(group.use) && group.use.length > 0
+    const hasFilter = typeof group.filter === 'string' && group.filter.trim() !== ''
+    const hasIncludeAll = group['include-all'] === true
 
-    if (!hasProxies && !hasUse) {
+    if (!hasProxies && !hasUse && !hasFilter && !hasIncludeAll) {
       issues.push({
         level: 'error',
-        message: `代理组 "${name}" 的proxies和use字段都为空或不存在`,
+        message: `代理组 "${name}" 的proxies、use、filter和include-all字段都为空或不存在`,
         location,
         field: 'proxies'
       })
