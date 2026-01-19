@@ -96,6 +96,7 @@ const CLIENT_TYPES = [
   { type: 'surfboard', name: 'Surfboard', icon: surfboardIcon },
   { type: 'surge', name: 'Surge', icon: surgeIcon },
   { type: 'surgemac', name: 'Surge Mac', icon: surgeMacIcon },
+  { type: 'clash-to-surge', name: 'Clash→Surge', icon: surgeIcon },
   { type: 'loon', name: 'Loon', icon: loonIcon },
   { type: 'qx', name: 'QuantumultX', icon: quanxIcon },
   { type: 'egern', name: 'Egern', icon: egernIcon },
