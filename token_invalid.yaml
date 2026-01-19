@@ -10,19 +10,19 @@ proxies:
     type: ss
     server: test.example.com.cn
     port: 443
-    password: password123
+    password: J6h6sFZp0Xxv7M8K2RZ6nN8c8ZxQpJZcQ4M2YVtPZ5Q=
     cipher: 2022-blake3-chacha20-poly1305
   - name: ⚠️ 请联系管理员
     type: ss
     server: test.example.com.cn
     port: 443
-    password: password123
+    password: J6h6sFZp0Xxv7M8K2RZ6nN8c8ZxQpJZcQ4M2YVtPZ5Q=
     cipher: 2022-blake3-chacha20-poly1305
 proxy-groups:
   - name: 🚀 节点选择
     type: select
     proxies:
-      - 订阅已过期
-      - 请联系管理员
+      - ⚠️ 订阅已过期
+      - ⚠️ 请联系管理员
 rules:
   - MATCH,DIRECT
