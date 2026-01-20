@@ -225,7 +225,7 @@ direct-nameserver:
   - https://1.12.12.12/dns-query
 nameserver-policy:
   geosite:cn,apple,private,steam,onedrive,category-games@cn:
-    - https://1.12.12.12/dns-query
+  - https://1.12.12.12/dns-query
 proxy-server-nameserver:
   - https://1.12.12.12/dns-query
 ipv6: false
