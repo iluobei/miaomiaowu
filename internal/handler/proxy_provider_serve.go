@@ -249,20 +249,20 @@ func fetchSubscriptionContent(sub *storage.ExternalSubscription) ([]byte, error)
 // base64FeatureStrings 是用于检测 base64 编码订阅内容的特征字符串
 // 这些是常见协议标识符的 base64 编码形式
 var base64FeatureStrings = []string{
-	"dm1lc3M",       // vmess
-	"c3NyOi8v",      // ssr://
-	"c29ja3M6Ly",    // socks://
-	"dHJvamFu",      // trojan
-	"c3M6Ly",        // ss:/
-	"c3NkOi8v",      // ssd://
-	"c2hhZG93",      // shadow
-	"aHR0c",         // htt
-	"dmxlc3M=",      // vless
-	"aHlzdGVyaWEy", // hysteria2
-	"aHkyOi8v",      // hy2://
+	"dm1lc3M",          // vmess
+	"c3NyOi8v",         // ssr://
+	"c29ja3M6Ly",       // socks://
+	"dHJvamFu",         // trojan
+	"c3M6Ly",           // ss:/
+	"c3NkOi8v",         // ssd://
+	"c2hhZG93",         // shadow
+	"aHR0c",            // htt
+	"dmxlc3M",          // vless
+	"aHlzdGVyaWEy",     // hysteria2
+	"aHkyOi8v",         // hy2://
 	"d2lyZWd1YXJkOi8v", // wireguard://
-	"d2c6Ly8=",      // wg://
-	"dHVpYzovLw==",  // tuic://
+	"d2c6Ly8",          // wg://
+	"dHVpYzovLw",       // tuic://
 }
 
 // preprocessSubscriptionContent 预处理订阅内容
