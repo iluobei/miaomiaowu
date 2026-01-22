@@ -250,6 +250,11 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.4.8 (2026-01-22)
+- 🌈 节点列表支持拖动标签排序
+- 🌈 增加tcping延迟探测
+- 🛠️ fix:base64格式外部订阅导入错误
+- 🛠️ fix:loon订阅缺少obfs参数[#51](https://github.com/Jimleerx/miaomiaowu/issues/51)
 ### v0.4.7 (2026-01-20)
 - 🌈 增加两个防泄漏dns配置模板
 - 🌈 支持clashtosurge配置模板转换
