@@ -264,10 +264,12 @@ func NewUpdateApplySSEHandler() http.Handler {
 // checkLatestVersion fetches the latest release info from GitHub
 func checkLatestVersion() (*UpdateInfo, error) {
 	url := fmt.Sprintf(githubAPIURL, githubRepo)
+	logger.Debug("[系统更新] 检查更新", "url", url)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
+		logger.Error("[系统更新] 创建请求失败", "error", err)
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
@@ -275,18 +277,22 @@ func checkLatestVersion() (*UpdateInfo, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		logger.Error("[系统更新] 请求GitHub API失败", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Error("[系统更新] GitHub API返回错误", "status", resp.StatusCode)
 		return nil, fmt.Errorf("GitHub API 返回状态码: %d", resp.StatusCode)
 	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		logger.Error("[系统更新] 解析GitHub响应失败", "error", err)
 		return nil, fmt.Errorf("解析 GitHub 响应失败: %w", err)
 	}
+	logger.Debug("[系统更新] 获取到最新版本", "tag", release.TagName)
 
 	// Select download URL based on current OS/arch
 	arch := runtime.GOARCH
