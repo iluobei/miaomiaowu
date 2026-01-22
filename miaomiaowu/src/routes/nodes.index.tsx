@@ -24,7 +24,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { parseProxyUrl, toClashProxy, type ProxyNode, type ClashProxy } from '@/lib/proxy-parser'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, Link2, Flag, GripVertical } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, Link2, Flag, GripVertical, Zap, Loader2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import ExchangeIcon from '@/assets/icons/exchange.svg'
@@ -414,6 +414,10 @@ function NodesPage() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateGroups, setDuplicateGroups] = useState<Array<{ config: string; nodes: ParsedNode[] }>>([])
   const [deletingDuplicates, setDeletingDuplicates] = useState(false)
+
+  // TCPing 测试状态
+  const [tcpingResults, setTcpingResults] = useState<Record<string, { success: boolean; latency: number; error?: string; loading?: boolean }>>({})
+  const [tcpingNodeId, setTcpingNodeId] = useState<string | null>(null) // 正在测试的节点ID
 
   // 优化的回调函数
   const handleUserAgentChange = useCallback((value: string) => {
@@ -831,6 +835,124 @@ function NodesPage() {
       toast.error('生成 URI 失败: ' + (error instanceof Error ? error.message : String(error)))
     }
   }, [])
+
+  // 处理 TCPing 测试
+  const handleTcping = async (node: TempNode) => {
+    if (!node.parsed?.server || !node.parsed?.port) return
+
+    const nodeKey = node.isSaved ? String(node.dbId) : node.id
+    setTcpingNodeId(nodeKey)
+    setTcpingResults(prev => ({
+      ...prev,
+      [nodeKey]: { success: false, latency: 0, loading: true }
+    }))
+
+    try {
+      const result = await api.post('/api/admin/tcping', {
+        host: node.parsed.server,
+        port: node.parsed.port,
+        timeout: 5000
+      })
+
+      setTcpingResults(prev => ({
+        ...prev,
+        [nodeKey]: {
+          success: result.data.success,
+          latency: result.data.latency,
+          error: result.data.error,
+          loading: false
+        }
+      }))
+    } catch (error) {
+      setTcpingResults(prev => ({
+        ...prev,
+        [nodeKey]: {
+          success: false,
+          latency: 0,
+          error: error instanceof Error ? error.message : '测试失败',
+          loading: false
+        }
+      }))
+    } finally {
+      setTcpingNodeId(null)
+    }
+  }
+
+  // 批量 TCPing 测试状态
+  const [batchTcpingLoading, setBatchTcpingLoading] = useState(false)
+
+  // 批量 TCPing 测试选中的节点
+  const handleBatchTcping = async () => {
+    if (selectedNodeIds.size === 0) {
+      toast.error('请先选择要测试的节点')
+      return
+    }
+
+    // 获取选中的节点
+    const selectedNodes = deferredFilteredNodes.filter(
+      node => node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) && node.parsed?.server && node.parsed?.port
+    )
+
+    if (selectedNodes.length === 0) {
+      toast.error('没有可测试的节点')
+      return
+    }
+
+    setBatchTcpingLoading(true)
+
+    // 设置所有选中节点为加载状态
+    const loadingState: Record<string, { success: boolean; latency: number; loading: boolean }> = {}
+    selectedNodes.forEach(node => {
+      const nodeKey = String(node.dbId)
+      loadingState[nodeKey] = { success: false, latency: 0, loading: true }
+    })
+    setTcpingResults(prev => ({ ...prev, ...loadingState }))
+
+    try {
+      // 构建批量请求
+      const requests = selectedNodes.map(node => ({
+        host: node.parsed!.server,
+        port: node.parsed!.port,
+        timeout: 5000
+      }))
+
+      const result = await api.post('/api/admin/tcping/batch', requests)
+
+      // 更新结果
+      const newResults: Record<string, { success: boolean; latency: number; error?: string; loading: boolean }> = {}
+      selectedNodes.forEach((node, index) => {
+        const nodeKey = String(node.dbId)
+        const response = result.data[index]
+        newResults[nodeKey] = {
+          success: response.success,
+          latency: response.latency,
+          error: response.error,
+          loading: false
+        }
+      })
+      setTcpingResults(prev => ({ ...prev, ...newResults }))
+
+      // 统计结果
+      const successCount = result.data.filter((r: { success: boolean }) => r.success).length
+      toast.success(`测试完成: ${successCount}/${selectedNodes.length} 个节点连通`)
+    } catch (error) {
+      // 所有节点标记为失败
+      const errorResults: Record<string, { success: boolean; latency: number; error: string; loading: boolean }> = {}
+      selectedNodes.forEach(node => {
+        const nodeKey = String(node.dbId)
+        errorResults[nodeKey] = {
+          success: false,
+          latency: 0,
+          error: error instanceof Error ? error.message : '测试失败',
+          loading: false
+        }
+      })
+      setTcpingResults(prev => ({ ...prev, ...errorResults }))
+      toast.error('批量测试失败')
+    } finally {
+      setBatchTcpingLoading(false)
+    }
+  }
 
   // 处理IP解析
   const handleResolveIp = async (node: TempNode) => {
@@ -2098,6 +2220,24 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                           修改标签 ({selectedNodeIds.size})
                         </Button>
                         <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={handleBatchTcping}
+                          disabled={batchTcpingLoading}
+                        >
+                          {batchTcpingLoading ? (
+                            <>
+                              <Loader2 className='size-4 mr-1 animate-spin' />
+                              测试中...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className='size-4 mr-1' />
+                              TCPing ({selectedNodeIds.size})
+                            </>
+                          )}
+                        </Button>
+                        <Button
                           variant='secondary'
                           size='sm'
                           onClick={() => {
@@ -2436,6 +2576,76 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                   >
                                     <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
                                   </Button>
+                                )}
+                                {/* TCPing 测试按钮 - 平板视图 */}
+                                {node.parsed && (
+                                  (() => {
+                                    const nodeKey = node.isSaved ? String(node.dbId) : node.id
+                                    const tcpingResult = tcpingResults[nodeKey]
+                                    const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
+
+                                    // 测试成功后显示延迟数字
+                                    if (tcpingResult?.success && !isLoading) {
+                                      return (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant='ghost'
+                                              size='sm'
+                                              className='h-7 px-1.5 text-xs font-mono text-green-600 hover:text-green-700'
+                                              onClick={() => handleTcping(node)}
+                                            >
+                                              {tcpingResult.latency < 1000
+                                                ? `${Math.round(tcpingResult.latency)}ms`
+                                                : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>点击重新测试</TooltipContent>
+                                        </Tooltip>
+                                      )
+                                    }
+
+                                    // 测试失败显示超时
+                                    if (tcpingResult && !tcpingResult.success && !isLoading) {
+                                      return (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant='ghost'
+                                              size='sm'
+                                              className='h-7 px-1.5 text-xs font-mono text-red-500 hover:text-red-600'
+                                              onClick={() => handleTcping(node)}
+                                            >
+                                              超时
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
+                                        </Tooltip>
+                                      )
+                                    }
+
+                                    // 默认状态或加载中
+                                    return (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                            disabled={isLoading}
+                                            onClick={() => handleTcping(node)}
+                                          >
+                                            {isLoading ? (
+                                              <Loader2 className='size-4 animate-spin' />
+                                            ) : (
+                                              <Zap className='size-4' />
+                                            )}
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
+                                      </Tooltip>
+                                    )
+                                  })()
                                 )}
                                 {node.isSaved && node.dbNode && !hasRegionEmoji(node.name) && (
                                   <Tooltip>
@@ -3154,6 +3364,76 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                       >
                                         <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
                                       </Button>
+                                    )}
+                                    {/* TCPing 测试按钮 */}
+                                    {node.parsed && (
+                                      (() => {
+                                        const nodeKey = node.isSaved ? String(node.dbId) : node.id
+                                        const tcpingResult = tcpingResults[nodeKey]
+                                        const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
+
+                                        // 测试成功后显示延迟数字
+                                        if (tcpingResult?.success && !isLoading) {
+                                          return (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='h-6 px-1.5 text-xs font-mono border border-green-500/50 hover:border-green-500 ml-1 shrink-0 text-green-600'
+                                                  onClick={() => handleTcping(node)}
+                                                >
+                                                  {tcpingResult.latency < 1000
+                                                    ? `${Math.round(tcpingResult.latency)}ms`
+                                                    : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>点击重新测试</TooltipContent>
+                                            </Tooltip>
+                                          )
+                                        }
+
+                                        // 测试失败显示超时
+                                        if (tcpingResult && !tcpingResult.success && !isLoading) {
+                                          return (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='h-6 px-1.5 text-xs font-mono border border-red-500/50 hover:border-red-500 ml-1 shrink-0 text-red-500'
+                                                  onClick={() => handleTcping(node)}
+                                                >
+                                                  超时
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
+                                            </Tooltip>
+                                          )
+                                        }
+
+                                        // 默认状态或加载中
+                                        return (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant='ghost'
+                                                size='sm'
+                                                className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
+                                                disabled={isLoading}
+                                                onClick={() => handleTcping(node)}
+                                              >
+                                                {isLoading ? (
+                                                  <Loader2 className='size-3.5 animate-spin text-primary' />
+                                                ) : (
+                                                  <Zap className='size-3.5 text-[#d97757]' />
+                                                )}
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
+                                          </Tooltip>
+                                        )
+                                      })()
                                     )}
                                   </div>
                                 ) : (
