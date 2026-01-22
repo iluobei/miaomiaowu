@@ -152,8 +152,12 @@ func (p *LoonProducer) shadowsocks(proxy Proxy) (string, error) {
 					return "", fmt.Errorf("%s %s is not supported", cipher, plugin)
 				}
 				result.Append(fmt.Sprintf(",obfs-name=%s", mode))
-				result.AppendIfPresent(",obfs-host=%s", "plugin-opts.host")
-				result.AppendIfPresent(",obfs-uri=%s", "plugin-opts.path")
+				if host := GetString(pluginOpts, "host"); host != "" {
+					result.Append(fmt.Sprintf(",obfs-host=%s", host))
+				}
+				if path := GetString(pluginOpts, "path"); path != "" {
+					result.Append(fmt.Sprintf(",obfs-uri=%s", path))
+				}
 			}
 		} else if plugin != "shadow-tls" {
 			return "", fmt.Errorf("plugin %s is not supported", plugin)
