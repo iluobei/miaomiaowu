@@ -48,6 +48,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable'
 
 // @ts-ignore - retained simple route definition
@@ -268,6 +269,49 @@ const SortableCard = React.memo(function SortableCard({ id, isSaved, isBatchDrag
   )
 })
 
+// 可拖拽的标签按钮组件
+interface SortableTagButtonProps {
+  tag: string
+  count: number
+  isActive: boolean
+  onClick: () => void
+}
+
+const SortableTagButton = React.memo(function SortableTagButton({ tag, count, isActive, onClick }: SortableTagButtonProps) {
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: tag,
+  })
+
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: 'grab',
+  }
+
+  return (
+    <Button
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      size='sm'
+      variant={isActive ? 'default' : 'outline'}
+      onClick={onClick}
+      className='touch-none'
+    >
+      {tag} ({count})
+    </Button>
+  )
+})
+
 // DragOverlay 内容组件
 function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; protocolColors: Record<string, string> }) {
   if (nodes.length === 0) return null
@@ -458,6 +502,11 @@ function NodesPage() {
 
   // 节点排序状态
   const [nodeOrder, setNodeOrder] = useState<number[]>([])
+  // 标签排序状态（用于标签拖拽排序）
+  const [tagOrder, setTagOrder] = useState<string[]>([])
+  const [draggingTag, setDraggingTag] = useState<string | null>(null)
+  // 标签排序中的 Loading 状态
+  const [isReorderingByTag, setIsReorderingByTag] = useState(false)
   // 批量拖动状态：当拖动选中的节点时，记录正在批量拖动的节点ID集合
   const [batchDraggingIds, setBatchDraggingIds] = useState<Set<number>>(new Set())
   // 当前正在拖动的节点ID（用于 DragOverlay）
@@ -525,8 +574,8 @@ function NodesPage() {
         node_order: newOrder
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-config'] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['user-config'] })
     },
     onError: (error: any) => {
       toast.error('保存排序失败: ' + (error.response?.data?.error || error.message))
@@ -1983,6 +2032,86 @@ function NodesPage() {
     return counts
   }, [displayNodes])
 
+  // 排序后的标签列表（根据 tagOrder 排序）
+  const sortedTags = useMemo(() => {
+    const tags = Object.keys(tagCounts).filter(tag => tag !== 'all' && tagCounts[tag] > 0)
+    if (tagOrder.length === 0) {
+      return tags
+    }
+    // 按 tagOrder 排序，不在 tagOrder 中的标签放到最后
+    return [...tags].sort((a, b) => {
+      const indexA = tagOrder.indexOf(a)
+      const indexB = tagOrder.indexOf(b)
+      if (indexA === -1 && indexB === -1) return 0
+      if (indexA === -1) return 1
+      if (indexB === -1) return -1
+      return indexA - indexB
+    })
+  }, [tagCounts, tagOrder])
+
+  // 标签拖拽结束处理 - 同步更新节点顺序
+  const handleTagDragEnd = useCallback(async (event: DragEndEvent) => {
+    setDraggingTag(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = sortedTags.indexOf(active.id as string)
+    const newIndex = sortedTags.indexOf(over.id as string)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    // 开始 Loading
+    setIsReorderingByTag(true)
+
+    // 使用 requestAnimationFrame 让 UI 先更新显示 Loading
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
+    try {
+      // 更新标签顺序
+      const newTagOrder = arrayMove(sortedTags, oldIndex, newIndex)
+      setTagOrder(newTagOrder)
+
+      // 根据新的标签顺序，重新排列节点
+      // 1. 获取所有已保存的节点
+      const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
+
+      // 2. 按新的标签顺序分组节点
+      const nodesByTag: Record<string, typeof savedDisplayNodes> = {}
+      savedDisplayNodes.forEach(node => {
+        const tag = node.tag || ''
+        if (!nodesByTag[tag]) {
+          nodesByTag[tag] = []
+        }
+        nodesByTag[tag].push(node)
+      })
+
+      // 3. 按新的标签顺序重建节点顺序
+      const newNodeOrder: number[] = []
+      newTagOrder.forEach(tag => {
+        const nodesInTag = nodesByTag[tag] || []
+        nodesInTag.forEach(node => {
+          if (node.dbId) {
+            newNodeOrder.push(node.dbId)
+          }
+        })
+      })
+      // 添加没有标签或标签不在列表中的节点
+      savedDisplayNodes.forEach(node => {
+        if (node.dbId && !newNodeOrder.includes(node.dbId)) {
+          newNodeOrder.push(node.dbId)
+        }
+      })
+
+      // 4. 更新节点顺序并等待数据刷新完成
+      setNodeOrder(newNodeOrder)
+      await updateNodeOrderMutation.mutateAsync(newNodeOrder)
+      // 等待数据刷新完成
+      await queryClient.invalidateQueries({ queryKey: ['user-config'] })
+      await queryClient.invalidateQueries({ queryKey: ['nodes'] })
+    } finally {
+      setIsReorderingByTag(false)
+    }
+  }, [sortedTags, displayNodes, updateNodeOrderMutation, queryClient])
+
   // 提取所有唯一的标签
   const allUniqueTags = useMemo(() => {
     const tags = new Set<string>()
@@ -2366,9 +2495,9 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     </div>
                   </div>
 
-                  {/* 标签筛选按钮 */}
+                  {/* 标签筛选按钮 - 支持拖拽排序 */}
                   <div>
-                    <div className='text-sm font-medium mb-2'>按标签筛选</div>
+                    <div className='text-sm font-medium mb-2'>按标签筛选 <span className='text-xs text-muted-foreground'>(拖拽标签可排序节点)</span></div>
                     <div className='flex flex-wrap gap-2'>
                       <Button
                         size='sm'
@@ -2394,36 +2523,68 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                       >
                         全部 ({tagCounts.all})
                       </Button>
-                      {Object.keys(tagCounts).filter(tag => tag !== 'all' && tagCounts[tag] > 0).map(tag => (
-                        <Button
-                          key={tag}
-                          size='sm'
-                          variant={tagFilter === tag ? 'default' : 'outline'}
-                          onClick={() => {
-                            setTagFilter(tag)
-                            // 计算应该选中的节点
-                            const nodesToSelect = displayNodes
-                              .filter(n => n.isSaved && n.dbId && n.dbNode?.tag === tag)
-                              .filter(n => selectedProtocol === 'all' || n.dbNode?.protocol?.toLowerCase() === selectedProtocol)
-                            const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.dbId!))
-
-                            // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
-                            const currentIds = Array.from(selectedNodeIds).sort()
-                            const targetIds = Array.from(nodeIdsToSelect).sort()
-                            if (tagFilter === tag && currentIds.length === targetIds.length &&
-                                currentIds.every((id, i) => id === targetIds[i])) {
-                              setSelectedNodeIds(new Set())
-                            } else {
-                              setSelectedNodeIds(nodeIdsToSelect)
-                            }
-                          }}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={(event) => setDraggingTag(event.active.id as string)}
+                        onDragEnd={handleTagDragEnd}
+                        onDragCancel={() => setDraggingTag(null)}
+                      >
+                        <SortableContext
+                          items={sortedTags}
+                          strategy={horizontalListSortingStrategy}
                         >
-                          {tag} ({tagCounts[tag]})
-                        </Button>
-                      ))}
+                          {sortedTags.map(tag => (
+                            <SortableTagButton
+                              key={tag}
+                              tag={tag}
+                              count={tagCounts[tag]}
+                              isActive={tagFilter === tag}
+                              onClick={() => {
+                                setTagFilter(tag)
+                                // 计算应该选中的节点
+                                const nodesToSelect = displayNodes
+                                  .filter(n => n.isSaved && n.dbId && n.dbNode?.tag === tag)
+                                  .filter(n => selectedProtocol === 'all' || n.dbNode?.protocol?.toLowerCase() === selectedProtocol)
+                                const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.dbId!))
+
+                                // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
+                                const currentIds = Array.from(selectedNodeIds).sort()
+                                const targetIds = Array.from(nodeIdsToSelect).sort()
+                                if (tagFilter === tag && currentIds.length === targetIds.length &&
+                                    currentIds.every((id, i) => id === targetIds[i])) {
+                                  setSelectedNodeIds(new Set())
+                                } else {
+                                  setSelectedNodeIds(nodeIdsToSelect)
+                                }
+                              }}
+                            />
+                          ))}
+                        </SortableContext>
+                        {draggingTag && createPortal(
+                          <DragOverlay>
+                            <Button size='sm' variant='default' className='opacity-80 shadow-lg'>
+                              {draggingTag} ({tagCounts[draggingTag]})
+                            </Button>
+                          </DragOverlay>,
+                          document.body
+                        )}
+                      </DndContext>
                     </div>
                   </div>
                 </div>
+
+                {/* 节点列表区域 - 包含Loading overlay */}
+                <div className='relative'>
+                  {/* Loading Overlay */}
+                  {isReorderingByTag && (
+                    <div className='absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start justify-center pt-8 rounded-md'>
+                      <div className='flex items-center gap-2 bg-background/95 px-4 py-2 rounded-md shadow-lg border'>
+                        <Loader2 className='size-5 animate-spin text-primary' />
+                        <span className='text-sm text-muted-foreground'>正在重新排序节点...</span>
+                      </div>
+                    </div>
+                  )}
 
                 {/* 移动端卡片视图 (<768px) */}
                 {!isTablet && (
@@ -3815,6 +3976,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     document.body
                   )}
                 </DndContext>
+                </div>
               </CardContent>
             </Card>
           )}
