@@ -935,7 +935,11 @@ function NodesPage() {
       // 统计结果
       const successCount = result.data.filter((r: { success: boolean }) => r.success).length
       toast.success(`测试完成: ${successCount}/${selectedNodes.length} 个节点连通`)
-    } catch (error) {
+    } catch (error: unknown) {
+      // 提取后端错误信息
+      const axiosError = error as { response?: { data?: { error?: string } } }
+      const errorMessage = axiosError.response?.data?.error || (error instanceof Error ? error.message : '测试失败')
+
       // 所有节点标记为失败
       const errorResults: Record<string, { success: boolean; latency: number; error: string; loading: boolean }> = {}
       selectedNodes.forEach(node => {
@@ -943,12 +947,12 @@ function NodesPage() {
         errorResults[nodeKey] = {
           success: false,
           latency: 0,
-          error: error instanceof Error ? error.message : '测试失败',
+          error: errorMessage,
           loading: false
         }
       })
       setTcpingResults(prev => ({ ...prev, ...errorResults }))
-      toast.error('批量测试失败')
+      toast.error(errorMessage)
     } finally {
       setBatchTcpingLoading(false)
     }

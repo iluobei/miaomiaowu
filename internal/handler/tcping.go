@@ -24,7 +24,7 @@ type TCPingResponse struct {
 	Error   string  `json:"error,omitempty"`
 }
 
-// NewTCPingHandler returns a handler that performs TCP ping
+// tcping handler
 func NewTCPingHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -84,7 +84,7 @@ func NewTCPingHandler() http.Handler {
 	})
 }
 
-// NewTCPingBatchHandler returns a handler that performs batch TCP ping
+// 批量tcping延迟检测
 func NewTCPingBatchHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -94,17 +94,17 @@ func NewTCPingBatchHandler() http.Handler {
 
 		var requests []TCPingRequest
 		if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid request body")
+			writeJSONError(w, http.StatusBadRequest, "请求参数错误")
 			return
 		}
 
 		if len(requests) == 0 {
-			writeJSONError(w, http.StatusBadRequest, "empty request list")
+			writeJSONError(w, http.StatusBadRequest, "节点为空")
 			return
 		}
 
-		if len(requests) > 50 {
-			writeJSONError(w, http.StatusBadRequest, "too many requests (max 50)")
+		if len(requests) > 200 {
+			writeJSONError(w, http.StatusBadRequest, "超过最大节点数量 (200)")
 			return
 		}
 
