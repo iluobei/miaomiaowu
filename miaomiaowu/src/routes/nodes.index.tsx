@@ -2590,13 +2590,18 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
 
                                     // 测试成功后显示延迟数字
                                     if (tcpingResult?.success && !isLoading) {
+                                      const latencyColor = tcpingResult.latency < 100
+                                        ? 'text-green-600 hover:text-green-700'
+                                        : tcpingResult.latency < 200
+                                          ? 'text-orange-500 hover:text-orange-600'
+                                          : 'text-red-500 hover:text-red-600'
                                       return (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button
                                               variant='ghost'
                                               size='sm'
-                                              className='h-7 px-1.5 text-xs font-mono text-green-600 hover:text-green-700'
+                                              className={`h-7 px-1.5 text-xs font-mono ${latencyColor}`}
                                               onClick={() => handleTcping(node)}
                                             >
                                               {tcpingResult.latency < 1000
@@ -2944,6 +2949,191 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                                           <Badge variant='outline' className='text-xs shrink-0'>
                                             {node.parsed.mode}
                                           </Badge>
+                                        )}
+                                        {/* 平板端操作按钮: IP解析、绑定探针、TCPing测试、临时订阅 */}
+                                        {node.parsed?.server && (
+                                          (() => {
+                                            const nodeKey = node.isSaved ? String(node.dbId) : node.id
+                                            const serverIsIp = isIpAddress(node.parsed.server)
+                                            const hasOriginalServer = !node.isSaved && node.originalServer
+
+                                            // 已保存的节点且服务器地址已经是IP，不显示IP按钮
+                                            if (node.isSaved && serverIsIp) {
+                                              return null
+                                            }
+
+                                            // 未保存的节点且有原始服务器地址，显示回退按钮
+                                            if (hasOriginalServer) {
+                                              return (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='size-5 p-0 border border-orange-500/50 hover:border-orange-500 shrink-0'
+                                                  title='恢复原始域名'
+                                                  onClick={() => restoreTempNodeServer(node.id)}
+                                                >
+                                                  <Undo2 className='size-3 text-orange-500' />
+                                                </Button>
+                                              )
+                                            }
+
+                                            // 显示IP解析菜单或按钮
+                                            return ipMenuState?.nodeId === nodeKey ? (
+                                              <DropdownMenu open={true} onOpenChange={(open) => !open && setIpMenuState(null)}>
+                                                <DropdownMenuTrigger asChild>
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
+                                                    title='选择IP地址'
+                                                  >
+                                                    <img
+                                                      src={IpIcon}
+                                                      alt='IP'
+                                                      className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                    />
+                                                  </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align='start'>
+                                                  {ipMenuState.ips.map((ip) => (
+                                                    <DropdownMenuItem
+                                                      key={ip}
+                                                      onClick={() => {
+                                                        if (node.isSaved && node.dbId) {
+                                                          updateNodeServerMutation.mutate({
+                                                            nodeId: node.dbId,
+                                                            server: ip,
+                                                          })
+                                                        } else {
+                                                          updateTempNodeServer(node.id, ip)
+                                                          setIpMenuState(null)
+                                                        }
+                                                      }}
+                                                    >
+                                                      <span className='font-mono'>{ip}</span>
+                                                    </DropdownMenuItem>
+                                                  ))}
+                                                </DropdownMenuContent>
+                                              </DropdownMenu>
+                                            ) : (
+                                              <Button
+                                                variant='ghost'
+                                                size='sm'
+                                                className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
+                                                title='解析IP地址'
+                                                disabled={resolvingIpFor === nodeKey}
+                                                onClick={() => handleResolveIp(node)}
+                                              >
+                                                <img
+                                                  src={IpIcon}
+                                                  alt='IP'
+                                                  className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                />
+                                              </Button>
+                                            )
+                                          })()
+                                        )}
+                                        {node.isSaved && node.dbNode?.original_server && (
+                                          <Button
+                                            variant='ghost'
+                                            size='sm'
+                                            className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
+                                            title='恢复原始域名'
+                                            disabled={restoreNodeServerMutation.isPending}
+                                            onClick={() => restoreNodeServerMutation.mutate(node.dbId)}
+                                          >
+                                            <Undo2 className='size-3' />
+                                          </Button>
+                                        )}
+                                        {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
+                                          <Button
+                                            variant='ghost'
+                                            size='sm'
+                                            className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
+                                            title={node.dbNode.probe_server ? `当前绑定: ${node.dbNode.probe_server}` : '绑定探针服务器'}
+                                            onClick={() => {
+                                              setSelectedNodeForProbe(node.dbNode!)
+                                              setProbeBindingDialogOpen(true)
+                                              refetchProbeConfig()
+                                            }}
+                                          >
+                                            <Activity className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
+                                          </Button>
+                                        )}
+                                        {/* TCPing 测试按钮 */}
+                                        {node.parsed && (
+                                          (() => {
+                                            const nodeKey = node.isSaved ? String(node.dbId) : node.id
+                                            const tcpingResult = tcpingResults[nodeKey]
+                                            const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
+
+                                            // 测试成功后显示延迟数字
+                                            if (tcpingResult?.success && !isLoading) {
+                                              const latencyColor = tcpingResult.latency < 100
+                                                ? 'border-green-500/50 hover:border-green-500 text-green-600'
+                                                : tcpingResult.latency < 200
+                                                  ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
+                                                  : 'border-red-500/50 hover:border-red-500 text-red-500'
+                                              return (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className={`h-5 px-1 text-xs font-mono border shrink-0 ${latencyColor}`}
+                                                      onClick={() => handleTcping(node)}
+                                                    >
+                                                      {tcpingResult.latency < 1000
+                                                        ? `${Math.round(tcpingResult.latency)}ms`
+                                                        : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>点击重新测试</TooltipContent>
+                                                </Tooltip>
+                                              )
+                                            }
+
+                                            // 测试失败显示超时
+                                            if (tcpingResult && !tcpingResult.success && !isLoading) {
+                                              return (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='h-5 px-1 text-xs font-mono border border-red-500/50 hover:border-red-500 shrink-0 text-red-500'
+                                                      onClick={() => handleTcping(node)}
+                                                    >
+                                                      超时
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
+                                                </Tooltip>
+                                              )
+                                            }
+
+                                            // 默认状态或加载中
+                                            return (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
+                                                    disabled={isLoading}
+                                                    onClick={() => handleTcping(node)}
+                                                  >
+                                                    {isLoading ? (
+                                                      <Loader2 className='size-3 animate-spin text-primary' />
+                                                    ) : (
+                                                      <Zap className='size-3 text-[#d97757]' />
+                                                    )}
+                                                  </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
+                                              </Tooltip>
+                                            )
+                                          })()
                                         )}
                                       </div>
                                     )}
@@ -3378,13 +3568,18 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
 
                                         // 测试成功后显示延迟数字
                                         if (tcpingResult?.success && !isLoading) {
+                                          const latencyColor = tcpingResult.latency < 100
+                                            ? 'border-green-500/50 hover:border-green-500 text-green-600'
+                                            : tcpingResult.latency < 200
+                                              ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
+                                              : 'border-red-500/50 hover:border-red-500 text-red-500'
                                           return (
                                             <Tooltip>
                                               <TooltipTrigger asChild>
                                                 <Button
                                                   variant='ghost'
                                                   size='sm'
-                                                  className='h-6 px-1.5 text-xs font-mono border border-green-500/50 hover:border-green-500 ml-1 shrink-0 text-green-600'
+                                                  className={`h-6 px-1.5 text-xs font-mono border ml-1 shrink-0 ${latencyColor}`}
                                                   onClick={() => handleTcping(node)}
                                                 >
                                                   {tcpingResult.latency < 1000
