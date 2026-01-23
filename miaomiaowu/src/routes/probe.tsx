@@ -37,6 +37,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 type ServerForm = {
   key: string
@@ -202,6 +213,26 @@ function ProbeManagePage() {
       queryClient.setQueryData(['probe-config'], { config: data.config })
       // 使流量汇总数据缓存失效，以便重新获取最新数据
       queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
+    },
+    onError: handleServerError,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.delete('/api/admin/probe-config')
+      return response.data
+    },
+    onSuccess: () => {
+      toast.success('探针配置已删除')
+      // 重置表单状态
+      setFormState({
+        probeType: PROBE_TYPES[0]?.value ?? 'nezha',
+        address: '',
+        servers: [],
+      })
+      queryClient.invalidateQueries({ queryKey: ['probe-config'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
     },
     onError: handleServerError,
   })
@@ -467,9 +498,39 @@ function ProbeManagePage() {
                 <h1 className='text-3xl font-semibold tracking-tight'>探针数据源</h1>
                 <p className='text-muted-foreground'>配置 traffic 接口所使用的探针类型、面板地址以及参与汇总的服务器列表。</p>
               </div>
-              <Button type='submit' disabled={mutation.isPending}>
-                {mutation.isPending ? '保存中…' : '保存配置'}
-              </Button>
+              <div className='flex gap-2'>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type='button'
+                      variant='destructive'
+                      disabled={deleteMutation.isPending || !configData?.config?.address}
+                    >
+                      {deleteMutation.isPending ? '删除中…' : '删除配置'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认删除探针配置</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        此操作将删除探针配置、所有服务器数据，并解除所有节点与探针的绑定关系。此操作不可撤销。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteMutation.mutate()}
+                        className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                      >
+                        确认删除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button type='submit' disabled={mutation.isPending}>
+                  {mutation.isPending ? '保存中…' : '保存配置'}
+                </Button>
+              </div>
             </div>
             {lastUpdated ? (
               <p className='text-sm text-muted-foreground'>最近保存：{lastUpdated}</p>

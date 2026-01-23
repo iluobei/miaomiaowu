@@ -1324,6 +1324,36 @@ func (r *TrafficRepository) UpsertProbeConfig(ctx context.Context, cfg ProbeConf
 	return r.GetProbeConfig(ctx)
 }
 
+// DeleteProbeConfig deletes the probe configuration and clears all node probe bindings.
+func (r *TrafficRepository) DeleteProbeConfig(ctx context.Context) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete probe config tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Clear probe_server binding from all nodes
+	if _, err := tx.ExecContext(ctx, `UPDATE nodes SET probe_server = '' WHERE probe_server != ''`); err != nil {
+		return fmt.Errorf("clear node probe bindings: %w", err)
+	}
+
+	// Delete probe_servers (will cascade from probe_configs deletion, but do it explicitly for clarity)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM probe_servers WHERE config_id = 1`); err != nil {
+		return fmt.Errorf("delete probe servers: %w", err)
+	}
+
+	// Delete probe config
+	if _, err := tx.ExecContext(ctx, `DELETE FROM probe_configs WHERE id = 1`); err != nil {
+		return fmt.Errorf("delete probe config: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete probe config: %w", err)
+	}
+
+	return nil
+}
+
 func (r *TrafficRepository) ensureDefaultProbeConfig() error {
 	// No longer creating default probe configuration
 	// Users must configure probe settings via the web interface

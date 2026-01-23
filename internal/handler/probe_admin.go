@@ -59,8 +59,10 @@ func (h *probeConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleGet(w, r)
 	case http.MethodPut:
 		h.handleUpdate(w, r)
+	case http.MethodDelete:
+		h.handleDelete(w, r)
 	default:
-		methodNotAllowed(w, http.MethodGet, http.MethodPut)
+		methodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
 }
 
@@ -179,6 +181,17 @@ func (h *probeConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"config": convertProbeConfigResponse(updated),
+	})
+}
+
+func (h *probeConfigHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.DeleteProbeConfig(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"message": "探针配置已删除",
 	})
 }
 
