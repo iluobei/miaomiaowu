@@ -1,7 +1,7 @@
 // @ts-nocheck
-import React, { useState, useMemo, useCallback, useEffect, memo, useDeferredValue } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, memo, useDeferredValue, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect, useSearch } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Topbar } from '@/components/layout/topbar'
@@ -53,6 +53,9 @@ import {
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
+  validateSearch: (search: Record<string, unknown>) => ({
+    action: search.action as string | undefined,
+  }),
   beforeLoad: () => {
     const token = useAuthStore.getState().auth.accessToken
     if (!token) {
@@ -392,6 +395,12 @@ function NodesPage() {
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
 
+  // URL 搜索参数
+  const { action } = useSearch({ from: '/nodes/' })
+
+  // 订阅 URL 输入框引用
+  const subscriptionUrlInputRef = useRef<HTMLInputElement>(null)
+
   // 视口宽度判断 - 用于条件渲染 SortableContext，避免重复注册导致拖动偏移
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const isTablet = useMediaQuery('(min-width: 768px)')
@@ -420,6 +429,9 @@ function NodesPage() {
 
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
+
+  // 导入节点 Tab 状态
+  const [importTab, setImportTab] = useState<string>('manual')
 
   // 批量操作状态 - 从 localStorage 恢复选中状态
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(() => getStoredSelectedIds())
@@ -554,6 +566,18 @@ function NodesPage() {
       localStorage.setItem(STORAGE_KEY_SELECTED_IDS, JSON.stringify(Array.from(selectedNodeIds)))
     } catch {}
   }, [selectedNodeIds])
+
+  // 处理 URL 参数：打开导入卡片并聚焦订阅输入框
+  useEffect(() => {
+    if (action === 'import-subscription') {
+      setIsInputCardExpanded(true)
+      setImportTab('subscription')
+      // 延迟聚焦，等待 DOM 更新
+      setTimeout(() => {
+        subscriptionUrlInputRef.current?.focus()
+      }, 100)
+    }
+  }, [action])
 
   // dnd-kit sensors
   // 移动端需要更长的 delay 以允许正常滚动，只有长按才触发拖拽
@@ -2199,7 +2223,7 @@ function NodesPage() {
               </CollapsibleTrigger>
               <CollapsibleContent className='CollapsibleContent'>
                 <CardContent>
-                  <Tabs defaultValue='manual' className='w-full'>
+                  <Tabs value={importTab} onValueChange={setImportTab} className='w-full'>
                     <TabsList className='grid w-full grid-cols-2'>
                       <TabsTrigger value='manual'>手动输入</TabsTrigger>
                       <TabsTrigger value='subscription'>订阅导入</TabsTrigger>
@@ -2246,6 +2270,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                     <TabsContent value='subscription' className='space-y-4 mt-4'>
                       <div className='space-y-2'>
                         <Input
+                          ref={subscriptionUrlInputRef}
                           placeholder='https://example.com/api/clash/subscribe?token=xxx'
                           value={subscriptionUrl}
                           onChange={handleSubscriptionUrlChange}

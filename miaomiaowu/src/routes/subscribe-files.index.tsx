@@ -31,7 +31,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
-import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon, Plus } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -2393,8 +2393,24 @@ function SubscribeFilesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>订阅列表 ({files.length})</CardTitle>
-            <CardDescription>已添加的订阅文件</CardDescription>
+            <div className='flex items-center justify-between'>
+              <div>
+                <CardTitle>订阅列表 ({files.length})</CardTitle>
+                <CardDescription>已添加的订阅文件</CardDescription>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => navigate({ to: '/generator' })}
+                  >
+                    <Plus className='h-4 w-4' />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>生成订阅</TooltipContent>
+              </Tooltip>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -2796,8 +2812,20 @@ function SubscribeFilesPage() {
             </CollapsibleTrigger>
             <CollapsibleContent className='CollapsibleContent'>
               <CardContent>
-              {/* 同步按钮 */}
-              <div className='flex justify-end mb-4'>
+              {/* 操作按钮 */}
+              <div className='flex justify-end mb-4 gap-2'>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => navigate({ to: '/nodes', search: { action: 'import-subscription' } })}
+                    >
+                      <Plus className='h-4 w-4' />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>添加外部订阅</TooltipContent>
+                </Tooltip>
                 <Button
                   variant='outline'
                   size='sm'
