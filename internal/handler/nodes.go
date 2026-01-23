@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -967,8 +968,9 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	}
 
 	var req struct {
-		URL       string `json:"url"`
-		UserAgent string `json:"user_agent"`
+		URL            string `json:"url"`
+		UserAgent      string `json:"user_agent"`
+		SkipCertVerify bool   `json:"skip_cert_verify"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -992,6 +994,13 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		Timeout: 30 * time.Second,
 	}
 
+	// 如果需要跳过证书验证
+	if req.SkipCertVerify {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
 	httpReq, err := http.NewRequest("GET", req.URL, nil)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, errors.New("无效的订阅URL"))
@@ -1001,7 +1010,7 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	// 添加User-Agent头
 	httpReq.Header.Set("User-Agent", userAgent)
 
-	logger.Info("[订阅获取] 开始请求外部订阅", "url", req.URL, "user_agent", userAgent)
+	logger.Info("[订阅获取] 开始请求外部订阅", "url", req.URL, "user_agent", userAgent, "skip_cert_verify", req.SkipCertVerify)
 
 	resp, err := client.Do(httpReq)
 	if err != nil {

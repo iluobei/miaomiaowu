@@ -426,6 +426,7 @@ function NodesPage() {
   // 自定义标签状态
   const [manualTag, setManualTag] = useState<string>('手动输入')
   const [subscriptionTag, setSubscriptionTag] = useState<string>('')
+  const [skipCertVerify, setSkipCertVerify] = useState<boolean>(true)
 
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
@@ -1654,10 +1655,11 @@ function NodesPage() {
 
   // 从订阅获取节点
   const fetchSubscriptionMutation = useMutation({
-    mutationFn: async ({ url, userAgent }: { url: string; userAgent: string }) => {
+    mutationFn: async ({ url, userAgent, skipCertVerify }: { url: string; userAgent: string; skipCertVerify: boolean }) => {
       const response = await api.post('/api/admin/nodes/fetch-subscription', {
         url,
-        user_agent: userAgent
+        user_agent: userAgent,
+        skip_cert_verify: skipCertVerify
       })
       return response.data as {
         format?: 'v2ray'
@@ -1878,7 +1880,8 @@ function NodesPage() {
 
     fetchSubscriptionMutation.mutate({
       url: subscriptionUrl,
-      userAgent: finalUserAgent
+      userAgent: finalUserAgent,
+      skipCertVerify
     })
   }
 
@@ -2307,13 +2310,25 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                         <Label htmlFor='subscription-tag' className='text-sm font-medium'>
                           节点标签
                         </Label>
-                        <Input
-                          id='subscription-tag'
-                          placeholder='默认使用服务器地址作为标签'
-                          value={subscriptionTag}
-                          onChange={(e) => setSubscriptionTag(e.target.value)}
-                          className='font-mono text-sm'
-                        />
+                        <div className='flex items-center gap-4'>
+                          <Input
+                            id='subscription-tag'
+                            placeholder='默认使用服务器地址作为标签'
+                            value={subscriptionTag}
+                            onChange={(e) => setSubscriptionTag(e.target.value)}
+                            className='font-mono text-sm flex-1'
+                          />
+                          <div className='flex items-center gap-2 shrink-0'>
+                            <Switch
+                              id='skip-cert-verify'
+                              checked={skipCertVerify}
+                              onCheckedChange={setSkipCertVerify}
+                            />
+                            <Label htmlFor='skip-cert-verify' className='text-sm whitespace-nowrap cursor-pointer'>
+                              跳过证书验证
+                            </Label>
+                          </div>
+                        </div>
                         <p className='text-xs text-muted-foreground'>
                           为订阅导入的节点设置标签，留空将使用服务器地址作为标签
                         </p>
@@ -2351,6 +2366,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                       <Pencil className='h-4 w-4 inline' /> 编辑节点名称，
                       <img src={ExchangeIcon} alt='链式代理' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 创建链式代理，
                       <Activity className='h-4 w-4 inline' /> 绑定探针，
+                      <Zap className='h-4 w-4 inline' /> TCPing延迟测试，
                       <Flag className='h-4 w-4 inline' /> 添加地区emoji，
                       <img src={IpIcon} alt='解析IP地址' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 解析IP地址，
                       <Undo2 className='h-4 w-4 inline' /> 恢复原始域名，
