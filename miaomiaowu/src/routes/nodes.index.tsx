@@ -1635,7 +1635,13 @@ function NodesPage() {
         url,
         user_agent: userAgent
       })
-      return response.data as { proxies: ClashProxy[]; count: number; suggested_tag?: string }
+      return response.data as {
+        format?: 'v2ray'
+        proxies?: ClashProxy[]
+        uris?: string[]
+        count: number
+        suggested_tag?: string
+      }
     },
     onSuccess: async (data, variables) => {
       // 优先使用后端返回的 suggested_tag（从 Content-Disposition 提取）
@@ -1650,30 +1656,55 @@ function NodesPage() {
         }
       }
 
-      // 将Clash节点转换为TempNode格式
-      const parsed: TempNode[] = data.proxies.map((clashNode) => {
-        // Clash节点已经是标准格式，直接作为ProxyNode和ClashProxy使用
-        const proxyNode: ProxyNode = {
-          name: clashNode.name || '未知',
-          type: clashNode.type || 'unknown',
-          server: clashNode.server || '',
-          port: clashNode.port || 0,
-          ...clashNode,
-        }
-        const name = proxyNode.name || '未知'
-        const parsedProxy = cloneProxyWithName(proxyNode, name)
-        const clashProxy = cloneProxyWithName(clashNode, name)
+      let parsed: TempNode[] = []
 
-        return {
-          id: Math.random().toString(36).substring(7),
-          rawUrl: variables.url, // 使用订阅链接地址
-          name,
-          parsed: parsedProxy,
-          clash: clashProxy,
-          enabled: true,
-          tag: subscriptionTag.trim() || defaultTag, // 添加标签信息
-        }
-      })
+      if (data.format === 'v2ray' && data.uris) {
+        // v2ray 格式：使用前端 proxy-parser.ts 解析 URI
+        parsed = data.uris
+          .map((uri) => {
+            const parsedNode = parseProxyUrl(uri)
+            if (!parsedNode) return null
+            const clashNode = toClashProxy(parsedNode)
+            const name = parsedNode.name || '未知'
+            const normalizedParsed = cloneProxyWithName(parsedNode, name)
+            const normalizedClash = cloneProxyWithName(clashNode, name)
+
+            return {
+              id: Math.random().toString(36).substring(7),
+              rawUrl: uri,
+              name,
+              parsed: normalizedParsed,
+              clash: normalizedClash,
+              enabled: true,
+              tag: subscriptionTag.trim() || defaultTag,
+            }
+          })
+          .filter((node): node is TempNode => node !== null)
+      } else if (data.proxies) {
+        // Clash 格式：直接使用后端返回的节点
+        parsed = data.proxies.map((clashNode) => {
+          const proxyNode: ProxyNode = {
+            name: clashNode.name || '未知',
+            type: clashNode.type || 'unknown',
+            server: clashNode.server || '',
+            port: clashNode.port || 0,
+            ...clashNode,
+          }
+          const name = proxyNode.name || '未知'
+          const parsedProxy = cloneProxyWithName(proxyNode, name)
+          const clashProxy = cloneProxyWithName(clashNode, name)
+
+          return {
+            id: Math.random().toString(36).substring(7),
+            rawUrl: variables.url,
+            name,
+            parsed: parsedProxy,
+            clash: clashProxy,
+            enabled: true,
+            tag: subscriptionTag.trim() || defaultTag,
+          }
+        })
+      }
 
       setTempNodes(parsed)
       setCurrentTag('subscription') // 订阅导入
@@ -1683,7 +1714,7 @@ function NodesPage() {
         setSubscriptionTag(defaultTag)
       }
 
-      toast.success(`成功导入 ${data.count} 个节点`)
+      toast.success(`成功导入 ${parsed.length} 个节点`)
 
       // 保存外部订阅链接
       try {
@@ -2234,6 +2265,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLS节�
                             <SelectItem value='clash.meta'>clash.meta</SelectItem>
                             <SelectItem value='clash-verge/v1.5.1'>clash-verge/v1.5.1</SelectItem>
                             <SelectItem value='Clash'>Clash</SelectItem>
+                            <SelectItem value='v2ray'>v2ray</SelectItem>
                             <SelectItem value='手动输入'>手动输入</SelectItem>
                           </SelectContent>
                         </Select>

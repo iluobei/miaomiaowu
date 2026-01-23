@@ -1043,6 +1043,53 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// 从 Content-Disposition 头中提取订阅名称作为建议的标签
+	suggestedTag := ""
+	contentDisposition := resp.Header.Get("Content-Disposition")
+	if contentDisposition != "" {
+		suggestedTag = parseFilenameFromContentDisposition(contentDisposition)
+		// 移除文件扩展名
+		if suggestedTag != "" {
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".yaml")
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".yml")
+			suggestedTag = strings.TrimSuffix(suggestedTag, ".txt")
+		}
+	}
+
+	// v2ray 格式: base64 编码的 URI 列表，返回原始 URI 由前端解析
+	if strings.Contains(strings.ToLower(userAgent), "v2ray") {
+		decoded, err := base64DecodeV2ray(string(body))
+		if err != nil {
+			logger.Info("[订阅获取] v2ray格式base64解码失败", "url", req.URL, "error", err)
+			writeError(w, http.StatusBadRequest, errors.New("解析v2ray订阅内容失败: "+err.Error()))
+			return
+		}
+
+		// 按行分割，过滤空行
+		lines := strings.Split(decoded, "\n")
+		var uris []string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				uris = append(uris, line)
+			}
+		}
+
+		if len(uris) == 0 {
+			writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
+			return
+		}
+
+		logger.Info("[订阅获取] v2ray格式解析成功", "url", req.URL, "uri_count", len(uris))
+		respondJSON(w, http.StatusOK, map[string]any{
+			"format":        "v2ray",
+			"uris":          uris,
+			"count":         len(uris),
+			"suggested_tag": suggestedTag,
+		})
+		return
+	}
+
 	// 解析YAML
 	var clashConfig struct {
 		Proxies []map[string]any `yaml:"proxies"`
@@ -1076,19 +1123,6 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 	for _, proxy := range clashConfig.Proxies {
 		convertNilToEmptyStringInMap(proxy)
 		decodeProxyURLFields(proxy)
-	}
-
-	// 从 Content-Disposition 头中提取订阅名称作为建议的标签
-	suggestedTag := ""
-	contentDisposition := resp.Header.Get("Content-Disposition")
-	if contentDisposition != "" {
-		suggestedTag = parseFilenameFromContentDisposition(contentDisposition)
-		// 移除文件扩展名
-		if suggestedTag != "" {
-			suggestedTag = strings.TrimSuffix(suggestedTag, ".yaml")
-			suggestedTag = strings.TrimSuffix(suggestedTag, ".yml")
-			suggestedTag = strings.TrimSuffix(suggestedTag, ".txt")
-		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
