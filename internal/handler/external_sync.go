@@ -298,9 +298,31 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 
 	// Parse subscription-userinfo header if sync_traffic is enabled
 	if settings.SyncTraffic {
-		if userInfo := resp.Header.Get("subscription-userinfo"); userInfo != "" {
+		userInfo := resp.Header.Get("subscription-userinfo")
+		if userInfo != "" {
 			logger.Info("[外部订阅同步] 发现流量信息头，开始解析...")
 			parseAndUpdateTrafficInfo(ctx, repo, &sub, userInfo)
+		} else if !strings.Contains(strings.ToLower(userAgent), "clash") {
+			// 如果使用的不是 clash UA 且没有获取到流量信息，尝试用 clash-meta UA 再请求一次
+			logger.Info("[外部订阅同步] 未获取到流量信息，尝试使用 clash-meta UA 获取", "name", sub.Name)
+			clashMetaUA := "clash-meta/2.4.0"
+			trafficReq, err := http.NewRequestWithContext(ctx, http.MethodGet, sub.URL, nil)
+			if err == nil {
+				trafficReq.Header.Set("User-Agent", clashMetaUA)
+				trafficResp, err := client.Do(trafficReq)
+				if err == nil {
+					defer trafficResp.Body.Close()
+					if trafficResp.StatusCode == http.StatusOK {
+						trafficUserInfo := trafficResp.Header.Get("subscription-userinfo")
+						if trafficUserInfo != "" {
+							logger.Info("[外部订阅同步] clash-meta UA 获取流量信息成功", "name", sub.Name)
+							parseAndUpdateTrafficInfo(ctx, repo, &sub, trafficUserInfo)
+						}
+					}
+				} else {
+					logger.Info("[外部订阅同步] clash-meta UA 请求失败", "error", err)
+				}
+			}
 		}
 	}
 
@@ -312,16 +334,32 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 
 	logger.Info("[外部订阅同步] 成功获取订阅内容", "size", len(body))
 
-	// Parse YAML content
+	var proxies []any
+
+	// 首先尝试解析为 YAML (Clash 格式)
 	var yamlContent map[string]any
-	if err := yaml.Unmarshal(body, &yamlContent); err != nil {
-		logger.Info("[外部订阅同步] 解析YAML内容失败", "error", err)
-		return 0, sub, fmt.Errorf("parse yaml: %w", err)
+	if err := yaml.Unmarshal(body, &yamlContent); err == nil {
+		// YAML 解析成功，提取 proxies
+		if p, ok := yamlContent["proxies"].([]any); ok && len(p) > 0 {
+			proxies = p
+			logger.Info("[外部订阅同步] 解析为 Clash YAML 格式", "name", sub.Name, "count", len(proxies))
+		}
 	}
 
-	// Extract proxies
-	proxies, ok := yamlContent["proxies"].([]any)
-	if !ok || len(proxies) == 0 {
+	// 如果 YAML 解析失败或没有 proxies，尝试 v2ray 格式 (base64 编码的 URI 列表)
+	if len(proxies) == 0 {
+		logger.Info("[外部订阅同步] 尝试解析为 v2ray 格式", "name", sub.Name)
+		v2rayProxies, err := ParseV2raySubscription(string(body))
+		if err == nil && len(v2rayProxies) > 0 {
+			// 将 map[string]any 转换为 []any
+			for _, p := range v2rayProxies {
+				proxies = append(proxies, p)
+			}
+			logger.Info("[外部订阅同步] 解析为 v2ray 格式成功", "name", sub.Name, "count", len(proxies))
+		}
+	}
+
+	if len(proxies) == 0 {
 		logger.Info("[外部订阅同步] 订阅中未找到节点(proxies)数据")
 		return 0, sub, fmt.Errorf("no proxies found in subscription")
 	}

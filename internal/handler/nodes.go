@@ -1065,8 +1065,40 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		}
 	}
 
+	// 解析流量信息
+	var trafficUpload, trafficDownload, trafficTotal int64
+	var trafficExpire *time.Time
+	userInfo := resp.Header.Get("subscription-userinfo")
+	if userInfo != "" {
+		trafficUpload, trafficDownload, trafficTotal, trafficExpire = ParseTrafficInfoHeader(userInfo)
+		logger.Info("[订阅获取] 解析流量信息", "upload", trafficUpload, "download", trafficDownload, "total", trafficTotal)
+	}
+
 	// v2ray 格式: base64 编码的 URI 列表，返回原始 URI 由前端解析
 	if strings.Contains(strings.ToLower(userAgent), "v2ray") {
+		// 如果没有获取到流量信息，尝试用 clash-meta UA 再请求一次获取流量信息
+		if trafficTotal == 0 {
+			logger.Info("[订阅获取] v2ray格式未获取到流量信息，尝试使用 clash-meta UA 获取")
+			clashMetaUA := "clash-meta/2.4.0"
+			trafficReq, err := http.NewRequest("GET", req.URL, nil)
+			if err == nil {
+				trafficReq.Header.Set("User-Agent", clashMetaUA)
+				trafficResp, err := client.Do(trafficReq)
+				if err == nil {
+					defer trafficResp.Body.Close()
+					if trafficResp.StatusCode == http.StatusOK {
+						trafficUserInfo := trafficResp.Header.Get("subscription-userinfo")
+						if trafficUserInfo != "" {
+							trafficUpload, trafficDownload, trafficTotal, trafficExpire = ParseTrafficInfoHeader(trafficUserInfo)
+							logger.Info("[订阅获取] clash-meta UA 获取流量信息成功", "upload", trafficUpload, "download", trafficDownload, "total", trafficTotal)
+						}
+					}
+				} else {
+					logger.Info("[订阅获取] clash-meta UA 请求失败", "error", err)
+				}
+			}
+		}
+
 		decoded, err := base64DecodeV2ray(string(body))
 		if err != nil {
 			logger.Info("[订阅获取] v2ray格式base64解码失败", "url", req.URL, "error", err)
@@ -1090,12 +1122,24 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		}
 
 		logger.Info("[订阅获取] v2ray格式解析成功", "url", req.URL, "uri_count", len(uris))
-		respondJSON(w, http.StatusOK, map[string]any{
+		response := map[string]any{
 			"format":        "v2ray",
 			"uris":          uris,
 			"count":         len(uris),
 			"suggested_tag": suggestedTag,
-		})
+		}
+		// 添加流量信息（如果有）
+		if trafficTotal > 0 {
+			response["traffic"] = map[string]any{
+				"upload":   trafficUpload,
+				"download": trafficDownload,
+				"total":    trafficTotal,
+			}
+			if trafficExpire != nil {
+				response["traffic"].(map[string]any)["expire"] = trafficExpire.Unix()
+			}
+		}
+		respondJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -1134,11 +1178,23 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		decodeProxyURLFields(proxy)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"proxies":       clashConfig.Proxies,
 		"count":         len(clashConfig.Proxies),
 		"suggested_tag": suggestedTag,
-	})
+	}
+	// 添加流量信息（如果有）
+	if trafficTotal > 0 {
+		response["traffic"] = map[string]any{
+			"upload":   trafficUpload,
+			"download": trafficDownload,
+			"total":    trafficTotal,
+		}
+		if trafficExpire != nil {
+			response["traffic"].(map[string]any)["expire"] = trafficExpire.Unix()
+		}
+	}
+	respondJSON(w, http.StatusOK, response)
 }
 
 // handleUpdateProbeBinding updates the probe server binding for a node.

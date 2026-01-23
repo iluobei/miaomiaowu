@@ -159,6 +159,30 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		}
 	}
 
+	// 如果使用的不是 clash-meta UA 且没有获取到流量信息，尝试用 clash-meta UA 再次请求
+	clashMetaUA := "clash-meta/2.4.0"
+	if trafficTotal == 0 && !strings.Contains(strings.ToLower(userAgent), "clash") {
+		logger.Info("[外部订阅] 未获取到流量信息，尝试使用 clash-meta UA 重新获取", "name", name)
+		retryReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+		if err == nil {
+			retryReq.Header.Set("User-Agent", clashMetaUA)
+			retryResp, err := client.Do(retryReq)
+			if err == nil {
+				defer retryResp.Body.Close()
+				if retryResp.StatusCode == http.StatusOK {
+					userInfo := retryResp.Header.Get("subscription-userinfo")
+					logger.Info("[外部订阅] clash-meta UA 获取到 subscription-userinfo", "name", name, "header", userInfo)
+					if userInfo != "" {
+						trafficUpload, trafficDownload, trafficTotal, trafficExpire = ParseTrafficInfoHeader(userInfo)
+						logger.Info("[外部订阅] clash-meta UA 解析流量信息成功", "upload", trafficUpload, "download", trafficDownload, "total", trafficTotal)
+					}
+				}
+			} else {
+				logger.Info("[外部订阅] clash-meta UA 请求失败", "error", err)
+			}
+		}
+	}
+
 	now := time.Now()
 	sub := storage.ExternalSubscription{
 		Username:    username,
