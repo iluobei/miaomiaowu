@@ -2827,7 +2827,7 @@ anytls://password@example.com:443/?sni=example.com&fp=chrome&alpn=h2#AnyTLSèŠ‚ç‚
                                       const latencyColor = tcpingResult.latency < 100
                                         ? 'text-green-600 hover:text-green-700'
                                         : tcpingResult.latency < 200
-                                          ? 'text-orange-500 hover:text-orange-600'
+                                          ? 'text-yellow-500 hover:text-yellow-600'
                                           : 'text-red-500 hover:text-red-600'
                                       return (
                                         <Tooltip>
