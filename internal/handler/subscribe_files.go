@@ -398,6 +398,9 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		existing.ExpireAt = expireAt
+	} else {
+		// 为空时清除过期时间
+		existing.ExpireAt = nil
 	}
 
 	// 处理文件名更新
