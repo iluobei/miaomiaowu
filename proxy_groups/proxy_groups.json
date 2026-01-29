@@ -675,6 +675,27 @@
     "ip_rules": []
   },
   {
+    "name": "tiktok",
+    "label": "Tiktok",
+    "emoji": "🎶",
+    "icon": "🎶",
+    "rule_name": "Tiktok",
+    "group_label": "🎶 Tiktok",
+    "presets": ["comprehensive"],
+    "site_rules": [
+      {
+        "key": "tiktok",
+        "behavior": "domain",
+        "type": "http",
+        "format": "mrs",
+        "url": "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/tiktok.mrs",
+        "path": "./ruleset/tiktok.mrs",
+        "interval": 86400
+      }
+    ],
+    "ip_rules": []
+  },
+  {
     "name": "spotify",
     "label": "Spotify",
     "emoji": "🎵",
