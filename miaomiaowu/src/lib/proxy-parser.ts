@@ -981,6 +981,10 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         }
         break
     }
+    // ip-version解析
+    if (queryParams["ip-version"]) {
+      node['ip-version'] = queryParams["ip-version"]
+    }
 
     return node
   } catch (e) {

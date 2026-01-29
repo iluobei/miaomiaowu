@@ -201,7 +201,7 @@ function vless(proxy: Proxy): string {
         }
     }
 
-    if (['splithttp', "xhttp"].includes(proxy.network || '')) {
+    if (['splithttp', "xhttp"].includes(proxy.network || '') && proxy.mode !== undefined) {
         vlessTransport += `&mode=${encodeURIComponent(proxy.mode) || 'auto'}`;
     }
 
