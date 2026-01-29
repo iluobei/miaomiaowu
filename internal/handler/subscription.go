@@ -758,6 +758,17 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+
+	// 📥 订阅获取日志 - 方便管理员搜索和追踪
+	logger.Info("📥📥📥 [SUB_FETCH] 用户获取订阅",
+		"user", username,
+		"subscription", displayName,
+		"filename", filename,
+		"client_type", clientType,
+		"bytes", len(data),
+		"duration_ms", time.Since(requestStart).Milliseconds(),
+	)
+
 	logger.Info("[⏱️ 耗时监测] 请求处理完成", "total_duration_ms", time.Since(requestStart).Milliseconds(), "username", username, "filename", filename)
 }
 
@@ -1153,7 +1164,8 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 
-	logger.Info("[Token Invalid] 返回Token失效响应", "client_type", clientType)
+	// ⚠️ Token失效日志 - 方便管理员追踪无效访问
+	logger.Info("⚠️⚠️⚠️ [SUB_INVALID] Token失效或过期访问", "client_type", clientType)
 }
 
 // convertSubscription converts a YAML subscription file to the specified client format
