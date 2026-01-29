@@ -47,6 +47,8 @@ function SystemSettingsPage() {
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
   const [proxyGroupsSourceUrl, setProxyGroupsSourceUrl] = useState('')
   const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
+  const [silentMode, setSilentMode] = useState(false)
+  const [silentModeTimeout, setSilentModeTimeout] = useState(15)
 
   // Sync proxy group categories mutation
   const syncProxyGroupsMutation = useSyncProxyGroupCategories()
@@ -68,6 +70,8 @@ function SystemSettingsPage() {
         enable_proxy_provider: boolean
         proxy_groups_source_url: string
         client_compatibility_mode: boolean
+        silent_mode: boolean
+        silent_mode_timeout: number
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -88,6 +92,8 @@ function SystemSettingsPage() {
       setEnableProxyProvider(userConfig.enable_proxy_provider || false)
       setProxyGroupsSourceUrl(userConfig.proxy_groups_source_url || '')
       setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
+      setSilentMode(userConfig.silent_mode || false)
+      setSilentModeTimeout(userConfig.silent_mode_timeout || 15)
     }
   }, [userConfig])
 
@@ -105,6 +111,8 @@ function SystemSettingsPage() {
       enable_proxy_provider: boolean
       proxy_groups_source_url: string
       client_compatibility_mode: boolean
+      silent_mode: boolean
+      silent_mode_timeout: number
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -126,6 +134,8 @@ function SystemSettingsPage() {
       setEnableProxyProvider(variables.enable_proxy_provider)
       setProxyGroupsSourceUrl(variables.proxy_groups_source_url || '')
       setClientCompatibilityMode(variables.client_compatibility_mode)
+      setSilentMode(variables.silent_mode)
+      setSilentModeTimeout(variables.silent_mode_timeout)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -148,6 +158,8 @@ function SystemSettingsPage() {
     enable_proxy_provider: boolean
     proxy_groups_source_url: string
     client_compatibility_mode: boolean
+    silent_mode: boolean
+    silent_mode_timeout: number
   }>) => {
     updateConfigMutation.mutate({
       force_sync_external: forceSyncExternal,
@@ -162,6 +174,8 @@ function SystemSettingsPage() {
       enable_proxy_provider: enableProxyProvider,
       proxy_groups_source_url: proxyGroupsSourceUrl,
       client_compatibility_mode: clientCompatibilityMode,
+      silent_mode: silentMode,
+      silent_mode_timeout: silentModeTimeout,
       ...updates,
     })
   }
@@ -348,98 +362,174 @@ function SystemSettingsPage() {
               <CardTitle>功能开关</CardTitle>
               <CardDescription>管理系统功能的启用状态</CardDescription>
             </CardHeader>
-            <CardContent className='space-y-0'>
-              {/* 节点探针服务器绑定 */}
-              <div className='flex items-center justify-between py-3'>
-                <div className='flex items-center gap-2'>
-                  <Label htmlFor='enable-probe-binding' className='cursor-pointer'>
-                    节点探针服务器绑定
-                  </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
-                    </TooltipTrigger>
-                    <TooltipContent side='right' className='max-w-xs'>
-                      <p>开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量。</p>
-                    </TooltipContent>
-                  </Tooltip>
+            <CardContent>
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                {/* 节点探针服务器绑定 */}
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='enable-probe-binding' className='cursor-pointer'>
+                      探针服务器绑定
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='enable-probe-binding'
+                    checked={enableProbeBinding}
+                    onCheckedChange={(checked) => updateConfig({ enable_probe_binding: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
                 </div>
-                <Switch
-                  id='enable-probe-binding'
-                  checked={enableProbeBinding}
-                  onCheckedChange={(checked) => updateConfig({ enable_probe_binding: checked })}
-                  disabled={loadingConfig || updateConfigMutation.isPending}
-                />
+
+                {/* 短链接 */}
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='enable-short-link' className='cursor-pointer'>
+                      启用短链接
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>开启后，订阅链接页面将显示6位字符的短链接。可在个人设置页面重置短链接。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='enable-short-link'
+                    checked={enableShortLink}
+                    onCheckedChange={(checked) => updateConfig({ enable_short_link: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
+                </div>
+
+                {/* 新模板系统 */}
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='use-new-template-system' className='cursor-pointer'>
+                      新模板系统
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>开启后使用数据库模板（支持网页端管理），关闭后使用 rule_templates 目录下的模板文件。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='use-new-template-system'
+                    checked={useNewTemplateSystem}
+                    onCheckedChange={(checked) => updateConfig({ use_new_template_system: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
+                </div>
+
+                {/* 代理集合 */}
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='enable-proxy-provider' className='cursor-pointer'>
+                      启用代理集合
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>代理集合（Proxy Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置代理集合，并在编辑代理组时将代理集合拖入代理组。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='enable-proxy-provider'
+                    checked={enableProxyProvider}
+                    onCheckedChange={(checked) => updateConfig({ enable_proxy_provider: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
+                </div>
+
+                {/* 客户端兼容模式 */}
+                <div className='flex items-center justify-between rounded-lg border p-3'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='client-compatibility-mode' className='cursor-pointer'>
+                      客户端兼容模式
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>自动过滤不兼容的节点（如 WireGuard），仅记录日志不报错。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='client-compatibility-mode'
+                    checked={clientCompatibilityMode}
+                    onCheckedChange={(checked) => updateConfig({ client_compatibility_mode: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
+                </div>
+
+                {/* 静默模式 */}
+                <div className='flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-900 dark:bg-orange-950'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='silent-mode' className='cursor-pointer'>
+                      静默模式
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>开启后服务响应返回 404，获取一次订阅后恢复访问 {silentModeTimeout} 分钟。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    id='silent-mode'
+                    checked={silentMode}
+                    onCheckedChange={(checked) => updateConfig({ silent_mode: checked })}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
+                </div>
               </div>
 
-              {/* 短链接 */}
-              <div className='flex items-center justify-between py-3 border-t'>
-                <div className='flex items-center gap-2'>
-                  <Label htmlFor='enable-short-link' className='cursor-pointer'>
-                    启用短链接
-                  </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
-                    </TooltipTrigger>
-                    <TooltipContent side='right' className='max-w-xs'>
-                      <p>开启后，订阅链接页面将显示6位字符的短链接。可在个人设置页面重置短链接。</p>
-                    </TooltipContent>
-                  </Tooltip>
+              {/* 静默模式超时设置 */}
+              {silentMode && (
+                <div className='mt-4 space-y-2 rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-900 dark:bg-orange-950'>
+                  <div className='flex items-center gap-2'>
+                    <Label htmlFor='silent-mode-timeout'>恢复访问时长（分钟）</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      </TooltipTrigger>
+                      <TooltipContent side='top' className='max-w-xs'>
+                        <p>用户获取订阅后，服务器恢复访问的时长。</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input
+                    id='silent-mode-timeout'
+                    type='number'
+                    min={1}
+                    max={1440}
+                    value={silentModeTimeout}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                    onChange={(e) => setSilentModeTimeout(parseInt(e.target.value) || 15)}
+                    onBlur={() => updateConfig({ silent_mode_timeout: silentModeTimeout })}
+                    className='max-w-32'
+                  />
                 </div>
-                <Switch
-                  id='enable-short-link'
-                  checked={enableShortLink}
-                  onCheckedChange={(checked) => updateConfig({ enable_short_link: checked })}
-                  disabled={loadingConfig || updateConfigMutation.isPending}
-                />
-              </div>
-
-              {/* 新模板系统 */}
-              <div className='flex items-center justify-between py-3 border-t'>
-                <div className='flex items-center gap-2'>
-                  <Label htmlFor='use-new-template-system' className='cursor-pointer'>
-                    使用新模板系统
-                  </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
-                    </TooltipTrigger>
-                    <TooltipContent side='right' className='max-w-xs'>
-                      <p>开启后使用数据库模板（支持网页端管理），关闭后使用 rule_templates 目录下的模板文件。</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Switch
-                  id='use-new-template-system'
-                  checked={useNewTemplateSystem}
-                  onCheckedChange={(checked) => updateConfig({ use_new_template_system: checked })}
-                  disabled={loadingConfig || updateConfigMutation.isPending}
-                />
-              </div>
-
-              {/* 代理集合 */}
-              <div className='flex items-center justify-between py-3 border-t'>
-                <div className='flex items-center gap-2'>
-                  <Label htmlFor='enable-proxy-provider' className='cursor-pointer'>
-                    启用代理集合
-                  </Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
-                    </TooltipTrigger>
-                    <TooltipContent side='right' className='max-w-xs'>
-                      <p>代理集合（Proxy Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置代理集合，并在编辑代理组时将代理集合拖入代理组。</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Switch
-                  id='enable-proxy-provider'
-                  checked={enableProxyProvider}
-                  onCheckedChange={(checked) => updateConfig({ enable_proxy_provider: checked })}
-                  disabled={loadingConfig || updateConfigMutation.isPending}
-                />
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -469,25 +559,6 @@ function SystemSettingsPage() {
                     }}
                   />
                   <p className='text-xs text-muted-foreground'>留空使用系统默认地址或环境变量配置</p>
-                </div>
-                <div className='flex items-center justify-between rounded-lg border p-3'>
-                  <div className='flex-1 space-y-0.5'>
-                    <Label htmlFor='client-compatibility-mode' className='font-medium'>
-                      客户端兼容模式
-                    </Label>
-                    <p className='text-sm text-muted-foreground'>
-                      自动过滤不兼容的节点 (如 WireGuard),仅记录日志
-                    </p>
-                  </div>
-                  <Switch
-                    id='client-compatibility-mode'
-                    checked={clientCompatibilityMode}
-                    disabled={loadingConfig || updateConfigMutation.isPending}
-                    onCheckedChange={(checked) => {
-                      setClientCompatibilityMode(checked)
-                      updateConfig({ client_compatibility_mode: checked })
-                    }}
-                  />
                 </div>
                 <Button
                   onClick={() => {

@@ -22,6 +22,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as GeneratorRouteImport } from './routes/generator'
 import { Route as CustomRulesRouteImport } from './routes/custom-rules'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
+import { Route as R404RouteImport } from './routes/404'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates.index'
 import { Route as SubscriptionIndexRouteImport } from './routes/subscription.index'
@@ -95,6 +96,11 @@ const ChangePasswordRoute = ChangePasswordRouteImport.update({
   path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const R404Route = R404RouteImport.update({
+  id: '/404',
+  path: '/404',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -133,6 +139,7 @@ const SubscribeFilesCustomRoute = SubscribeFilesCustomRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/404': typeof R404Route
   '/change-password': typeof ChangePasswordRoute
   '/custom-rules': typeof CustomRulesRouteWithChildren
   '/generator': typeof GeneratorRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/404': typeof R404Route
   '/change-password': typeof ChangePasswordRoute
   '/generator': typeof GeneratorRoute
   '/login': typeof LoginRoute
@@ -173,6 +181,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/404': typeof R404Route
   '/change-password': typeof ChangePasswordRoute
   '/custom-rules': typeof CustomRulesRouteWithChildren
   '/generator': typeof GeneratorRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/404'
     | '/change-password'
     | '/custom-rules'
     | '/generator'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/404'
     | '/change-password'
     | '/generator'
     | '/login'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/404'
     | '/change-password'
     | '/custom-rules'
     | '/generator'
@@ -259,6 +271,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  R404Route: typeof R404Route
   ChangePasswordRoute: typeof ChangePasswordRoute
   CustomRulesRoute: typeof CustomRulesRouteWithChildren
   GeneratorRoute: typeof GeneratorRoute
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/change-password'
       fullPath: '/change-password'
       preLoaderRoute: typeof ChangePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/404': {
+      id: '/404'
+      path: '/404'
+      fullPath: '/404'
+      preLoaderRoute: typeof R404RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -481,6 +501,7 @@ const TemplatesRouteWithChildren = TemplatesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  R404Route: R404Route,
   ChangePasswordRoute: ChangePasswordRoute,
   CustomRulesRoute: CustomRulesRouteWithChildren,
   GeneratorRoute: GeneratorRoute,

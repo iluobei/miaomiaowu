@@ -27,6 +27,8 @@ type userConfigRequest struct {
 	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
 	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
+	SilentMode              bool    `json:"silent_mode"`               // Silent mode: return 404 for all requests except subscription
+	SilentModeTimeout       int     `json:"silent_mode_timeout"`       // Minutes to allow access after subscription fetch
 }
 
 type userConfigResponse struct {
@@ -44,6 +46,8 @@ type userConfigResponse struct {
 	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
 	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
+	SilentMode              bool    `json:"silent_mode"`               // Silent mode: return 404 for all requests except subscription
+	SilentModeTimeout       int     `json:"silent_mode_timeout"`       // Minutes to allow access after subscription fetch
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -96,6 +100,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				NodeOrder:               []int64{},
 				ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
 				ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
+				SilentMode:              systemConfig.SilentMode,
+				SilentModeTimeout:       systemConfig.SilentModeTimeout,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -121,6 +127,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		NodeOrder:               settings.NodeOrder,
 		ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
 		ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
+		SilentMode:              systemConfig.SilentMode,
+		SilentModeTimeout:       systemConfig.SilentModeTimeout,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -195,10 +203,16 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		return
 	}
 
-	// Update system config with proxy groups source URL
+	// Update system config with proxy groups source URL and silent mode
+	silentModeTimeout := payload.SilentModeTimeout
+	if silentModeTimeout <= 0 {
+		silentModeTimeout = 15
+	}
 	systemConfig := storage.SystemConfig{
 		ProxyGroupsSourceURL:    proxyGroupsSourceURL,
 		ClientCompatibilityMode: payload.ClientCompatibilityMode,
+		SilentMode:              payload.SilentMode,
+		SilentModeTimeout:       silentModeTimeout,
 	}
 	if err := repo.UpdateSystemConfig(r.Context(), systemConfig); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("update system config: %w", err))
@@ -220,6 +234,8 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		NodeOrder:               settings.NodeOrder,
 		ProxyGroupsSourceURL:    proxyGroupsSourceURL,
 		ClientCompatibilityMode: payload.ClientCompatibilityMode,
+		SilentMode:              payload.SilentMode,
+		SilentModeTimeout:       silentModeTimeout,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

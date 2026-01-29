@@ -259,8 +259,10 @@ type UserSettings struct {
 
 // SystemConfig represents global system configuration shared across all users.
 type SystemConfig struct {
-	ProxyGroupsSourceURL     string // Remote URL for proxy groups configuration
-	ClientCompatibilityMode  bool   // Auto-filter incompatible nodes for clients
+	ProxyGroupsSourceURL    string // Remote URL for proxy groups configuration
+	ClientCompatibilityMode bool   // Auto-filter incompatible nodes for clients
+	SilentMode              bool   // Silent mode: return 404 for all requests except subscription
+	SilentModeTimeout       int    // Minutes to allow access after subscription fetch (default 15)
 }
 
 // ExternalSubscription represents an external subscription URL imported by user.
@@ -835,6 +837,16 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 
 	// Add client_compatibility_mode column to system_config table
 	if err := r.ensureSystemConfigColumn("client_compatibility_mode", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add silent_mode column to system_config table
+	if err := r.ensureSystemConfigColumn("silent_mode", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add silent_mode_timeout column to system_config table (default 15 minutes)
+	if err := r.ensureSystemConfigColumn("silent_mode_timeout", "INTEGER NOT NULL DEFAULT 15"); err != nil {
 		return err
 	}
 
@@ -4265,23 +4277,28 @@ func (r *TrafficRepository) DeleteProxyProviderConfig(ctx context.Context, id in
 // Returns an empty SystemConfig if the row doesn't exist (should not happen after migration).
 func (r *TrafficRepository) GetSystemConfig(ctx context.Context) (SystemConfig, error) {
 	const query = `
-SELECT proxy_groups_source_url, client_compatibility_mode
+SELECT proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_mode_timeout
 FROM system_config
 WHERE id = 1
 `
 
 	var cfg SystemConfig
-	var compatibilityMode int
-	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.ProxyGroupsSourceURL, &compatibilityMode)
+	var compatibilityMode, silentMode, silentModeTimeout int
+	err := r.db.QueryRowContext(ctx, query).Scan(&cfg.ProxyGroupsSourceURL, &compatibilityMode, &silentMode, &silentModeTimeout)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// Return empty config if row doesn't exist (defensive)
-			return SystemConfig{}, nil
+			return SystemConfig{SilentModeTimeout: 15}, nil
 		}
 		return SystemConfig{}, fmt.Errorf("query system config: %w", err)
 	}
 
 	cfg.ClientCompatibilityMode = compatibilityMode != 0
+	cfg.SilentMode = silentMode != 0
+	cfg.SilentModeTimeout = silentModeTimeout
+	if cfg.SilentModeTimeout <= 0 {
+		cfg.SilentModeTimeout = 15
+	}
 	return cfg, nil
 }
 
@@ -4292,6 +4309,8 @@ func (r *TrafficRepository) UpdateSystemConfig(ctx context.Context, cfg SystemCo
 UPDATE system_config
 SET proxy_groups_source_url = ?,
     client_compatibility_mode = ?,
+    silent_mode = ?,
+    silent_mode_timeout = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 1
 `
@@ -4300,8 +4319,16 @@ WHERE id = 1
 	if cfg.ClientCompatibilityMode {
 		compatibilityMode = 1
 	}
+	silentMode := 0
+	if cfg.SilentMode {
+		silentMode = 1
+	}
+	silentModeTimeout := cfg.SilentModeTimeout
+	if silentModeTimeout <= 0 {
+		silentModeTimeout = 15
+	}
 
-	result, err := r.db.ExecContext(ctx, updateStmt, cfg.ProxyGroupsSourceURL, compatibilityMode)
+	result, err := r.db.ExecContext(ctx, updateStmt, cfg.ProxyGroupsSourceURL, compatibilityMode, silentMode, silentModeTimeout)
 	if err != nil {
 		return fmt.Errorf("update system config: %w", err)
 	}
@@ -4314,10 +4341,10 @@ WHERE id = 1
 	// If no rows were updated, insert the singleton row (defensive fallback)
 	if rowsAffected == 0 {
 		const insertStmt = `
-INSERT INTO system_config (id, proxy_groups_source_url, client_compatibility_mode)
-VALUES (1, ?, ?)
+INSERT INTO system_config (id, proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_mode_timeout)
+VALUES (1, ?, ?, ?, ?)
 `
-		if _, err := r.db.ExecContext(ctx, insertStmt, cfg.ProxyGroupsSourceURL, compatibilityMode); err != nil {
+		if _, err := r.db.ExecContext(ctx, insertStmt, cfg.ProxyGroupsSourceURL, compatibilityMode, silentMode, silentModeTimeout); err != nil {
 			return fmt.Errorf("insert system config: %w", err)
 		}
 	}

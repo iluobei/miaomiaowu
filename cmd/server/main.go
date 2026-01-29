@@ -118,12 +118,13 @@ func main() {
 
 	trafficHandler := handler.NewTrafficSummaryHandler(repo)
 	userRepo := auth.NewRepositoryAdapter(repo)
+	loginRateLimiter := handler.NewLoginRateLimiter()
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/setup/status", handler.NewSetupStatusHandler(repo))
 	mux.Handle("/api/setup/init", handler.NewInitialSetupHandler(repo))
 	mux.Handle("/api/setup/restore-backup", handler.NewSetupRestoreBackupHandler(repo))
-	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo))
+	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo, loginRateLimiter))
 
 	// Admin-only endpoints
 	mux.Handle("/api/admin/credentials", auth.RequireAdmin(tokenStore, userRepo, handler.NewCredentialsHandler(authManager, tokenStore)))
@@ -223,7 +224,11 @@ func main() {
 	})
 
 	allowedOrigins := getAllowedOrigins()
-	handlerWithCORS := withCORS(mux, allowedOrigins)
+
+	// 静默模式中间件
+	silentModeManager := handler.NewSilentModeManager(repo, tokenStore)
+	handlerWithSilentMode := silentModeManager.Middleware(mux)
+	handlerWithCORS := withCORS(handlerWithSilentMode, allowedOrigins)
 
 	srv := &http.Server{
 		Addr:              addr,

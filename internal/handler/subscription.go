@@ -769,6 +769,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		"duration_ms", time.Since(requestStart).Milliseconds(),
 	)
 
+	// 更新静默模式活跃时间
+	if silentMgr := GetSilentModeManager(); silentMgr != nil && username != "" {
+		silentMgr.RecordSubscriptionAccess(username)
+	}
+
 	logger.Info("[⏱️ 耗时监测] 请求处理完成", "total_duration_ms", time.Since(requestStart).Milliseconds(), "username", username, "filename", filename)
 }
 

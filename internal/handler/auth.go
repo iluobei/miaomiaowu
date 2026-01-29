@@ -57,7 +57,7 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
-func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *storage.TrafficRepository) http.Handler {
+func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *storage.TrafficRepository, rateLimiter *LoginRateLimiter) http.Handler {
 	if manager == nil || tokens == nil {
 		panic("login handler requires manager and token store")
 	}
@@ -82,6 +82,14 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 		username := strings.TrimSpace(payload.Username)
 		clientIP := getClientIP(r)
 
+		// 检查速率限制
+		if rateLimiter != nil {
+			if err := rateLimiter.Check(clientIP, username); err != nil {
+				writeError(w, http.StatusTooManyRequests, errors.New("too many login attempts, please try again later"))
+				return
+			}
+		}
+
 		ok, err := manager.Authenticate(r.Context(), username, payload.Password)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
@@ -90,12 +98,20 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 
 		if !ok {
 			// 记录登录失败
-			logger.Warn("[认证] 登录失败",
+			if rateLimiter != nil {
+				rateLimiter.RecordFailure(clientIP, username)
+			}
+			logger.Warn("🔐 [LOGIN_FAIL] 登录失败",
 				"username", username,
 				"client_ip", clientIP,
 				"time", time.Now().Format("2006-01-02 15:04:05"))
 			writeError(w, http.StatusUnauthorized, errors.New("invalid credentials"))
 			return
+		}
+
+		// 登录成功，清除速率限制计数
+		if rateLimiter != nil {
+			rateLimiter.RecordSuccess(clientIP, username)
 		}
 
 		user, err := manager.User(r.Context(), username)
@@ -134,7 +150,7 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 		}
 
 		// 记录登录成功
-		logger.Info("[认证] 登录成功",
+		logger.Info("🔐 [LOGIN_OK] 登录成功",
 			"username", username,
 			"client_ip", clientIP,
 			"remember_me", payload.RememberMe,
