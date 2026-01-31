@@ -29,6 +29,7 @@ type ACLProxyGroup struct {
 
 // ParseACLConfig parses ACL4SSR format configuration content
 // Extracts ruleset= and custom_proxy_group= definitions
+// For duplicate proxy group names, the later one overrides the earlier one
 func ParseACLConfig(content string) ([]ACLRuleset, []ACLProxyGroup) {
 	var rulesets []ACLRuleset
 	var proxyGroups []ACLProxyGroup
@@ -60,7 +61,36 @@ func ParseACLConfig(content string) ([]ACLRuleset, []ACLProxyGroup) {
 		}
 	}
 
+	// Deduplicate proxy groups: later ones override earlier ones
+	proxyGroups = deduplicateProxyGroups(proxyGroups)
+
 	return rulesets, proxyGroups
+}
+
+// deduplicateProxyGroups removes duplicate proxy groups by name
+// Later occurrences override earlier ones, preserving the order of last occurrence
+func deduplicateProxyGroups(groups []ACLProxyGroup) []ACLProxyGroup {
+	if len(groups) <= 1 {
+		return groups
+	}
+
+	// Use a map to track the last occurrence of each group name
+	lastIndex := make(map[string]int)
+	for i, g := range groups {
+		lastIndex[g.Name] = i
+	}
+
+	// Build result preserving order of last occurrences
+	seen := make(map[string]bool)
+	var result []ACLProxyGroup
+	for i, g := range groups {
+		if lastIndex[g.Name] == i && !seen[g.Name] {
+			result = append(result, g)
+			seen[g.Name] = true
+		}
+	}
+
+	return result
 }
 
 // parseRuleset parses a ruleset definition with support for various formats
