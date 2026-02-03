@@ -246,9 +246,9 @@ type UserSettings struct {
 	SyncTraffic          bool   // Sync traffic info from external subscriptions
 	EnableProbeBinding   bool   // Enable probe server binding for nodes
 	CustomRulesEnabled   bool   // Enable custom rules feature
-	EnableShortLink      bool   // Enable short link feature for subscriptions
-	UseNewTemplateSystem bool   // Use new template system (database-based), default true
-	EnableProxyProvider  bool      // Enable proxy provider feature
+	EnableShortLink     bool   // Enable short link feature for subscriptions
+	TemplateVersion     string // Template version: "v1" (file-based), "v2" (database/ACL), "v3" (mihomo-style)
+	EnableProxyProvider bool   // Enable proxy provider feature
 	NodeOrder            []int64   // Node display order (array of node IDs)
 	DebugEnabled         bool      // Enable debug logging to file
 	DebugLogPath         string    // Path to current debug log file
@@ -766,8 +766,15 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 		return err
 	}
 
-	// Add use_new_template_system to user_settings table (default true)
-	if err := r.ensureUserSettingsColumn("use_new_template_system", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+	// Add template_version to user_settings table (default "v2")
+	// This replaces the old use_new_template_system boolean field
+	if err := r.ensureUserSettingsColumn("template_version", "TEXT NOT NULL DEFAULT 'v2'"); err != nil {
+		return err
+	}
+
+	// Migrate old use_new_template_system to template_version
+	// If use_new_template_system column exists, migrate its values
+	if err := r.migrateTemplateVersionFromBool(); err != nil {
 		return err
 	}
 
@@ -1601,6 +1608,26 @@ func (r *TrafficRepository) ensureUserSettingsColumn(name, definition string) er
 	alter := fmt.Sprintf("ALTER TABLE user_settings ADD COLUMN %s %s", name, definition)
 	if _, err := r.db.Exec(alter); err != nil {
 		return fmt.Errorf("add column %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// migrateTemplateVersionFromBool migrates the old use_new_template_system boolean column
+// to the new template_version string column.
+func (r *TrafficRepository) migrateTemplateVersionFromBool() error {
+	// Check if old column exists
+	var count int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('user_settings') WHERE name = 'use_new_template_system'`).Scan(&count)
+	if err != nil || count == 0 {
+		// Old column doesn't exist, nothing to migrate
+		return nil
+	}
+
+	// Migrate values: use_new_template_system=1 -> "v2", use_new_template_system=0 -> "v1"
+	_, err = r.db.Exec(`UPDATE user_settings SET template_version = CASE WHEN use_new_template_system = 1 THEN 'v2' ELSE 'v1' END WHERE template_version = 'v2'`)
+	if err != nil {
+		return fmt.Errorf("migrate template_version values: %w", err)
 	}
 
 	return nil
@@ -3128,11 +3155,11 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(use_new_template_system, 1), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
-	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, debugEnabledInt int
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(template_version, 'v2'), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, enableProxyProviderInt, debugEnabledInt int
 	var nodeOrderJSON string
 	var debugStartedAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &useNewTemplateSystemInt, &enableProxyProviderInt, &nodeOrderJSON, &debugEnabledInt, &settings.DebugLogPath, &debugStartedAt, &settings.CreatedAt, &settings.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &enableShortLinkInt, &settings.TemplateVersion, &enableProxyProviderInt, &nodeOrderJSON, &debugEnabledInt, &settings.DebugLogPath, &debugStartedAt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -3146,7 +3173,6 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 	settings.EnableProbeBinding = enableProbeBindingInt == 1
 	settings.CustomRulesEnabled = customRulesEnabledInt == 1
 	settings.EnableShortLink = enableShortLinkInt == 1
-	settings.UseNewTemplateSystem = useNewTemplateSystemInt == 1
 	settings.EnableProxyProvider = enableProxyProviderInt == 1
 	settings.DebugEnabled = debugEnabledInt == 1
 
@@ -3209,9 +3235,10 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 		enableShortLinkInt = 1
 	}
 
-	useNewTemplateSystemInt := 1 // default to true
-	if !settings.UseNewTemplateSystem {
-		useNewTemplateSystemInt = 0
+	// Handle template version, default to "v2" for backward compatibility
+	templateVersion := strings.TrimSpace(settings.TemplateVersion)
+	if templateVersion == "" {
+		templateVersion = "v2"
 	}
 
 	enableProxyProviderInt := 0
@@ -3249,7 +3276,7 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, use_new_template_system, enable_proxy_provider, node_order, debug_enabled, debug_log_path, debug_started_at, updated_at)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, enable_short_link, template_version, enable_proxy_provider, node_order, debug_enabled, debug_log_path, debug_started_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
@@ -3261,7 +3288,7 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			enable_probe_binding = excluded.enable_probe_binding,
 			custom_rules_enabled = excluded.custom_rules_enabled,
 			enable_short_link = excluded.enable_short_link,
-			use_new_template_system = excluded.use_new_template_system,
+			template_version = excluded.template_version,
 			enable_proxy_provider = excluded.enable_proxy_provider,
 			node_order = excluded.node_order,
 			debug_enabled = excluded.debug_enabled,
@@ -3270,7 +3297,7 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, useNewTemplateSystemInt, enableProxyProviderInt, nodeOrderJSON, debugEnabledInt, settings.DebugLogPath, settings.DebugStartedAt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, templateVersion, enableProxyProviderInt, nodeOrderJSON, debugEnabledInt, settings.DebugLogPath, settings.DebugStartedAt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 

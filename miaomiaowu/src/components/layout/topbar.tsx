@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Link as LinkIcon, Radar, Users, Files, Zap, Network, Menu, FileCode, Settings, Send } from 'lucide-react'
+import { Activity, Link as LinkIcon, Radar, Users, Files, Zap, Network, Menu, FileCode, Settings, Send, FileStack } from 'lucide-react'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UserMenu } from './user-menu'
 import { useAuthStore } from '@/stores/auth-store'
@@ -42,6 +42,11 @@ const adminNavLinks = [
     title: '订阅管理',
     to: '/subscribe-files',
     icon: Files,
+  },
+  {
+    title: '模板管理',
+    to: '/templates-v3',
+    icon: FileStack,
   },
   {
     title: '规则管理',

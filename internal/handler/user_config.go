@@ -22,7 +22,7 @@ type userConfigRequest struct {
 	EnableProbeBinding      bool    `json:"enable_probe_binding"`
 	CustomRulesEnabled      bool    `json:"custom_rules_enabled"`
 	EnableShortLink         bool    `json:"enable_short_link"`
-	UseNewTemplateSystem    *bool   `json:"use_new_template_system"` // nil means not provided, default true
+	TemplateVersion         string  `json:"template_version"` // "v1", "v2", or "v3"
 	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
 	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
@@ -41,7 +41,7 @@ type userConfigResponse struct {
 	EnableProbeBinding      bool    `json:"enable_probe_binding"`
 	CustomRulesEnabled      bool    `json:"custom_rules_enabled"`
 	EnableShortLink         bool    `json:"enable_short_link"`
-	UseNewTemplateSystem    bool    `json:"use_new_template_system"`
+	TemplateVersion         string  `json:"template_version"` // "v1", "v2", or "v3"
 	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
 	NodeOrder               []int64 `json:"node_order"` // Node display order (array of node IDs)
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
@@ -95,7 +95,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				EnableProbeBinding:      false,
 				CustomRulesEnabled:      true,  // 自定义规则始终启用
 				EnableShortLink:         false,
-				UseNewTemplateSystem:    true,  // 默认使用新模板系统
+				TemplateVersion:         "v2",  // 默认使用v2模板系统
 				EnableProxyProvider:     false,
 				NodeOrder:               []int64{},
 				ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
@@ -122,7 +122,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		EnableProbeBinding:      settings.EnableProbeBinding,
 		CustomRulesEnabled:      true, // 自定义规则始终启用
 		EnableShortLink:         settings.EnableShortLink,
-		UseNewTemplateSystem:    settings.UseNewTemplateSystem,
+		TemplateVersion:         settings.TemplateVersion,
 		EnableProxyProvider:     settings.EnableProxyProvider,
 		NodeOrder:               settings.NodeOrder,
 		ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
@@ -169,10 +169,14 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		cacheExpireMinutes = 0
 	}
 
-	// Handle use_new_template_system, default to true if not provided
-	useNewTemplateSystem := true
-	if payload.UseNewTemplateSystem != nil {
-		useNewTemplateSystem = *payload.UseNewTemplateSystem
+	// Handle template_version, default to "v2" if not provided
+	templateVersion := strings.TrimSpace(payload.TemplateVersion)
+	if templateVersion == "" {
+		templateVersion = "v2"
+	}
+	if templateVersion != "v1" && templateVersion != "v2" && templateVersion != "v3" {
+		writeError(w, http.StatusBadRequest, errors.New("template_version must be 'v1', 'v2', or 'v3'"))
+		return
 	}
 
 	// Validate and sanitize proxy groups source URL
@@ -183,19 +187,19 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	}
 
 	settings := storage.UserSettings{
-		Username:             username,
-		ForceSyncExternal:    payload.ForceSyncExternal,
-		MatchRule:            matchRule,
-		SyncScope:            syncScope,
-		KeepNodeName:         payload.KeepNodeName,
-		CacheExpireMinutes:   cacheExpireMinutes,
-		SyncTraffic:          payload.SyncTraffic,
-		EnableProbeBinding:   payload.EnableProbeBinding,
-		CustomRulesEnabled:   true, // 自定义规则始终启用
-		EnableShortLink:      payload.EnableShortLink,
-		UseNewTemplateSystem: useNewTemplateSystem,
-		EnableProxyProvider:  payload.EnableProxyProvider,
-		NodeOrder:            payload.NodeOrder,
+		Username:            username,
+		ForceSyncExternal:   payload.ForceSyncExternal,
+		MatchRule:           matchRule,
+		SyncScope:           syncScope,
+		KeepNodeName:        payload.KeepNodeName,
+		CacheExpireMinutes:  cacheExpireMinutes,
+		SyncTraffic:         payload.SyncTraffic,
+		EnableProbeBinding:  payload.EnableProbeBinding,
+		CustomRulesEnabled:  true, // 自定义规则始终启用
+		EnableShortLink:     payload.EnableShortLink,
+		TemplateVersion:     templateVersion,
+		EnableProxyProvider: payload.EnableProxyProvider,
+		NodeOrder:           payload.NodeOrder,
 	}
 
 	if err := repo.UpsertUserSettings(r.Context(), settings); err != nil {
@@ -229,7 +233,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		EnableProbeBinding:      settings.EnableProbeBinding,
 		CustomRulesEnabled:      true, // 自定义规则始终启用
 		EnableShortLink:         settings.EnableShortLink,
-		UseNewTemplateSystem:    settings.UseNewTemplateSystem,
+		TemplateVersion:         settings.TemplateVersion,
 		EnableProxyProvider:     settings.EnableProxyProvider,
 		NodeOrder:               settings.NodeOrder,
 		ProxyGroupsSourceURL:    proxyGroupsSourceURL,
