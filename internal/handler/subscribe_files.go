@@ -652,9 +652,9 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		// 获取用户设置
 		settings, err := h.repo.GetUserSettings(r.Context(), username)
 		if err == nil {
-			// 只有在使用新模板系统时才进行校验
-			shouldValidate = settings.UseNewTemplateSystem
-			logger.Info("[创建订阅文件] 用户设置", "username", username, "use_new_template_system", settings.UseNewTemplateSystem, "should_validate", shouldValidate)
+			// 只有在使用v2模板系统时才进行校验
+			shouldValidate = settings.TemplateVersion == "v2"
+			logger.Info("[创建订阅文件] 用户设置", "username", username, "template_version", settings.TemplateVersion, "should_validate", shouldValidate)
 		} else if !errors.Is(err, storage.ErrUserSettingsNotFound) {
 			logger.Info("[创建订阅文件] 获取用户设置失败，使用默认行为(进行校验)", "username", username, "error", err)
 		}

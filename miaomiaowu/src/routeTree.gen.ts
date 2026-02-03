@@ -25,6 +25,7 @@ import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as R404RouteImport } from './routes/404'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates.index'
+import { Route as TemplatesV3IndexRouteImport } from './routes/templates-v3.index'
 import { Route as SubscriptionIndexRouteImport } from './routes/subscription.index'
 import { Route as SubscribeFilesIndexRouteImport } from './routes/subscribe-files.index'
 import { Route as NodesIndexRouteImport } from './routes/nodes.index'
@@ -111,6 +112,11 @@ const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => TemplatesRoute,
 } as any)
+const TemplatesV3IndexRoute = TemplatesV3IndexRouteImport.update({
+  id: '/templates-v3/',
+  path: '/templates-v3/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SubscriptionIndexRoute = SubscriptionIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/nodes/': typeof NodesIndexRoute
   '/subscribe-files/': typeof SubscribeFilesIndexRoute
   '/subscription/': typeof SubscriptionIndexRoute
+  '/templates-v3': typeof TemplatesV3IndexRoute
   '/templates/': typeof TemplatesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/nodes': typeof NodesIndexRoute
   '/subscribe-files': typeof SubscribeFilesIndexRoute
   '/subscription': typeof SubscriptionIndexRoute
+  '/templates-v3': typeof TemplatesV3IndexRoute
   '/templates': typeof TemplatesIndexRoute
 }
 export interface FileRoutesById {
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/nodes/': typeof NodesIndexRoute
   '/subscribe-files/': typeof SubscribeFilesIndexRoute
   '/subscription/': typeof SubscriptionIndexRoute
+  '/templates-v3/': typeof TemplatesV3IndexRoute
   '/templates/': typeof TemplatesIndexRoute
 }
 export interface FileRouteTypes {
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/nodes/'
     | '/subscribe-files/'
     | '/subscription/'
+    | '/templates-v3'
     | '/templates/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/nodes'
     | '/subscribe-files'
     | '/subscription'
+    | '/templates-v3'
     | '/templates'
   id:
     | '__root__'
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '/nodes/'
     | '/subscribe-files/'
     | '/subscription/'
+    | '/templates-v3/'
     | '/templates/'
   fileRoutesById: FileRoutesById
 }
@@ -285,6 +297,7 @@ export interface RootRouteChildren {
   SystemSettingsRoute: typeof SystemSettingsRoute
   TemplatesRoute: typeof TemplatesRouteWithChildren
   UsersRoute: typeof UsersRoute
+  TemplatesV3IndexRoute: typeof TemplatesV3IndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -401,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TemplatesIndexRouteImport
       parentRoute: typeof TemplatesRoute
     }
+    '/templates-v3/': {
+      id: '/templates-v3/'
+      path: '/templates-v3'
+      fullPath: '/templates-v3'
+      preLoaderRoute: typeof TemplatesV3IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/subscription/': {
       id: '/subscription/'
       path: '/'
@@ -515,6 +535,7 @@ const rootRouteChildren: RootRouteChildren = {
   SystemSettingsRoute: SystemSettingsRoute,
   TemplatesRoute: TemplatesRouteWithChildren,
   UsersRoute: UsersRoute,
+  TemplatesV3IndexRoute: TemplatesV3IndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
