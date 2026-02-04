@@ -133,6 +133,11 @@ function TemplatesV3Page() {
       queryClient.invalidateQueries({ queryKey: ['rule-template', editingTemplateName] })
       toast.success('模板保存成功')
       setIsDirty(false)
+      // Close editor after successful save
+      setIsEditorOpen(false)
+      setEditingTemplateName(null)
+      setTemplateContent('')
+      setProxyGroups([])
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '保存失败')
@@ -471,6 +476,9 @@ function TemplatesV3Page() {
                   <Save className="h-4 w-4 mr-2" />
                   保存
                 </Button>
+                <Button variant="outline" onClick={handleCloseEditor}>
+                  关闭
+                </Button>
               </div>
             </div>
           </DialogHeader>
@@ -519,6 +527,7 @@ function TemplatesV3Page() {
                           key={index}
                           group={group}
                           index={index}
+                          allGroupNames={proxyGroups.map(g => g.name)}
                           onChange={handleProxyGroupChange}
                           onDelete={handleProxyGroupDelete}
                           onMoveUp={handleProxyGroupMoveUp}
