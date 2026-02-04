@@ -28,6 +28,8 @@ interface ProxyGroupEditorProps {
   onMoveDown?: (index: number) => void
   isFirst?: boolean
   isLast?: boolean
+  showRegionToggle?: boolean
+  isRegionGroup?: boolean
 }
 
 const GROUP_TYPE_LABELS: Record<ProxyGroupType, string> = {
@@ -48,6 +50,8 @@ export function ProxyGroupEditor({
   onMoveDown,
   isFirst = false,
   isLast = false,
+  showRegionToggle = true,
+  isRegionGroup = false,
 }: ProxyGroupEditorProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -151,31 +155,54 @@ export function ProxyGroupEditor({
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={group.includeAll}
-                    onCheckedChange={(v) => updateField('includeAll', v)}
+                    onCheckedChange={(v) => {
+                      onChange(index, {
+                        ...group,
+                        includeAll: v,
+                        includeAllProxies: v,
+                        includeAllProviders: v,
+                      })
+                    }}
                   />
-                  <span className="text-sm">include-all</span>
+                  <span className="text-sm">代理集合+节点</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={group.includeAllProxies}
-                    onCheckedChange={(v) => updateField('includeAllProxies', v)}
+                    onCheckedChange={(v) => {
+                      const newIncludeAll = v && group.includeAllProviders
+                      onChange(index, {
+                        ...group,
+                        includeAllProxies: v,
+                        includeAll: v ? newIncludeAll : false,
+                      })
+                    }}
                   />
-                  <span className="text-sm">include-all-proxies</span>
+                  <span className="text-sm">代理节点</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={group.includeAllProviders}
-                    onCheckedChange={(v) => updateField('includeAllProviders', v)}
+                    onCheckedChange={(v) => {
+                      const newIncludeAll = v && group.includeAllProxies
+                      onChange(index, {
+                        ...group,
+                        includeAllProviders: v,
+                        includeAll: v ? newIncludeAll : false,
+                      })
+                    }}
                   />
-                  <span className="text-sm">include-all-providers</span>
+                  <span className="text-sm">代理集合</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={group.includeRegionProxyGroups}
-                    onCheckedChange={(v) => updateField('includeRegionProxyGroups', v)}
-                  />
-                  <span className="text-sm">include-region-proxy-groups</span>
-                </div>
+                {showRegionToggle && !isRegionGroup && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={group.includeRegionProxyGroups}
+                      onCheckedChange={(v) => updateField('includeRegionProxyGroups', v)}
+                    />
+                    <span className="text-sm">区域代理组</span>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,23 +1,23 @@
 import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
 
-// Predefined region proxy groups with their filter patterns
+// Predefined region proxy groups with their comprehensive filter patterns
 export const REGION_PROXY_GROUPS = [
-  { name: '🇭🇰 香港', filter: '港|HK|Hong Kong|🇭🇰' },
-  { name: '🇺🇸 美国', filter: '美|US|USA|United States|🇺🇸' },
-  { name: '🇯🇵 日本', filter: '日|JP|Japan|🇯🇵' },
-  { name: '🇸🇬 新加坡', filter: '新|SG|Singapore|🇸🇬' },
-  { name: '🇹🇼 台湾', filter: '台|TW|Taiwan|🇹🇼' },
-  { name: '🇰🇷 韩国', filter: '韩|KR|Korea|🇰🇷' },
-  { name: '🇨🇦 加拿大', filter: '加拿大|CA|Canada|🇨🇦' },
-  { name: '🇬🇧 英国', filter: '英|UK|GB|Britain|🇬🇧' },
-  { name: '🇫🇷 法国', filter: '法|FR|France|🇫🇷' },
-  { name: '🇩🇪 德国', filter: '德|DE|Germany|🇩🇪' },
-  { name: '🇳🇱 荷兰', filter: '荷|NL|Netherlands|🇳🇱' },
-  { name: '🇹🇷 土耳其', filter: '土|TR|Turkey|🇹🇷' },
+  { name: '🇭🇰 香港节点', filter: '🇭🇰|港|\\bHK(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|九龙|Kowloon|新界|沙田|荃湾|葵涌' },
+  { name: '🇺🇸 美国节点', filter: '🇺🇸|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\\bUS(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC' },
+  { name: '🇯🇵 日本节点', filter: '🇯🇵|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\\bJP(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|关西|Kansai|KANSAI' },
+  { name: '🇸🇬 新加坡节点', filter: '🇸🇬|新加坡|坡|狮城|\\bSG(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Singapore|SINGAPORE|SIN' },
+  { name: '🇼🇸 台湾节点', filter: '🇹🇼|🇼🇸|台|新北|彰化|\\bTW(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Taiwan|TAIWAN|TWN|TPE|ROC' },
+  { name: '🇰🇷 韩国节点', filter: '🇰🇷|\\bKR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN' },
+  { name: '🇨🇦 加拿大节点', filter: '🇨🇦|加拿大|\\bCA(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL' },
+  { name: '🇬🇧 英国节点', filter: '🇬🇧|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\\bUK(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|GBR|LHR|MAN' },
+  { name: '🇫🇷 法国节点', filter: '🇫🇷|法国|\\bFR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS' },
+  { name: '🇩🇪 德国节点', filter: '🇩🇪|德国|Germany|GERMANY|\\bDE(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC' },
+  { name: '🇳🇱 荷兰节点', filter: '🇳🇱|荷兰|Netherlands|NETHERLANDS|\\bNL(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|NLD|阿姆斯特丹|AMS' },
+  { name: '🇹🇷 土耳其节点', filter: '🇹🇷|土耳其|Turkey|TURKEY|Türkiye|\\bTR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|TUR|IST|ANK' },
 ] as const
 
-// Generate exclude filter for "Other regions" group
-export const OTHER_REGIONS_EXCLUDE_FILTER = REGION_PROXY_GROUPS.map(r => r.filter).join('|')
+// Comprehensive exclude filter for "Other regions" group
+export const OTHER_REGIONS_EXCLUDE_FILTER = '(^(?!.*(港|\\bHK(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|🇭🇰|九龙|Kowloon|新界|沙田|荃湾|葵涌|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\\bUS(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC|🇺🇸|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\\bJP(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|🇯🇵|关西|Kansai|KANSAI|新加坡|坡|狮城|\\bSG(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Singapore|SINGAPORE|SIN|🇸🇬|台|新北|彰化|\\bTW(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Taiwan|TAIWAN|TWN|TPE|ROC|🇹🇼|\\bKR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN|🇰🇷|加拿大|\\bCA(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL|🇨🇦|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\\bUK(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|GBR|LHR|MAN|🇬🇧|法国|\\bFR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS|🇫🇷|德国|Germany|GERMANY|\\bDE(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC|🇩🇪|荷兰|Netherlands|NETHERLANDS|\\bNL(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|NLD|阿姆斯特丹|AMS|🇳🇱|土耳其|Turkey|TURKEY|Türkiye|\\bTR(?:[-_ ]?\\d+(?:[-_ ]?[A-Za-z]{2,})?)?\\b|TUR|IST|ANK|🇹🇷)).*)'
 
 // Proxy types supported by mihomo/clash
 export const PROXY_TYPES = [
@@ -324,7 +324,7 @@ export function generateRegionProxyGroups(type: ProxyGroupType = 'url-test'): Pr
     const state = {
       ...createDefaultFormState(region.name),
       type,
-      filterKeywords: region.filter.split('|').join(', '),
+      filterKeywords: region.filter, // Keep original regex filter as-is
       includeAllProxies: true,
     }
     state.proxyOrder = getDefaultProxyOrder(state)
@@ -333,9 +333,9 @@ export function generateRegionProxyGroups(type: ProxyGroupType = 'url-test'): Pr
 
   // Add "Other regions" group
   const otherState = {
-    ...createDefaultFormState('🌍 其他地区'),
+    ...createDefaultFormState('🌐 其他地区'),
     type,
-    excludeFilterKeywords: OTHER_REGIONS_EXCLUDE_FILTER.split('|').join(', '),
+    filterKeywords: OTHER_REGIONS_EXCLUDE_FILTER, // Keep original regex filter as-is
     includeAllProxies: true,
   }
   otherState.proxyOrder = getDefaultProxyOrder(otherState)
@@ -346,7 +346,7 @@ export function generateRegionProxyGroups(type: ProxyGroupType = 'url-test'): Pr
 
 // Get region proxy group names
 export function getRegionProxyGroupNames(): string[] {
-  return [...REGION_PROXY_GROUPS.map(r => r.name), '🌍 其他地区']
+  return [...REGION_PROXY_GROUPS.map(r => r.name), '🌐 其他地区']
 }
 
 // Create a blank v3 template

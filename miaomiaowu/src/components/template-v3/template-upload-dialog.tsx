@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Upload, FileText, Plus, RefreshCw } from 'lucide-react'
+import { Upload, FileText, Plus, RefreshCw, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createBlankTemplate } from '@/lib/template-v3-utils'
 import { api } from '@/lib/api'
@@ -17,6 +17,13 @@ interface UserTemplate {
   id: number
   name: string
   rule_source: string
+}
+
+interface SubscribeFile {
+  id: number
+  name: string
+  filename: string
+  description: string
 }
 
 interface TemplateUploadDialogProps {
@@ -34,7 +41,7 @@ export function TemplateUploadDialog({
   onCreate,
   isLoading = false,
 }: TemplateUploadDialogProps) {
-  const [tab, setTab] = useState<'upload' | 'paste' | 'blank' | 'v2import'>('upload')
+  const [tab, setTab] = useState<'upload' | 'paste' | 'blank' | 'v2import' | 'fromSub'>('upload')
   const [pasteContent, setPasteContent] = useState('')
   const [newTemplateName, setNewTemplateName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -46,10 +53,24 @@ export function TemplateUploadDialog({
   const [selectedV2Template, setSelectedV2Template] = useState<string>('')
   const [isFetchingTemplates, setIsFetchingTemplates] = useState(false)
 
+  // From subscription states
+  const [subscribeFiles, setSubscribeFiles] = useState<SubscribeFile[]>([])
+  const [selectedSubscription, setSelectedSubscription] = useState<string>('')
+  const [isFetchingSubscriptions, setIsFetchingSubscriptions] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisPreview, setAnalysisPreview] = useState<string>('')
+
   // Fetch user templates when dialog opens and v2import tab is selected
   useEffect(() => {
     if (open && tab === 'v2import' && userTemplates.length === 0) {
       fetchUserTemplates()
+    }
+  }, [open, tab])
+
+  // Fetch subscriptions when dialog opens and fromSub tab is selected
+  useEffect(() => {
+    if (open && tab === 'fromSub' && subscribeFiles.length === 0) {
+      fetchSubscriptions()
     }
   }, [open, tab])
 
@@ -65,12 +86,26 @@ export function TemplateUploadDialog({
     }
   }
 
+  const fetchSubscriptions = async () => {
+    setIsFetchingSubscriptions(true)
+    try {
+      const response = await api.get('/api/admin/subscribe-files')
+      setSubscribeFiles(response.data.files || [])
+    } catch (error) {
+      toast.error('获取订阅列表失败')
+    } finally {
+      setIsFetchingSubscriptions(false)
+    }
+  }
+
   const resetForm = () => {
     setPasteContent('')
     setNewTemplateName('')
     setSelectedFile(null)
     setSelectedDnsPreset('fake_ip_no_dnsleak')
     setSelectedV2Template('')
+    setSelectedSubscription('')
+    setAnalysisPreview('')
     setTab('upload')
   }
 
@@ -124,8 +159,70 @@ export function TemplateUploadDialog({
     } else if (tab === 'v2import') {
       handleV2Import()
       return // Don't reset form yet, wait for conversion
+    } else if (tab === 'fromSub') {
+      handleFromSubscription()
+      return // Don't reset form yet, wait for analysis
     }
     resetForm()
+  }
+
+  const handleFromSubscription = async () => {
+    if (!selectedSubscription) {
+      toast.error('请选择订阅文件')
+      return
+    }
+    if (!newTemplateName.trim()) {
+      toast.error('请输入模板名称')
+      return
+    }
+
+    setIsAnalyzing(true)
+    try {
+      // Analyze the subscription
+      const response = await api.post('/api/admin/template-v3/analyze-subscription', {
+        subscription_filename: selectedSubscription,
+      })
+
+      const { template_content } = response.data
+
+      let name = newTemplateName.trim()
+      if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
+        name += '__v3.yaml'
+      }
+
+      onCreate(name, template_content)
+      resetForm()
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '分析订阅失败')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  const handleAnalyzePreview = async () => {
+    if (!selectedSubscription) {
+      toast.error('请选择订阅文件')
+      return
+    }
+
+    setIsAnalyzing(true)
+    try {
+      const response = await api.post('/api/admin/template-v3/analyze-subscription', {
+        subscription_filename: selectedSubscription,
+      })
+
+      setAnalysisPreview(response.data.template_content)
+
+      // Auto-fill template name from subscription
+      const sub = subscribeFiles.find(s => s.filename === selectedSubscription)
+      if (sub && !newTemplateName) {
+        setNewTemplateName(sub.name + '__v3')
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || '分析订阅失败')
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const handleV2Import = async () => {
@@ -311,16 +408,16 @@ export function TemplateUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>创建模板</DialogTitle>
           <DialogDescription>
-            上传 YAML 文件、粘贴内容、创建空白模板或从 V2 模板导入
+            上传 YAML 文件、粘贴内容、创建空白模板、从 V2 模板导入或从订阅生成
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-          <TabsList className="w-full grid grid-cols-4">
+          <TabsList className="w-full grid grid-cols-5">
             <TabsTrigger value="upload">
               <Upload className="h-4 w-4 mr-1" />
               上传
@@ -336,6 +433,10 @@ export function TemplateUploadDialog({
             <TabsTrigger value="v2import">
               <RefreshCw className="h-4 w-4 mr-1" />
               V2导入
+            </TabsTrigger>
+            <TabsTrigger value="fromSub">
+              <Wand2 className="h-4 w-4 mr-1" />
+              从订阅
             </TabsTrigger>
           </TabsList>
 
@@ -456,14 +557,80 @@ export function TemplateUploadDialog({
               • 正则表达式会转换为 <code>filter</code> 字段
             </p>
           </TabsContent>
+
+          <TabsContent value="fromSub" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>选择订阅文件</Label>
+              <Select
+                value={selectedSubscription}
+                onValueChange={setSelectedSubscription}
+                disabled={isFetchingSubscriptions}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={isFetchingSubscriptions ? '加载中...' : '选择订阅'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {subscribeFiles.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.filename}>
+                      {sub.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>新模板名称</Label>
+              <Input
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="my_template__v3.yaml"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleAnalyzePreview}
+                disabled={isAnalyzing || !selectedSubscription}
+              >
+                {isAnalyzing ? '分析中...' : '预览分析结果'}
+              </Button>
+            </div>
+
+            {analysisPreview && (
+              <div className="space-y-2">
+                <Label>分析结果预览</Label>
+                <Textarea
+                  value={analysisPreview}
+                  readOnly
+                  className="min-h-[200px] font-mono text-xs"
+                />
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              从已有订阅文件分析代理组配置，智能推断 filter、include-all 等配置。
+              <br />
+              • 自动识别区域节点并生成对应的 filter
+              <br />
+              • 支持 include-all-proxies、include-region-proxy-groups 等配置
+            </p>
+          </TabsContent>
         </Tabs>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={isLoading || isConverting}>
-            {isLoading || isConverting ? '处理中...' : tab === 'v2import' ? '转换并创建' : '创建'}
+          <Button onClick={handleSubmit} disabled={isLoading || isConverting || isAnalyzing}>
+            {isLoading || isConverting || isAnalyzing
+              ? '处理中...'
+              : tab === 'v2import'
+                ? '转换并创建'
+                : tab === 'fromSub'
+                  ? '生成并创建'
+                  : '创建'}
           </Button>
         </DialogFooter>
       </DialogContent>
