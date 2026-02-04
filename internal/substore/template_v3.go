@@ -305,14 +305,32 @@ func (p *TemplateV3Processor) removeGlobalConfig(rootMap *yaml.Node, key string)
 
 // processProxyGroups processes all proxy groups in the template
 func (p *TemplateV3Processor) processProxyGroups(groupsNode *yaml.Node) error {
+	var newContent []*yaml.Node
 	for _, groupNode := range groupsNode.Content {
 		if groupNode.Kind == yaml.MappingNode {
 			if err := p.processProxyGroup(groupNode); err != nil {
 				return err
 			}
+			// Check if proxies is empty after processing
+			if !p.hasEmptyProxies(groupNode) {
+				newContent = append(newContent, groupNode)
+			}
 		}
 	}
+	groupsNode.Content = newContent
 	return nil
+}
+
+// hasEmptyProxies checks if a proxy group has empty or no proxies
+func (p *TemplateV3Processor) hasEmptyProxies(groupNode *yaml.Node) bool {
+	for i := 0; i < len(groupNode.Content); i += 2 {
+		if groupNode.Content[i].Value == "proxies" {
+			valueNode := groupNode.Content[i+1]
+			return valueNode.Kind == yaml.SequenceNode && len(valueNode.Content) == 0
+		}
+	}
+	// No proxies field found, treat as empty
+	return true
 }
 
 // processProxyGroup processes a single proxy group
@@ -460,9 +478,8 @@ func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 func (p *TemplateV3Processor) calculateProxyNodes(group ProxyGroupV3) []string {
 	var nodes []string
 
-	// Check if any include option is set
-	hasIncludeOption := group.IncludeAll || group.IncludeAllProxies ||
-		group.IncludeType != "" || group.Filter != ""
+	// Check if explicit include option is set (not counting filter as include)
+	hasExplicitInclude := group.IncludeAll || group.IncludeAllProxies || group.IncludeType != ""
 
 	if group.IncludeAll || group.IncludeAllProxies {
 		for _, proxy := range p.allProxies {
@@ -475,8 +492,8 @@ func (p *TemplateV3Processor) calculateProxyNodes(group ProxyGroupV3) []string {
 				nodes = append(nodes, proxy.Name)
 			}
 		}
-	} else if !hasIncludeOption && (group.Filter != "" || group.ExcludeFilter != "") {
-		// If no include option is set but filter/exclude-filter is present,
+	} else if !hasExplicitInclude && (group.Filter != "" || group.ExcludeFilter != "") {
+		// If no explicit include option is set but filter/exclude-filter is present,
 		// implicitly include all proxies (mihomo behavior)
 		for _, proxy := range p.allProxies {
 			nodes = append(nodes, proxy.Name)

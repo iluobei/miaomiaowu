@@ -27,12 +27,16 @@ import { Badge } from '@/components/ui/badge'
 import { ProxyGroupEditor } from '@/components/template-v3/proxy-group-editor'
 import { TemplatePreview } from '@/components/template-v3/template-preview'
 import { TemplateUploadDialog } from '@/components/template-v3/template-upload-dialog'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import {
   extractProxyGroups,
   updateProxyGroups,
   createDefaultFormState,
   parseTemplate,
   generateProxyGroupsPreview,
+  generateRegionProxyGroups,
+  getRegionProxyGroupNames,
   PROXY_NODES_MARKER,
   PROXY_PROVIDERS_MARKER,
   PROXY_NODES_DISPLAY,
@@ -69,6 +73,7 @@ function TemplatesV3Page() {
   const [proxyGroups, setProxyGroups] = useState<ProxyGroupFormState[]>([])
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
   const [isDirty, setIsDirty] = useState(false)
+  const [enableRegionProxyGroups, setEnableRegionProxyGroups] = useState(false)
 
   // Delete/Rename state
   const [deletingTemplateName, setDeletingTemplateName] = useState<string | null>(null)
@@ -349,6 +354,27 @@ function TemplatesV3Page() {
     setPreviewContent('')
     setIsDirty(false)
     setIsCloseConfirmOpen(false)
+    setEnableRegionProxyGroups(false)
+  }
+
+  // Region proxy group names for checking
+  const regionGroupNames = getRegionProxyGroupNames()
+
+  // Handle region proxy groups toggle
+  const handleRegionProxyGroupsToggle = (enabled: boolean) => {
+    setEnableRegionProxyGroups(enabled)
+    setIsDirty(true)
+
+    if (enabled) {
+      // Add region proxy groups at the end
+      const regionGroups = generateRegionProxyGroups('url-test')
+      // Filter out any existing region groups to avoid duplicates
+      const nonRegionGroups = proxyGroups.filter(g => !regionGroupNames.includes(g.name))
+      setProxyGroups([...nonRegionGroups, ...regionGroups])
+    } else {
+      // Remove region proxy groups
+      setProxyGroups(proxyGroups.filter(g => !regionGroupNames.includes(g.name)))
+    }
   }
 
   // Handle proxy group change
@@ -533,6 +559,19 @@ function TemplatesV3Page() {
                 <TabsContent value="visual" className="flex-1 overflow-hidden mt-4">
                   <ScrollArea className="h-full pr-4">
                     <div className="space-y-3">
+                      {/* Region Proxy Groups Toggle */}
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="region-toggle" className="font-medium">开启区域代理组</Label>
+                          <span className="text-xs text-muted-foreground">自动添加按地区分类的代理组</span>
+                        </div>
+                        <Switch
+                          id="region-toggle"
+                          checked={enableRegionProxyGroups}
+                          onCheckedChange={handleRegionProxyGroupsToggle}
+                        />
+                      </div>
+
                       {proxyGroups.map((group, index) => (
                         <ProxyGroupEditor
                           key={index}
@@ -545,6 +584,8 @@ function TemplatesV3Page() {
                           onMoveDown={handleProxyGroupMoveDown}
                           isFirst={index === 0}
                           isLast={index === proxyGroups.length - 1}
+                          showRegionToggle={enableRegionProxyGroups}
+                          isRegionGroup={regionGroupNames.includes(group.name)}
                         />
                       ))}
                       <Button variant="outline" className="w-full" onClick={handleAddProxyGroup}>

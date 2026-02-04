@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/substore"
 
@@ -46,6 +47,18 @@ func (h *TemplateV3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleConvertV2Template(w, r)
+	case path == "/analyze-subscription" || path == "/analyze-subscription/":
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleAnalyzeSubscription(w, r)
+	case path == "/region-filters" || path == "/region-filters/":
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleGetRegionFilters(w, r)
 	default:
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
@@ -377,5 +390,85 @@ func (h *TemplateV3Handler) handleConvertV2Template(w http.ResponseWriter, r *ht
 		"proxy_groups":   result.ProxyGroups,
 		"rules":          result.Rules,
 		"rule_providers": result.RuleProviders,
+	})
+}
+
+// analyzeSubscriptionRequest represents the request body for analyzing a subscription
+type analyzeSubscriptionRequest struct {
+	SubscriptionFilename string `json:"subscription_filename"` // Filename in subscribes/
+	SubscriptionContent  string `json:"subscription_content"`  // Or direct content
+}
+
+// handleAnalyzeSubscription analyzes a subscription and generates V3 template config
+func (h *TemplateV3Handler) handleAnalyzeSubscription(w http.ResponseWriter, r *http.Request) {
+	var req analyzeSubscriptionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "无效的请求格式")
+		return
+	}
+
+	var content string
+
+	// Get content from filename or direct content
+	if req.SubscriptionFilename != "" {
+		// Security: Prevent directory traversal
+		if strings.Contains(req.SubscriptionFilename, "..") || strings.Contains(req.SubscriptionFilename, "/") {
+			writeJSONError(w, http.StatusBadRequest, "无效的文件名")
+			return
+		}
+
+		filePath := filepath.Join("subscribes", req.SubscriptionFilename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				writeJSONError(w, http.StatusNotFound, "订阅文件不存在")
+			} else {
+				writeJSONError(w, http.StatusInternalServerError, "读取订阅文件失败")
+			}
+			return
+		}
+		content = string(data)
+	} else if req.SubscriptionContent != "" {
+		content = req.SubscriptionContent
+	} else {
+		writeJSONError(w, http.StatusBadRequest, "请提供订阅文件名或内容")
+		return
+	}
+
+	// Get all node names from database for better analysis
+	username := auth.UsernameFromContext(r.Context())
+	nodes, err := h.repo.ListNodes(r.Context(), username)
+	var allNodeNames []string
+	if err == nil {
+		for _, node := range nodes {
+			if node.Enabled {
+				allNodeNames = append(allNodeNames, node.NodeName)
+			}
+		}
+	}
+
+	// Analyze the subscription
+	result, err := substore.AnalyzeSubscription(content, allNodeNames)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "分析订阅失败: "+err.Error())
+		return
+	}
+
+	// Generate V3 template
+	templateContent := substore.GenerateV3TemplateFromAnalysis(result)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"analysis":         result,
+		"template_content": templateContent,
+	})
+}
+
+// handleGetRegionFilters returns the available region filters
+func (h *TemplateV3Handler) handleGetRegionFilters(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"region_filters":       substore.ExtendedRegionFilters,
+		"other_exclude_filter": substore.OtherRegionExcludeFilter,
 	})
 }
