@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -197,8 +196,8 @@ func injectProxiesIntoTemplate(templateContent string, proxies []map[string]any)
 	}
 	encoder.Close()
 
-	// Post-process to convert Unicode escape sequences back to original characters
-	result := unescapeUnicode(buf.String())
+	// Post-process to remove quotes from emoji strings and convert Unicode escapes
+	result := RemoveUnicodeEscapeQuotes(buf.String())
 	return result, nil
 }
 
@@ -247,23 +246,11 @@ func addKeyValueToNode(node *yaml.Node, key string, value any) {
 func anyToYAMLNode(v any) *yaml.Node {
 	switch val := v.(type) {
 	case string:
-		node := &yaml.Node{
+		return &yaml.Node{
 			Kind:  yaml.ScalarNode,
+			Tag:   "!!str",
 			Value: val,
 		}
-		// Check if string contains non-ASCII characters (like emoji)
-		// If so, don't set Tag to avoid Unicode escaping
-		hasNonASCII := false
-		for _, r := range val {
-			if r > 127 {
-				hasNonASCII = true
-				break
-			}
-		}
-		if !hasNonASCII {
-			node.Tag = "!!str"
-		}
-		return node
 	case int:
 		return &yaml.Node{
 			Kind:  yaml.ScalarNode,
@@ -352,53 +339,4 @@ func boolToString(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-// unescapeUnicode converts Unicode escape sequences back to original characters
-// Handles both \uXXXX (BMP) and \UXXXXXXXX (supplementary planes like emoji)
-func unescapeUnicode(s string) string {
-	var result strings.Builder
-	i := 0
-	for i < len(s) {
-		if i+1 < len(s) && s[i] == '\\' {
-			if s[i+1] == 'U' && i+10 <= len(s) {
-				// \UXXXXXXXX format (8 hex digits)
-				hexStr := s[i+2 : i+10]
-				if codePoint, err := parseHex(hexStr); err == nil {
-					result.WriteRune(rune(codePoint))
-					i += 10
-					continue
-				}
-			} else if s[i+1] == 'u' && i+6 <= len(s) {
-				// \uXXXX format (4 hex digits)
-				hexStr := s[i+2 : i+6]
-				if codePoint, err := parseHex(hexStr); err == nil {
-					result.WriteRune(rune(codePoint))
-					i += 6
-					continue
-				}
-			}
-		}
-		result.WriteByte(s[i])
-		i++
-	}
-	return result.String()
-}
-
-// parseHex parses a hex string to an integer
-func parseHex(s string) (int64, error) {
-	var result int64
-	for _, c := range s {
-		result *= 16
-		if c >= '0' && c <= '9' {
-			result += int64(c - '0')
-		} else if c >= 'a' && c <= 'f' {
-			result += int64(c - 'a' + 10)
-		} else if c >= 'A' && c <= 'F' {
-			result += int64(c - 'A' + 10)
-		} else {
-			return 0, errors.New("invalid hex character")
-		}
-	}
-	return result, nil
 }

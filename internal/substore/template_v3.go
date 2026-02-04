@@ -7,6 +7,53 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// RegionProxyGroup defines a predefined region proxy group
+type RegionProxyGroup struct {
+	Name   string
+	Filter string
+}
+
+// Predefined region proxy groups
+var RegionProxyGroups = []RegionProxyGroup{
+	{Name: "🇭🇰 香港", Filter: "港|HK|Hong Kong|🇭🇰"},
+	{Name: "🇺🇸 美国", Filter: "美|US|USA|United States|🇺🇸"},
+	{Name: "🇯🇵 日本", Filter: "日|JP|Japan|🇯🇵"},
+	{Name: "🇸🇬 新加坡", Filter: "新|SG|Singapore|🇸🇬"},
+	{Name: "🇹🇼 台湾", Filter: "台|TW|Taiwan|🇹🇼"},
+	{Name: "🇰🇷 韩国", Filter: "韩|KR|Korea|🇰🇷"},
+	{Name: "🇨🇦 加拿大", Filter: "加拿大|CA|Canada|🇨🇦"},
+	{Name: "🇬🇧 英国", Filter: "英|UK|GB|Britain|🇬🇧"},
+	{Name: "🇫🇷 法国", Filter: "法|FR|France|🇫🇷"},
+	{Name: "🇩🇪 德国", Filter: "德|DE|Germany|🇩🇪"},
+	{Name: "🇳🇱 荷兰", Filter: "荷|NL|Netherlands|🇳🇱"},
+	{Name: "🇹🇷 土耳其", Filter: "土|TR|Turkey|🇹🇷"},
+}
+
+// Special markers for proxy order
+const (
+	ProxyNodesMarker     = "__PROXY_NODES__"
+	ProxyProvidersMarker = "__PROXY_PROVIDERS__"
+)
+
+// GetOtherRegionsExcludeFilter returns the exclude filter for "Other regions" group
+func GetOtherRegionsExcludeFilter() string {
+	var filters []string
+	for _, r := range RegionProxyGroups {
+		filters = append(filters, r.Filter)
+	}
+	return strings.Join(filters, "|")
+}
+
+// GetRegionProxyGroupNames returns all region proxy group names including "Other regions"
+func GetRegionProxyGroupNames() []string {
+	names := make([]string, 0, len(RegionProxyGroups)+1)
+	for _, r := range RegionProxyGroups {
+		names = append(names, r.Name)
+	}
+	names = append(names, "🌍 其他地区")
+	return names
+}
+
 // AdapterType represents the type of proxy adapter (matching mihomo's definition)
 type AdapterType string
 
@@ -40,25 +87,26 @@ const (
 
 // ProxyGroupV3 represents a proxy group with mihomo-style include/filter options
 type ProxyGroupV3 struct {
-	Name                string   `yaml:"name"`
-	Type                string   `yaml:"type"`
-	Proxies             []string `yaml:"proxies,omitempty"`
-	Use                 []string `yaml:"use,omitempty"`                   // 引入代理集合
-	IncludeAll          bool     `yaml:"include-all,omitempty"`           // 引入所有出站代理和代理集合
-	IncludeType         string   `yaml:"include-type,omitempty"`          // 根据节点类型引入节点
-	IncludeAllProxies   bool     `yaml:"include-all-proxies,omitempty"`   // 引入所有出站代理
-	IncludeAllProviders bool     `yaml:"include-all-providers,omitempty"` // 引入所有代理集合
-	Filter              string   `yaml:"filter,omitempty"`                // 筛选节点的正则表达式
-	ExcludeFilter       string   `yaml:"exclude-filter,omitempty"`        // 排除节点的正则表达式
-	ExcludeType         string   `yaml:"exclude-type,omitempty"`          // 根据类型排除节点
-	URL                 string   `yaml:"url,omitempty"`
-	Interval            int      `yaml:"interval,omitempty"`
-	Tolerance           int      `yaml:"tolerance,omitempty"`
-	Lazy                bool     `yaml:"lazy,omitempty"`
-	DisableUDP          bool     `yaml:"disable-udp,omitempty"`
-	Strategy            string   `yaml:"strategy,omitempty"`
-	InterfaceName       string   `yaml:"interface-name,omitempty"`
-	RoutingMark         int      `yaml:"routing-mark,omitempty"`
+	Name                     string   `yaml:"name"`
+	Type                     string   `yaml:"type"`
+	Proxies                  []string `yaml:"proxies,omitempty"`
+	Use                      []string `yaml:"use,omitempty"`                            // 引入代理集合
+	IncludeAll               bool     `yaml:"include-all,omitempty"`                    // 引入所有出站代理和代理集合
+	IncludeType              string   `yaml:"include-type,omitempty"`                   // 根据节点类型引入节点
+	IncludeAllProxies        bool     `yaml:"include-all-proxies,omitempty"`            // 引入所有出站代理
+	IncludeAllProviders      bool     `yaml:"include-all-providers,omitempty"`          // 引入所有代理集合
+	IncludeRegionProxyGroups bool     `yaml:"include-region-proxy-groups,omitempty"`    // 引入地区代理组
+	Filter                   string   `yaml:"filter,omitempty"`                         // 筛选节点的正则表达式
+	ExcludeFilter            string   `yaml:"exclude-filter,omitempty"`                 // 排除节点的正则表达式
+	ExcludeType              string   `yaml:"exclude-type,omitempty"`                   // 根据类型排除节点
+	URL                      string   `yaml:"url,omitempty"`
+	Interval                 int      `yaml:"interval,omitempty"`
+	Tolerance                int      `yaml:"tolerance,omitempty"`
+	Lazy                     bool     `yaml:"lazy,omitempty"`
+	DisableUDP               bool     `yaml:"disable-udp,omitempty"`
+	Strategy                 string   `yaml:"strategy,omitempty"`
+	InterfaceName            string   `yaml:"interface-name,omitempty"`
+	RoutingMark              int      `yaml:"routing-mark,omitempty"`
 }
 
 // ProxyNode represents a proxy node with its type
@@ -69,17 +117,21 @@ type ProxyNode struct {
 
 // TemplateV3Processor processes v3 templates with mihomo-style proxy group options
 type TemplateV3Processor struct {
-	allProxies    []ProxyNode          // All available proxy nodes
-	proxyGroups   []string             // Names of proxy groups (for reference)
-	providers     map[string][]string  // Provider name -> proxy names
+	allProxies          []ProxyNode         // All available proxy nodes
+	proxyGroups         []string            // Names of proxy groups (for reference)
+	providers           map[string][]string // Provider name -> proxy names
+	regionGroupsAdded   bool                // Whether region proxy groups have been added
+	regionGroupNames    []string            // Names of region proxy groups
 }
 
 // NewTemplateV3Processor creates a new v3 template processor
 func NewTemplateV3Processor(proxies []ProxyNode, providers map[string][]string) *TemplateV3Processor {
 	return &TemplateV3Processor{
-		allProxies:  proxies,
-		providers:   providers,
-		proxyGroups: []string{},
+		allProxies:        proxies,
+		providers:         providers,
+		proxyGroups:       []string{},
+		regionGroupsAdded: false,
+		regionGroupNames:  GetRegionProxyGroupNames(),
 	}
 }
 
@@ -97,19 +149,42 @@ func (p *TemplateV3Processor) ProcessTemplate(templateContent string, proxies []
 	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
 		rootMap := root.Content[0]
 		if rootMap.Kind == yaml.MappingNode {
+			var proxyGroupsIndex int = -1
+			var addRegionProxyGroups bool = false
+
+			// First pass: find proxy-groups and check for add-region-proxy-groups
 			for i := 0; i < len(rootMap.Content); i += 2 {
 				keyNode := rootMap.Content[i]
 				valueNode := rootMap.Content[i+1]
 
+				if keyNode.Value == "add-region-proxy-groups" {
+					addRegionProxyGroups = valueNode.Value == "true"
+				}
 				if keyNode.Value == "proxy-groups" && valueNode.Kind == yaml.SequenceNode {
-					// First pass: collect all proxy group names
-					p.collectProxyGroupNames(valueNode)
-					// Second pass: process each proxy group
-					if err := p.processProxyGroups(valueNode); err != nil {
-						return "", err
-					}
+					proxyGroupsIndex = i + 1
 				}
 			}
+
+			// Process proxy-groups if found
+			if proxyGroupsIndex >= 0 {
+				valueNode := rootMap.Content[proxyGroupsIndex]
+
+				// If add-region-proxy-groups is true, insert region groups at the beginning
+				if addRegionProxyGroups {
+					p.insertRegionProxyGroups(valueNode)
+				}
+
+				// Collect all proxy group names (including newly added region groups)
+				p.collectProxyGroupNames(valueNode)
+
+				// Process each proxy group
+				if err := p.processProxyGroups(valueNode); err != nil {
+					return "", err
+				}
+			}
+
+			// Remove add-region-proxy-groups from output
+			p.removeGlobalConfig(rootMap, "add-region-proxy-groups")
 		}
 	}
 
@@ -140,6 +215,92 @@ func (p *TemplateV3Processor) collectProxyGroupNames(groupsNode *yaml.Node) {
 			}
 		}
 	}
+}
+
+// insertRegionProxyGroups inserts predefined region proxy groups at the beginning
+func (p *TemplateV3Processor) insertRegionProxyGroups(groupsNode *yaml.Node) {
+	if p.regionGroupsAdded {
+		return
+	}
+
+	var newGroups []*yaml.Node
+
+	// Create region proxy groups
+	for _, region := range RegionProxyGroups {
+		groupNode := p.createRegionGroupNode(region.Name, region.Filter, "")
+		newGroups = append(newGroups, groupNode)
+	}
+
+	// Create "Other regions" group with exclude filter
+	otherRegionNode := p.createRegionGroupNode("🌍 其他地区", "", GetOtherRegionsExcludeFilter())
+	newGroups = append(newGroups, otherRegionNode)
+
+	// Prepend new groups to existing groups
+	groupsNode.Content = append(newGroups, groupsNode.Content...)
+	p.regionGroupsAdded = true
+}
+
+// createRegionGroupNode creates a YAML node for a region proxy group
+func (p *TemplateV3Processor) createRegionGroupNode(name, filter, excludeFilter string) *yaml.Node {
+	groupNode := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+
+	// Add name
+	groupNode.Content = append(groupNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+		&yaml.Node{Kind: yaml.ScalarNode, Value: name},
+	)
+
+	// Add type (url-test)
+	groupNode.Content = append(groupNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "type"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "url-test"},
+	)
+
+	// Add include-all-proxies
+	groupNode.Content = append(groupNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "include-all-proxies"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"},
+	)
+
+	// Add filter or exclude-filter
+	if filter != "" {
+		groupNode.Content = append(groupNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "filter"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: filter},
+		)
+	}
+	if excludeFilter != "" {
+		groupNode.Content = append(groupNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "exclude-filter"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: excludeFilter},
+		)
+	}
+
+	// Add url-test options
+	groupNode.Content = append(groupNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "url"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "https://www.gstatic.com/generate_204"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "interval"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "300"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tolerance"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "50"},
+	)
+
+	return groupNode
+}
+
+// removeGlobalConfig removes a global config key from the root map
+func (p *TemplateV3Processor) removeGlobalConfig(rootMap *yaml.Node, key string) {
+	newContent := make([]*yaml.Node, 0, len(rootMap.Content))
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value != key {
+			newContent = append(newContent, rootMap.Content[i], rootMap.Content[i+1])
+		}
+	}
+	rootMap.Content = newContent
 }
 
 // processProxyGroups processes all proxy groups in the template
@@ -203,6 +364,8 @@ func (p *TemplateV3Processor) parseProxyGroup(groupNode *yaml.Node) ProxyGroupV3
 			group.IncludeAllProxies = valueNode.Value == "true"
 		case "include-all-providers":
 			group.IncludeAllProviders = valueNode.Value == "true"
+		case "include-region-proxy-groups":
+			group.IncludeRegionProxyGroups = valueNode.Value == "true"
 		case "filter":
 			group.Filter = valueNode.Value
 		case "exclude-filter":
@@ -230,71 +393,50 @@ func (p *TemplateV3Processor) parseProxyGroup(groupNode *yaml.Node) ProxyGroupV3
 func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 	var result []string
 
-	// Start with explicitly defined proxies
-	result = append(result, group.Proxies...)
+	// Handle include-region-proxy-groups first (add region group names to proxies)
+	if group.IncludeRegionProxyGroups {
+		result = append(result, p.regionGroupNames...)
+	}
 
-	// Check if any include option is set
-	hasIncludeOption := group.IncludeAll || group.IncludeAllProxies || group.IncludeAllProviders ||
-		group.IncludeType != "" || len(group.Use) > 0
+	// Calculate proxy nodes (from include-all-proxies, include-type, filter)
+	proxyNodes := p.calculateProxyNodes(group)
 
-	// Handle include-all (includes both proxies and providers)
-	if group.IncludeAll {
-		// Add all proxy nodes
-		for _, proxy := range p.allProxies {
-			result = append(result, proxy.Name)
-		}
-		// Add all provider proxies (if not include-all-providers=false)
-		if !group.IncludeAllProviders {
-			for _, providerProxies := range p.providers {
-				result = append(result, providerProxies...)
-			}
-		}
-	} else {
-		// Handle include-all-proxies
-		if group.IncludeAllProxies {
-			for _, proxy := range p.allProxies {
-				result = append(result, proxy.Name)
-			}
-		}
+	// Calculate proxy providers (from use, include-all-providers)
+	proxyProviders := p.calculateProxyProviders(group)
 
-		// Handle include-type (filter by proxy type)
-		if group.IncludeType != "" {
-			types := parseTypeList(group.IncludeType)
-			for _, proxy := range p.allProxies {
-				if containsType(types, proxy.Type) {
-					result = append(result, proxy.Name)
-				}
-			}
+	// Check if proxies list contains markers
+	hasNodesMarker := false
+	hasProvidersMarker := false
+	for _, proxy := range group.Proxies {
+		if proxy == ProxyNodesMarker {
+			hasNodesMarker = true
 		}
-
-		// Handle use (specific providers)
-		if len(group.Use) > 0 && !group.IncludeAllProviders {
-			for _, providerName := range group.Use {
-				if providerProxies, ok := p.providers[providerName]; ok {
-					result = append(result, providerProxies...)
-				}
-			}
-		}
-
-		// Handle include-all-providers
-		if group.IncludeAllProviders {
-			for _, providerProxies := range p.providers {
-				result = append(result, providerProxies...)
-			}
-		}
-
-		// If no include option is set but filter/exclude-filter is present,
-		// implicitly include all proxies (mihomo behavior)
-		if !hasIncludeOption && (group.Filter != "" || group.ExcludeFilter != "") {
-			for _, proxy := range p.allProxies {
-				result = append(result, proxy.Name)
-			}
+		if proxy == ProxyProvidersMarker {
+			hasProvidersMarker = true
 		}
 	}
 
-	// Apply filter (include matching)
+	// If markers are present, use them to determine order
+	if hasNodesMarker || hasProvidersMarker {
+		for _, proxy := range group.Proxies {
+			if proxy == ProxyNodesMarker {
+				result = append(result, proxyNodes...)
+			} else if proxy == ProxyProvidersMarker {
+				result = append(result, proxyProviders...)
+			} else {
+				result = append(result, proxy)
+			}
+		}
+	} else {
+		// No markers, use default order: proxies, then nodes, then providers
+		result = append(result, group.Proxies...)
+		result = append(result, proxyNodes...)
+		result = append(result, proxyProviders...)
+	}
+
+	// Apply filter (include matching) - only to proxy nodes, not to proxy groups
 	if group.Filter != "" {
-		result = applyFilter(result, group.Filter)
+		result = applyFilterPreservingGroups(result, group.Filter, p.proxyGroups)
 	}
 
 	// Apply exclude-filter (exclude matching)
@@ -311,6 +453,87 @@ func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 	// Remove duplicates while preserving order
 	result = removeDuplicates(result)
 
+	return result
+}
+
+// calculateProxyNodes calculates proxy nodes from include options
+func (p *TemplateV3Processor) calculateProxyNodes(group ProxyGroupV3) []string {
+	var nodes []string
+
+	// Check if any include option is set
+	hasIncludeOption := group.IncludeAll || group.IncludeAllProxies ||
+		group.IncludeType != "" || group.Filter != ""
+
+	if group.IncludeAll || group.IncludeAllProxies {
+		for _, proxy := range p.allProxies {
+			nodes = append(nodes, proxy.Name)
+		}
+	} else if group.IncludeType != "" {
+		types := parseTypeList(group.IncludeType)
+		for _, proxy := range p.allProxies {
+			if containsType(types, proxy.Type) {
+				nodes = append(nodes, proxy.Name)
+			}
+		}
+	} else if !hasIncludeOption && (group.Filter != "" || group.ExcludeFilter != "") {
+		// If no include option is set but filter/exclude-filter is present,
+		// implicitly include all proxies (mihomo behavior)
+		for _, proxy := range p.allProxies {
+			nodes = append(nodes, proxy.Name)
+		}
+	}
+
+	return nodes
+}
+
+// calculateProxyProviders calculates proxy providers from include options
+func (p *TemplateV3Processor) calculateProxyProviders(group ProxyGroupV3) []string {
+	var providers []string
+
+	if group.IncludeAll || group.IncludeAllProviders {
+		for _, providerProxies := range p.providers {
+			providers = append(providers, providerProxies...)
+		}
+	} else if len(group.Use) > 0 {
+		for _, providerName := range group.Use {
+			if providerProxies, ok := p.providers[providerName]; ok {
+				providers = append(providers, providerProxies...)
+			}
+		}
+	}
+
+	return providers
+}
+
+// applyFilterPreservingGroups applies filter but preserves proxy group names
+func applyFilterPreservingGroups(proxies []string, filterPattern string, proxyGroups []string) []string {
+	patterns := strings.Split(filterPattern, "`")
+	groupSet := make(map[string]bool)
+	for _, g := range proxyGroups {
+		groupSet[g] = true
+	}
+
+	var result []string
+	for _, proxyName := range proxies {
+		// Always keep proxy groups
+		if groupSet[proxyName] {
+			result = append(result, proxyName)
+			continue
+		}
+
+		// Apply filter to non-group proxies
+		for _, pattern := range patterns {
+			pattern = strings.TrimSpace(pattern)
+			if pattern == "" {
+				continue
+			}
+			matched, err := regexp.MatchString(pattern, proxyName)
+			if err == nil && matched {
+				result = append(result, proxyName)
+				break
+			}
+		}
+	}
 	return result
 }
 
@@ -377,14 +600,15 @@ func (p *TemplateV3Processor) updateProxiesInNode(groupNode *yaml.Node, proxies 
 // removeMihomoFields removes mihomo-specific fields from the proxy group
 func (p *TemplateV3Processor) removeMihomoFields(groupNode *yaml.Node) {
 	fieldsToRemove := map[string]bool{
-		"use":                   true,
-		"include-all":          true,
-		"include-type":         true,
-		"include-all-proxies":  true,
-		"include-all-providers": true,
-		"filter":               true,
-		"exclude-filter":       true,
-		"exclude-type":         true,
+		"use":                        true,
+		"include-all":                true,
+		"include-type":               true,
+		"include-all-proxies":        true,
+		"include-all-providers":      true,
+		"include-region-proxy-groups": true,
+		"filter":                     true,
+		"exclude-filter":             true,
+		"exclude-type":               true,
 	}
 
 	newContent := make([]*yaml.Node, 0, len(groupNode.Content))

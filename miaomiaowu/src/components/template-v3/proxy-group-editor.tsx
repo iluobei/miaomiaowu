@@ -9,11 +9,19 @@ import { ChevronDown, ChevronUp, Trash2, GripVertical } from 'lucide-react'
 import { useState } from 'react'
 import { KeywordFilterInput } from './keyword-filter-input'
 import { ProxyTypeSelect } from './proxy-type-select'
-import { PROXY_GROUP_TYPES, type ProxyGroupFormState, type ProxyGroupType } from '@/lib/template-v3-utils'
+import { ProxyGroupSelect } from './proxy-group-select'
+import {
+  PROXY_GROUP_TYPES,
+  hasProxyNodes,
+  hasProxyProviders,
+  type ProxyGroupFormState,
+  type ProxyGroupType,
+} from '@/lib/template-v3-utils'
 
 interface ProxyGroupEditorProps {
   group: ProxyGroupFormState
   index: number
+  allGroupNames: string[]
   onChange: (index: number, group: ProxyGroupFormState) => void
   onDelete: (index: number) => void
   onMoveUp?: (index: number) => void
@@ -33,6 +41,7 @@ const GROUP_TYPE_LABELS: Record<ProxyGroupType, string> = {
 export function ProxyGroupEditor({
   group,
   index,
+  allGroupNames,
   onChange,
   onDelete,
   onMoveUp,
@@ -160,8 +169,26 @@ export function ProxyGroupEditor({
                   />
                   <span className="text-sm">include-all-providers</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={group.includeRegionProxyGroups}
+                    onCheckedChange={(v) => updateField('includeRegionProxyGroups', v)}
+                  />
+                  <span className="text-sm">include-region-proxy-groups</span>
+                </div>
               </div>
             </div>
+
+            {/* Row 2.5: Proxy Order (groups, nodes, providers) */}
+            <ProxyGroupSelect
+              label="代理顺序 (拖拽排序)"
+              value={group.proxyOrder}
+              onChange={(v) => updateField('proxyOrder', v)}
+              availableGroups={allGroupNames.filter(n => n !== group.name)}
+              showNodesMarker={hasProxyNodes(group)}
+              showProvidersMarker={hasProxyProviders(group)}
+              placeholder="选择要引用的代理组"
+            />
 
             {/* Row 3-4: Filter Keywords */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
