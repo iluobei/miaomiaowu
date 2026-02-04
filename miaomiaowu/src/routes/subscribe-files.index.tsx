@@ -56,6 +56,7 @@ type SubscribeFile = {
   type: 'create' | 'import' | 'upload'
   filename: string
   auto_sync_custom_rules: boolean
+  template_filename: string
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -260,6 +261,19 @@ function SubscribeFilesPage() {
   // 获取代理组配置
   const { data: proxyGroupCategories = [] } = useProxyGroupCategories()
 
+  // 获取用户配置，用于判断模板版本
+  const { data: userConfig } = useQuery({
+    queryKey: ['user-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/config')
+      return response.data as { template_version: string }
+    },
+    enabled: Boolean(auth.accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
+  const templateVersion = userConfig?.template_version || 'v2'
+  const isV3Mode = templateVersion === 'v3'
+
   // 日期格式化器
   const dateFormatter = useMemo(
     () =>
@@ -326,6 +340,7 @@ function SubscribeFilesPage() {
     name: '',
     description: '',
     filename: '',
+    template_filename: '',
     expire: undefined as Date | undefined,
   })
 
@@ -399,6 +414,18 @@ function SubscribeFilesPage() {
   })
 
   const files = filesData?.files ?? []
+
+  // 获取 V3 模板列表
+  const { data: templatesData } = useQuery({
+    queryKey: ['template-v3-list'],
+    queryFn: async () => {
+      const response = await api.get('/api/admin/template-v3')
+      return response.data as { templates: Array<{ name: string; filename: string }> }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+
+  const v3Templates = templatesData?.templates ?? []
 
   // 获取外部订阅列表
   const { data: externalSubsData, isLoading: isExternalSubsLoading } = useQuery({
@@ -546,7 +573,7 @@ function SubscribeFilesPage() {
       toast.success('订阅信息已更新')
       setEditMetadataDialogOpen(false)
       setEditingMetadata(null)
-      setMetadataForm({ name: '', description: '', filename: '' })
+      setMetadataForm({ name: '', description: '', filename: '', template_filename: '' })
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '更新失败')
@@ -1374,6 +1401,7 @@ function SubscribeFilesPage() {
       name: file.name,
       description: file.description,
       filename: file.filename,
+      template_filename: file.template_filename || '',
       expire: file.expire_at ? new Date(file.expire_at) : undefined,
     })
     setEditMetadataDialogOpen(true)
@@ -1395,6 +1423,7 @@ function SubscribeFilesPage() {
         name: metadataForm.name,
         description: metadataForm.description,
         filename: metadataForm.filename,
+        template_filename: metadataForm.template_filename || null,
         expire_at: metadataForm.expire
           ? (() => {
               const endOfDay = new Date(metadataForm.expire)
@@ -2636,6 +2665,51 @@ function SubscribeFilesPage() {
                     cellClassName: 'text-center',
                     width: '90px'
                   },
+                  // V3 模板绑定列（仅 v3 模式显示）
+                  ...(isV3Mode ? [{
+                    header: 'V3 模板',
+                    cell: (file: SubscribeFile) => (
+                      <Select
+                        value={file.template_filename || '_none_'}
+                        onValueChange={(value) => {
+                          const templateFilename = value === '_none_' ? '' : value
+                          updateMetadataMutation.mutate({
+                            id: file.id,
+                            data: {
+                              name: file.name,
+                              description: file.description,
+                              auto_sync_custom_rules: file.auto_sync_custom_rules,
+                              template_filename: templateFilename,
+                            }
+                          }, {
+                            onSuccess: () => {
+                              if (templateFilename) {
+                                toast.success(`已绑定模板: ${templateFilename}`)
+                              } else {
+                                toast.success('已解除模板绑定')
+                              }
+                            }
+                          })
+                        }}
+                        disabled={updateMetadataMutation.isPending}
+                      >
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <SelectValue placeholder="选择模板" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none_">无</SelectItem>
+                          {v3Templates.map((template) => (
+                            <SelectItem key={template.filename} value={template.filename}>
+                              {template.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ),
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center',
+                    width: '160px'
+                  }] as DataTableColumn<SubscribeFile>[] : []),
                   {
                     header: '操作',
                     cell: (file) => (
@@ -3917,7 +3991,7 @@ function SubscribeFilesPage() {
         setEditMetadataDialogOpen(open)
         if (!open) {
           setEditingMetadata(null)
-          setMetadataForm({ name: '', description: '', filename: '', expire: undefined })
+          setMetadataForm({ name: '', description: '', filename: '', template_filename: '', expire: undefined })
         }
       }}>
         <DialogContent className='sm:max-w-lg'>
@@ -3985,6 +4059,28 @@ function SubscribeFilesPage() {
               </Popover>
               <p className='text-xs text-muted-foreground'>
                 设置订阅链接的过期时间，过期后链接将失效
+              </p>
+            </div>
+            <div className='space-y-2'>
+              <Label>绑定 V3 模板（可选）</Label>
+              <Select
+                value={metadataForm.template_filename || '_none_'}
+                onValueChange={(value) => setMetadataForm({ ...metadataForm, template_filename: value === '_none_' ? '' : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder='不绑定模板' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='_none_'>不绑定模板</SelectItem>
+                  {v3Templates.map((template) => (
+                    <SelectItem key={template.filename} value={template.filename}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>
+                绑定模板后，获取订阅时将根据模板动态生成配置。绑定模板会自动禁用规则同步。
               </p>
             </div>
           </div>

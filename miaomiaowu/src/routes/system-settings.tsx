@@ -43,7 +43,7 @@ function SystemSettingsPage() {
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
   const [enableShortLink, setEnableShortLink] = useState(false)
-  const [useNewTemplateSystem, setUseNewTemplateSystem] = useState(true)
+  const [templateVersion, setTemplateVersion] = useState<'v1' | 'v2' | 'v3'>('v2')
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
   const [proxyGroupsSourceUrl, setProxyGroupsSourceUrl] = useState('')
   const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
@@ -66,7 +66,7 @@ function SystemSettingsPage() {
         sync_traffic: boolean
         enable_probe_binding: boolean
         enable_short_link: boolean
-        use_new_template_system: boolean
+        template_version: string
         enable_proxy_provider: boolean
         proxy_groups_source_url: string
         client_compatibility_mode: boolean
@@ -88,7 +88,7 @@ function SystemSettingsPage() {
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
       setEnableShortLink(userConfig.enable_short_link || false)
-      setUseNewTemplateSystem(userConfig.use_new_template_system !== false) // 默认为 true
+      setTemplateVersion((userConfig.template_version as 'v1' | 'v2' | 'v3') || 'v2')
       setEnableProxyProvider(userConfig.enable_proxy_provider || false)
       setProxyGroupsSourceUrl(userConfig.proxy_groups_source_url || '')
       setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
@@ -107,7 +107,7 @@ function SystemSettingsPage() {
       sync_traffic: boolean
       enable_probe_binding: boolean
       enable_short_link: boolean
-      use_new_template_system: boolean
+      template_version: string
       enable_proxy_provider: boolean
       proxy_groups_source_url: string
       client_compatibility_mode: boolean
@@ -130,7 +130,7 @@ function SystemSettingsPage() {
       setSyncTraffic(variables.sync_traffic)
       setEnableProbeBinding(variables.enable_probe_binding)
       setEnableShortLink(variables.enable_short_link)
-      setUseNewTemplateSystem(variables.use_new_template_system)
+      setTemplateVersion(variables.template_version as 'v1' | 'v2' | 'v3')
       setEnableProxyProvider(variables.enable_proxy_provider)
       setProxyGroupsSourceUrl(variables.proxy_groups_source_url || '')
       setClientCompatibilityMode(variables.client_compatibility_mode)
@@ -154,7 +154,7 @@ function SystemSettingsPage() {
     sync_traffic: boolean
     enable_probe_binding: boolean
     enable_short_link: boolean
-    use_new_template_system: boolean
+    template_version: string
     enable_proxy_provider: boolean
     proxy_groups_source_url: string
     client_compatibility_mode: boolean
@@ -170,7 +170,7 @@ function SystemSettingsPage() {
       sync_traffic: syncTraffic,
       enable_probe_binding: enableProbeBinding,
       enable_short_link: enableShortLink,
-      use_new_template_system: useNewTemplateSystem,
+      template_version: templateVersion,
       enable_proxy_provider: enableProxyProvider,
       proxy_groups_source_url: proxyGroupsSourceUrl,
       client_compatibility_mode: clientCompatibilityMode,
@@ -410,27 +410,51 @@ function SystemSettingsPage() {
                   />
                 </div>
 
-                {/* 新模板系统 */}
-                <div className='flex items-center justify-between rounded-lg border p-3'>
-                  <div className='flex items-center gap-2'>
-                    <Label htmlFor='use-new-template-system' className='cursor-pointer'>
-                      新模板系统
-                    </Label>
+                {/* 模板版本选择 */}
+                <div className='rounded-lg border p-3'>
+                  <div className='flex items-center gap-2 mb-3'>
+                    <Label className='font-medium'>模板版本</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后使用数据库模板（支持网页端管理），关闭后使用 rule_templates 目录下的模板文件。</p>
+                        <p>v1：使用 rule_templates 目录下的文件模板</p>
+                        <p>v2：使用数据库模板（通用后端，支持网页端管理）</p>
+                        <p>v3：使用新版模板系统（类 mihomo 配置，支持可视化编辑）</p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
-                  <Switch
-                    id='use-new-template-system'
-                    checked={useNewTemplateSystem}
-                    onCheckedChange={(checked) => updateConfig({ use_new_template_system: checked })}
-                    disabled={loadingConfig || updateConfigMutation.isPending}
-                  />
+                  <div className='flex gap-2'>
+                    {[
+                      { value: 'v1', label: '旧 (v1)' },
+                      { value: 'v2', label: '通用后端 (v2)' },
+                      { value: 'v3', label: '新 (v3)' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type='button'
+                        onClick={() => updateConfig({ template_version: option.value })}
+                        disabled={loadingConfig || updateConfigMutation.isPending}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                          templateVersion === option.value
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-background hover:bg-muted border-border'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
+                          templateVersion === option.value
+                            ? 'border-primary-foreground'
+                            : 'border-muted-foreground'
+                        }`}>
+                          {templateVersion === option.value && (
+                            <span className='w-1.5 h-1.5 rounded-full bg-primary-foreground' />
+                          )}
+                        </span>
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* 代理集合 */}

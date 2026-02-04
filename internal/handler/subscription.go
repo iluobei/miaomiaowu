@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"miaomiaowu/internal/logger"
@@ -304,18 +305,35 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// 文件读取
-	stepStart = time.Now()
-	data, err := os.ReadFile(resolvedPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeError(w, http.StatusNotFound, err)
+	// 模板生成逻辑：如果订阅绑定了 V3 模板，使用模板生成配置
+	var data []byte
+	if hasSubscribeFile && subscribeFile.TemplateFilename != "" {
+		stepStart = time.Now()
+		templateData, err := h.generateFromTemplate(r.Context(), username, subscribeFile)
+		if err != nil {
+			logger.Info("[Subscription] 模板生成失败，回退到原始文件", "error", err, "template", subscribeFile.TemplateFilename)
+			// 回退到直接读取文件
 		} else {
-			writeError(w, http.StatusInternalServerError, err)
+			data = templateData
+			logger.Info("[⏱️ 耗时监测] 模板生成完成", "step", "template_generate", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
 		}
-		return
 	}
-	logger.Info("[⏱️ 耗时监测] 文件读取完成", "step", "file_read", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
+
+	// 文件读取（如果模板生成失败或未绑定模板）
+	if len(data) == 0 {
+		stepStart = time.Now()
+		var readErr error
+		data, readErr = os.ReadFile(resolvedPath)
+		if readErr != nil {
+			if errors.Is(readErr, os.ErrNotExist) {
+				writeError(w, http.StatusNotFound, readErr)
+			} else {
+				writeError(w, http.StatusInternalServerError, readErr)
+			}
+			return
+		}
+		logger.Info("[⏱️ 耗时监测] 文件读取完成", "step", "file_read", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
+	}
 
 	// MMW 同步
 	stepStart = time.Now()
@@ -1707,4 +1725,85 @@ func sortProxiesByNodeOrder(ctx context.Context, repo *storage.TrafficRepository
 
 	logger.Info("[Subscription] 按节点顺序排序完成", "count", len(proxiesWithOrder), "user", username)
 	return nil
+}
+
+// generateFromTemplate 基于绑定的 V3 模板生成订阅配置
+// 代理节点来源：节点表（nodes），代理集合来源：代理集合表（proxy_provider_configs）
+func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username string, subscribeFile storage.SubscribeFile) ([]byte, error) {
+	if subscribeFile.TemplateFilename == "" {
+		return nil, errors.New("订阅未绑定模板")
+	}
+
+	// 1. 读取模板文件
+	templatePath := filepath.Join("rule_templates", subscribeFile.TemplateFilename)
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return nil, fmt.Errorf("读取模板文件失败: %w", err)
+	}
+	logger.Info("[模板生成] 读取模板文件", "template", subscribeFile.TemplateFilename, "bytes", len(templateContent))
+
+	// 2. 从节点表获取用户的所有代理节点
+	nodes, err := h.repo.ListNodes(ctx, username)
+	if err != nil {
+		return nil, fmt.Errorf("获取节点列表失败: %w", err)
+	}
+
+	// 将节点转换为 proxies 格式（[]map[string]any）
+	var proxies []map[string]any
+	for _, node := range nodes {
+		if !node.Enabled {
+			continue // 跳过禁用的节点
+		}
+		// ClashConfig 是 JSON 格式的字符串，需要解析
+		var proxyConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &proxyConfig); err != nil {
+			logger.Info("[模板生成] 解析节点配置失败，跳过", "node", node.NodeName, "error", err)
+			continue
+		}
+		// 确保节点名称正确（使用数据库中的名称）
+		proxyConfig["name"] = node.NodeName
+		proxies = append(proxies, proxyConfig)
+	}
+	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies))
+
+	// 3. 从代理集合表获取用户的代理集合配置（用于 proxy-providers）
+	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, username)
+	if err != nil {
+		logger.Info("[模板生成] 获取代理集合配置失败", "error", err)
+		// 不是致命错误，继续处理
+	}
+
+	// 构建 providers map：provider name -> proxy names
+	providers := make(map[string][]string)
+	for _, config := range providerConfigs {
+		// 获取该代理集合下的所有节点名称
+		// 通过 tag 字段匹配：节点的 tag 等于代理集合的名称
+		var providerProxyNames []string
+		for _, node := range nodes {
+			if node.Enabled && node.Tag == config.Name {
+				providerProxyNames = append(providerProxyNames, node.NodeName)
+			}
+		}
+		if len(providerProxyNames) > 0 {
+			providers[config.Name] = providerProxyNames
+		}
+	}
+	logger.Info("[模板生成] 从代理集合表获取代理集合", "count", len(providerConfigs), "with_nodes", len(providers))
+
+	// 4. 使用 TemplateV3Processor 处理模板
+	processor := substore.NewTemplateV3Processor(nil, providers)
+	result, err := processor.ProcessTemplate(string(templateContent), proxies)
+	if err != nil {
+		return nil, fmt.Errorf("处理模板失败: %w", err)
+	}
+
+	// 5. 注入代理节点到proxies字段（与预览保持一致）
+	result, err = injectProxiesIntoTemplate(result, proxies)
+	if err != nil {
+		return nil, fmt.Errorf("注入代理节点失败: %w", err)
+	}
+
+	logger.Info("[模板生成] 模板处理完成", "subscribe", subscribeFile.Name, "template", subscribeFile.TemplateFilename, "result_bytes", len(result))
+
+	return []byte(result), nil
 }

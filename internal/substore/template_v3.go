@@ -145,6 +145,9 @@ func (p *TemplateV3Processor) ProcessTemplate(templateContent string, proxies []
 	// Extract proxy nodes from the provided proxies
 	p.allProxies = extractProxyNodes(proxies)
 
+	// Track which proxy nodes are used (for adding to top-level proxies)
+	usedProxyNames := make(map[string]bool)
+
 	// Find and process proxy-groups
 	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
 		rootMap := root.Content[0]
@@ -181,10 +184,16 @@ func (p *TemplateV3Processor) ProcessTemplate(templateContent string, proxies []
 				if err := p.processProxyGroups(valueNode); err != nil {
 					return "", err
 				}
+
+				// Collect used proxy names from processed proxy-groups
+				usedProxyNames = p.collectUsedProxyNames(valueNode)
 			}
 
 			// Remove add-region-proxy-groups from output
 			p.removeGlobalConfig(rootMap, "add-region-proxy-groups")
+
+			// Add or update top-level proxies with used proxy configs
+			p.updateTopLevelProxies(rootMap, proxies, usedProxyNames)
 		}
 	}
 
@@ -806,4 +815,125 @@ func parseHexString(s string) (int64, bool) {
 		}
 	}
 	return result, true
+}
+
+// collectUsedProxyNames collects all proxy names used in processed proxy-groups
+func (p *TemplateV3Processor) collectUsedProxyNames(groupsNode *yaml.Node) map[string]bool {
+	usedNames := make(map[string]bool)
+	proxyGroupNames := make(map[string]bool)
+
+	// First, collect all proxy group names
+	for _, name := range p.proxyGroups {
+		proxyGroupNames[name] = true
+	}
+	for _, name := range p.regionGroupNames {
+		proxyGroupNames[name] = true
+	}
+
+	// Collect proxy names from each group (excluding group names and built-in keywords)
+	for _, groupNode := range groupsNode.Content {
+		if groupNode.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i < len(groupNode.Content); i += 2 {
+			if groupNode.Content[i].Value == "proxies" {
+				proxiesNode := groupNode.Content[i+1]
+				if proxiesNode.Kind == yaml.SequenceNode {
+					for _, proxyNode := range proxiesNode.Content {
+						name := proxyNode.Value
+						// Exclude group names and built-in keywords
+						if !proxyGroupNames[name] && name != "DIRECT" && name != "REJECT" && name != "PASS" {
+							usedNames[name] = true
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return usedNames
+}
+
+// updateTopLevelProxies adds or updates the top-level proxies list with used proxy configs
+func (p *TemplateV3Processor) updateTopLevelProxies(rootMap *yaml.Node, proxies []map[string]any, usedProxyNames map[string]bool) {
+	if len(usedProxyNames) == 0 {
+		return
+	}
+
+	// Build a map of proxy name to config
+	proxyConfigMap := make(map[string]map[string]any)
+	for _, proxy := range proxies {
+		if name, ok := proxy["name"].(string); ok {
+			proxyConfigMap[name] = proxy
+		}
+	}
+
+	// Create ordered list of proxies (maintain order from p.allProxies)
+	var orderedProxies []map[string]any
+	for _, proxyNode := range p.allProxies {
+		if usedProxyNames[proxyNode.Name] {
+			if config, exists := proxyConfigMap[proxyNode.Name]; exists {
+				orderedProxies = append(orderedProxies, config)
+			}
+		}
+	}
+
+	if len(orderedProxies) == 0 {
+		return
+	}
+
+	// Find existing proxies index or create new one
+	var proxiesIndex int = -1
+	for i := 0; i < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value == "proxies" {
+			proxiesIndex = i + 1
+			break
+		}
+	}
+
+	// Convert proxies to YAML nodes
+	proxiesYAML, err := yaml.Marshal(orderedProxies)
+	if err != nil {
+		return
+	}
+
+	var proxiesNode yaml.Node
+	if err := yaml.Unmarshal(proxiesYAML, &proxiesNode); err != nil {
+		return
+	}
+
+	// proxiesNode is a DocumentNode containing the actual sequence
+	if proxiesNode.Kind != yaml.DocumentNode || len(proxiesNode.Content) == 0 {
+		return
+	}
+	actualProxiesNode := proxiesNode.Content[0]
+
+	if proxiesIndex >= 0 {
+		// Replace existing proxies
+		rootMap.Content[proxiesIndex] = actualProxiesNode
+	} else {
+		// Insert proxies after dns (or at the beginning if dns not found)
+		insertIndex := 0
+		for i := 0; i < len(rootMap.Content); i += 2 {
+			key := rootMap.Content[i].Value
+			// Insert after common config keys
+			if key == "dns" || key == "mode" || key == "log-level" || key == "allow-lan" || key == "port" || key == "socks-port" {
+				insertIndex = i + 2
+			}
+		}
+
+		// Create key node
+		keyNode := &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: "proxies",
+		}
+
+		// Insert at the calculated position
+		newContent := make([]*yaml.Node, 0, len(rootMap.Content)+2)
+		newContent = append(newContent, rootMap.Content[:insertIndex]...)
+		newContent = append(newContent, keyNode, actualProxiesNode)
+		newContent = append(newContent, rootMap.Content[insertIndex:]...)
+		rootMap.Content = newContent
+	}
 }
