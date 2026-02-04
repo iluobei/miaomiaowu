@@ -40,6 +40,12 @@ func (h *TemplateV3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handlePreviewTemplate(w, r)
+	case path == "/convert-v2" || path == "/convert-v2/":
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleConvertV2Template(w, r)
 	default:
 		http.Error(w, "Not found", http.StatusNotFound)
 	}
@@ -339,4 +345,37 @@ func boolToString(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// convertV2Request represents the request body for converting a v2 template
+type convertV2Request struct {
+	Content string `json:"content"` // V2 template content (ACL4SSR format)
+}
+
+// handleConvertV2Template converts a v2 template to v3 format
+func (h *TemplateV3Handler) handleConvertV2Template(w http.ResponseWriter, r *http.Request) {
+	var req convertV2Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "无效的请求格式")
+		return
+	}
+
+	if strings.TrimSpace(req.Content) == "" {
+		writeJSONError(w, http.StatusBadRequest, "模板内容不能为空")
+		return
+	}
+
+	// Convert v2 to v3
+	result, err := substore.ConvertACLToV3(req.Content)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "转换失败: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"proxy_groups":   result.ProxyGroups,
+		"rules":          result.Rules,
+		"rule_providers": result.RuleProviders,
+	})
 }

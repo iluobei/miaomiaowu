@@ -298,17 +298,20 @@ export function updateProxyGroups(content: string, groups: ProxyGroupFormState[]
   return serializeTemplate(template)
 }
 
+// Display names for markers in preview (Chinese for better user understanding)
+export const PROXY_NODES_DISPLAY = '⛓️‍💥 代理节点'
+export const PROXY_PROVIDERS_DISPLAY = '📦 代理集合'
+
 // Generate proxy-groups YAML preview from form states
 export function generateProxyGroupsPreview(groups: ProxyGroupFormState[]): string {
   const configs = groups.map(formStateToConfig).map(config => {
-    // Filter out markers from proxies for preview display
+    // Replace markers with Chinese display names for preview
     if (config.proxies) {
-      config.proxies = config.proxies.filter(
-        p => p !== PROXY_NODES_MARKER && p !== PROXY_PROVIDERS_MARKER
-      )
-      if (config.proxies.length === 0) {
-        delete config.proxies
-      }
+      config.proxies = config.proxies.map(p => {
+        if (p === PROXY_NODES_MARKER) return PROXY_NODES_DISPLAY
+        if (p === PROXY_PROVIDERS_MARKER) return PROXY_PROVIDERS_DISPLAY
+        return p
+      })
     }
     return config
   })
