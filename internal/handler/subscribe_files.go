@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"miaomiaowu/internal/storage"
+	"miaomiaowu/internal/substore"
 	"miaomiaowu/internal/validator"
 
 	"gopkg.in/yaml.v3"
@@ -391,6 +392,17 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	if req.AutoSyncCustomRules != nil {
 		existing.AutoSyncCustomRules = *req.AutoSyncCustomRules
 	}
+	// 更新模板绑定（绑定模板后禁用规则同步）
+	templateJustBound := false
+	if req.TemplateFilename != nil {
+		existing.TemplateFilename = *req.TemplateFilename
+		// 绑定模板后自动禁用规则同步，因为配置将由模板生成
+		if *req.TemplateFilename != "" {
+			existing.AutoSyncCustomRules = false
+			templateJustBound = true
+			logger.Info("[订阅更新] 绑定模板，已禁用规则同步", "subscribe_id", existing.ID, "template", *req.TemplateFilename)
+		}
+	}
 	if req.ExpireAt != nil {
 		expireAt, parseErr := parseExpireAt(req.ExpireAt)
 		if parseErr != nil {
@@ -472,6 +484,23 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 		}()
 	}
 
+	// 如果绑定了V3模板，从模板重新生成订阅文件
+	if templateJustBound && updated.TemplateFilename != "" {
+		go func() {
+			ctx := context.Background()
+			username := auth.UsernameFromContext(r.Context())
+			if username == "" {
+				logger.Info("[模板生成] 无法获取用户名，跳过模板生成", "subscribe_id", updated.ID)
+				return
+			}
+			if err := h.regenerateFromTemplate(ctx, username, updated); err != nil {
+				logger.Info("[模板生成] 生成失败", "subscribe_id", updated.ID, "template", updated.TemplateFilename, "error", err)
+			} else {
+				logger.Info("[模板生成] 生成成功", "subscribe_id", updated.ID, "template", updated.TemplateFilename)
+			}
+		}()
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"file": convertSubscribeFile(updated),
 	})
@@ -549,6 +578,7 @@ type subscribeFileRequest struct {
 	Type                string  `json:"type"`
 	Filename            string  `json:"filename"`
 	AutoSyncCustomRules *bool   `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
+	TemplateFilename    *string `json:"template_filename,omitempty"`      // 绑定的 V3 模板文件名
 	ExpireAt            *string `json:"expire_at,omitempty"`
 }
 
@@ -560,6 +590,7 @@ type subscribeFileDTO struct {
 	Filename            string     `json:"filename"`
 	ExpireAt            *time.Time `json:"expire_at,omitempty"`
 	AutoSyncCustomRules bool       `json:"auto_sync_custom_rules"`
+	TemplateFilename    string     `json:"template_filename"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
 	LatestVersion       int64      `json:"latest_version,omitempty"`
@@ -574,6 +605,7 @@ func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 		Filename:            file.Filename,
 		ExpireAt:            file.ExpireAt,
 		AutoSyncCustomRules: file.AutoSyncCustomRules,
+		TemplateFilename:    file.TemplateFilename,
 		CreatedAt:           file.CreatedAt,
 		UpdatedAt:           file.UpdatedAt,
 	}
@@ -1298,4 +1330,89 @@ func copyMap(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+// regenerateFromTemplate 从V3模板重新生成订阅文件
+func (h *subscribeFilesHandler) regenerateFromTemplate(ctx context.Context, username string, subscribeFile storage.SubscribeFile) error {
+	if subscribeFile.TemplateFilename == "" {
+		return errors.New("订阅未绑定模板")
+	}
+
+	// 1. 读取模板文件
+	templatePath := filepath.Join("rule_templates", subscribeFile.TemplateFilename)
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return fmt.Errorf("读取模板文件失败: %w", err)
+	}
+	logger.Info("[模板生成] 读取模板文件", "template", subscribeFile.TemplateFilename, "bytes", len(templateContent))
+
+	// 2. 从节点表获取用户的所有代理节点
+	nodes, err := h.repo.ListNodes(ctx, username)
+	if err != nil {
+		return fmt.Errorf("获取节点列表失败: %w", err)
+	}
+
+	// 将节点转换为 proxies 格式（[]map[string]any）
+	var proxies []map[string]any
+	for _, node := range nodes {
+		if !node.Enabled {
+			continue // 跳过禁用的节点
+		}
+		// ClashConfig 是 JSON 格式的字符串，需要解析
+		var proxyConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &proxyConfig); err != nil {
+			logger.Info("[模板生成] 解析节点配置失败，跳过", "node", node.NodeName, "error", err)
+			continue
+		}
+		// 确保节点名称正确（使用数据库中的名称）
+		proxyConfig["name"] = node.NodeName
+		proxies = append(proxies, proxyConfig)
+	}
+	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies))
+
+	// 3. 从代理集合表获取用户的代理集合配置（用于 proxy-providers）
+	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, username)
+	if err != nil {
+		logger.Info("[模板生成] 获取代理集合配置失败", "error", err)
+		// 不是致命错误，继续处理
+	}
+
+	// 构建 providers map：provider name -> proxy names
+	providers := make(map[string][]string)
+	for _, config := range providerConfigs {
+		// 获取该代理集合下的所有节点名称
+		// 通过 tag 字段匹配：节点的 tag 等于代理集合的名称
+		var providerProxyNames []string
+		for _, node := range nodes {
+			if node.Enabled && node.Tag == config.Name {
+				providerProxyNames = append(providerProxyNames, node.NodeName)
+			}
+		}
+		if len(providerProxyNames) > 0 {
+			providers[config.Name] = providerProxyNames
+		}
+	}
+	logger.Info("[模板生成] 从代理集合表获取代理集合", "count", len(providerConfigs), "with_nodes", len(providers))
+
+	// 4. 使用 TemplateV3Processor 处理模板
+	processor := substore.NewTemplateV3Processor(nil, providers)
+	result, err := processor.ProcessTemplate(string(templateContent), proxies)
+	if err != nil {
+		return fmt.Errorf("处理模板失败: %w", err)
+	}
+
+	// 5. 注入代理节点到proxies字段（与预览保持一致）
+	result, err = injectProxiesIntoTemplate(result, proxies)
+	if err != nil {
+		return fmt.Errorf("注入代理节点失败: %w", err)
+	}
+
+	// 6. 写入订阅文件
+	subscribePath := filepath.Join("subscribes", subscribeFile.Filename)
+	if err := os.WriteFile(subscribePath, []byte(result), 0644); err != nil {
+		return fmt.Errorf("写入订阅文件失败: %w", err)
+	}
+
+	logger.Info("[模板生成] 模板处理完成", "subscribe", subscribeFile.Name, "template", subscribeFile.TemplateFilename, "result_bytes", len(result))
+	return nil
 }

@@ -5,6 +5,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { UserMenu } from './user-menu'
 import { useAuthStore } from '@/stores/auth-store'
 import { profileQueryFn } from '@/lib/profile'
+import { api } from '@/lib/api'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,10 +85,29 @@ export function Topbar() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const isAdmin = Boolean(profile?.is_admin)
+  // 获取用户配置，用于判断模板版本
+  const { data: userConfig } = useQuery({
+    queryKey: ['user-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/user/config')
+      return response.data as { template_version: string }
+    },
+    enabled: Boolean(auth.accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
 
-  // 计算所有导航链接
-  const allNavLinks = isAdmin ? [...baseNavLinks, ...adminNavLinks] : baseNavLinks
+  const isAdmin = Boolean(profile?.is_admin)
+  const templateVersion = userConfig?.template_version || 'v2'
+
+  // 计算所有导航链接，根据模板版本过滤
+  const filteredAdminLinks = adminNavLinks.filter(link => {
+    // 模板管理只在 v3 模式下显示
+    if (link.to === '/templates-v3') {
+      return templateVersion === 'v3'
+    }
+    return true
+  })
+  const allNavLinks = isAdmin ? [...baseNavLinks, ...filteredAdminLinks] : baseNavLinks
   const totalLinks = allNavLinks.length
 
   // 计算需要隐藏文字的按钮数量（从后往前）

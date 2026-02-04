@@ -29,6 +29,12 @@ func (h *TemplateV3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/template-v3")
 
 	switch {
+	case path == "" || path == "/":
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleListTemplates(w, r)
 	case path == "/process" || path == "/process/":
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -470,5 +476,46 @@ func (h *TemplateV3Handler) handleGetRegionFilters(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(map[string]any{
 		"region_filters":       substore.ExtendedRegionFilters,
 		"other_exclude_filter": substore.OtherRegionExcludeFilter,
+	})
+}
+
+// handleListTemplates 返回所有 V3 模板列表
+// 扫描 rule_templates 目录中以 _v3.yaml 结尾的文件
+func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.Request) {
+	templatesDir := "rule_templates"
+
+	entries, err := os.ReadDir(templatesDir)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "读取模板目录失败: "+err.Error())
+		return
+	}
+
+	type templateInfo struct {
+		Name     string `json:"name"`     // 显示名称（去掉 _v3.yaml 后缀）
+		Filename string `json:"filename"` // 完整文件名
+	}
+
+	var templates []templateInfo
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// 只返回 V3 模板（以 _v3.yaml 或 __v3.yaml 结尾）
+		if strings.HasSuffix(name, "_v3.yaml") || strings.HasSuffix(name, "__v3.yaml") {
+			displayName := strings.TrimSuffix(name, ".yaml")
+			displayName = strings.TrimSuffix(displayName, "_v3")
+			displayName = strings.TrimSuffix(displayName, "__v3")
+			displayName = strings.ReplaceAll(displayName, "_", " ")
+			templates = append(templates, templateInfo{
+				Name:     displayName,
+				Filename: name,
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"templates": templates,
 	})
 }
