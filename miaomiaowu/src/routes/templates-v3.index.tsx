@@ -33,6 +33,10 @@ import {
   createDefaultFormState,
   parseTemplate,
   generateProxyGroupsPreview,
+  PROXY_NODES_MARKER,
+  PROXY_PROVIDERS_MARKER,
+  PROXY_NODES_DISPLAY,
+  PROXY_PROVIDERS_DISPLAY,
   type ProxyGroupFormState,
 } from '@/lib/template-v3-utils'
 
@@ -410,6 +414,13 @@ function TemplatesV3Page() {
     setIsDirty(true)
   }
 
+  // Replace markers with Chinese display names for preview
+  const formatTemplateForDisplay = (content: string) => {
+    return content
+      .replace(new RegExp(PROXY_NODES_MARKER, 'g'), PROXY_NODES_DISPLAY)
+      .replace(new RegExp(PROXY_PROVIDERS_MARKER, 'g'), PROXY_PROVIDERS_DISPLAY)
+  }
+
   // Table columns
   const columns: DataTableColumn<string>[] = [
     {
@@ -610,7 +621,7 @@ function TemplatesV3Page() {
                   <Card className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full">
                       <pre className="text-xs p-4 font-mono whitespace-pre-wrap break-all">
-                        {listPreviewTemplateContent}
+                        {formatTemplateForDisplay(listPreviewTemplateContent)}
                       </pre>
                     </ScrollArea>
                   </Card>
