@@ -24,8 +24,8 @@ type userConfigRequest struct {
 	EnableShortLink         bool    `json:"enable_short_link"`
 	TemplateVersion         string  `json:"template_version"` // "v1", "v2", or "v3"
 	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
-	NodeOrder               []int64 `json:"node_order"`            // Node display order (array of node IDs)
-	NodeNameFilter          string  `json:"node_name_filter"`      // Regex pattern to filter out nodes by name during sync
+	NodeOrder               []int64 `json:"node_order"`       // Node display order (array of node IDs)
+	NodeNameFilter          string  `json:"node_name_filter"` // Regex pattern to filter out nodes by name during sync
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
 	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
 	SilentMode              bool    `json:"silent_mode"`               // Silent mode: return 404 for all requests except subscription
@@ -44,8 +44,8 @@ type userConfigResponse struct {
 	EnableShortLink         bool    `json:"enable_short_link"`
 	TemplateVersion         string  `json:"template_version"` // "v1", "v2", or "v3"
 	EnableProxyProvider     bool    `json:"enable_proxy_provider"`
-	NodeOrder               []int64 `json:"node_order"`            // Node display order (array of node IDs)
-	NodeNameFilter          string  `json:"node_name_filter"`      // Regex pattern to filter out nodes by name during sync
+	NodeOrder               []int64 `json:"node_order"`       // Node display order (array of node IDs)
+	NodeNameFilter          string  `json:"node_name_filter"` // Regex pattern to filter out nodes by name during sync
 	ProxyGroupsSourceURL    string  `json:"proxy_groups_source_url"`
 	ClientCompatibilityMode bool    `json:"client_compatibility_mode"` // Auto-filter incompatible nodes for clients
 	SilentMode              bool    `json:"silent_mode"`               // Silent mode: return 404 for all requests except subscription
@@ -95,12 +95,12 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				CacheExpireMinutes:      0,
 				SyncTraffic:             false,
 				EnableProbeBinding:      false,
-				CustomRulesEnabled:      true,  // 自定义规则始终启用
+				CustomRulesEnabled:      true, // 自定义规则始终启用
 				EnableShortLink:         false,
-				TemplateVersion:         "v2",  // 默认使用v2模板系统
+				TemplateVersion:         "v2", // 默认使用v2模板系统
 				EnableProxyProvider:     false,
 				NodeOrder:               []int64{},
-				NodeNameFilter:          "剩余|流量|到期|订阅|时间",
+				NodeNameFilter:          "剩余|流量|到期|订阅|时间|重置",
 				ProxyGroupsSourceURL:    systemConfig.ProxyGroupsSourceURL,
 				ClientCompatibilityMode: systemConfig.ClientCompatibilityMode,
 				SilentMode:              systemConfig.SilentMode,
