@@ -509,6 +509,18 @@ function parseShadowsocks(url: string): ProxyNode | null {
       }
     }
 
+    // 解析udp-over-tcp、udp-over-tcp-version、smux参数
+    if (queryParams.uot || queryParams['udp-over-tcp']) {
+      node['udp-over-tcp'] = queryParams['udp-over-tcp'] || queryParams.uot
+      if (queryParams.uotv || queryParams['udp-over-tcp-version']) {
+        node['udp-over-tcp-version'] = queryParams['udp-over-tcp-version'] || queryParams.uotv
+      }
+    }
+
+    if (queryParams.smux) {
+      node.smux = queryParams.smux
+    }
+
     return node
   } catch (e) {
     toast(`'Parse Shadowsocks error:' ${e instanceof Error ? e.message : String(e)}`)
