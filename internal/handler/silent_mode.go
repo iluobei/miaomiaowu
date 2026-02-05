@@ -15,11 +15,12 @@ import (
 var globalSilentModeManager *SilentModeManager
 
 type SilentModeManager struct {
-	repo           *storage.TrafficRepository
-	tokens         *auth.TokenStore
-	lastActiveTime sync.Map   // username -> time.Time
-	lastActiveIP   sync.Map   // ip -> time.Time (用于前端页面访问)
-	startTime      time.Time  // 服务启动时间，用于启动后临时恢复
+	repo                 *storage.TrafficRepository
+	tokens               *auth.TokenStore
+	lastActiveTime       sync.Map   // username -> time.Time
+	lastGlobalActiveTime time.Time  // 全局活跃时间，任何用户获取订阅后更新
+	globalActiveMu       sync.Mutex // 保护 lastGlobalActiveTime
+	startTime            time.Time  // 服务启动时间，用于启动后临时恢复
 }
 
 func NewSilentModeManager(repo *storage.TrafficRepository, tokens *auth.TokenStore) *SilentModeManager {
@@ -50,26 +51,24 @@ func (m *SilentModeManager) RecordSubscriptionAccess(username string) {
 	)
 }
 
-// RecordSubscriptionAccessWithIP records subscription access with IP for frontend page access
+// RecordSubscriptionAccessWithIP records subscription access and enables global access for all IPs
 func (m *SilentModeManager) RecordSubscriptionAccessWithIP(username, ip string) {
 	if username == "" {
 		return
 	}
 	now := time.Now()
 	m.lastActiveTime.Store(username, now)
-	if ip != "" {
-		m.lastActiveIP.Store(ip, now)
-		logger.Info("🔓 [SILENT_MODE] 用户获取订阅，恢复访问权限",
-			"username", username,
-			"ip", ip,
-			"time", now.Format("2006-01-02 15:04:05"),
-		)
-	} else {
-		logger.Info("🔓 [SILENT_MODE] 用户获取订阅，恢复访问权限",
-			"username", username,
-			"time", now.Format("2006-01-02 15:04:05"),
-		)
-	}
+
+	// 更新全局活跃时间，允许所有IP访问
+	m.globalActiveMu.Lock()
+	m.lastGlobalActiveTime = now
+	m.globalActiveMu.Unlock()
+
+	logger.Info("🔓 [SILENT_MODE] 用户获取订阅，恢复所有IP访问权限",
+		"username", username,
+		"ip", ip,
+		"time", now.Format("2006-01-02 15:04:05"),
+	)
 }
 
 func (m *SilentModeManager) isUserActive(username string, timeout int) bool {
@@ -87,18 +86,16 @@ func (m *SilentModeManager) isUserActive(username string, timeout int) bool {
 	return time.Now().Before(activeUntil)
 }
 
-// isIPActive checks if the IP is in active period (for frontend page access)
-func (m *SilentModeManager) isIPActive(ip string, timeout int) bool {
-	if ip == "" {
+// isGlobalActive checks if any user has fetched subscription recently (allows all IPs)
+func (m *SilentModeManager) isGlobalActive(timeout int) bool {
+	m.globalActiveMu.Lock()
+	lastActive := m.lastGlobalActiveTime
+	m.globalActiveMu.Unlock()
+
+	if lastActive.IsZero() {
 		return false
 	}
 
-	val, ok := m.lastActiveIP.Load(ip)
-	if !ok {
-		return false
-	}
-
-	lastActive := val.(time.Time)
 	activeUntil := lastActive.Add(time.Duration(timeout) * time.Minute)
 	return time.Now().Before(activeUntil)
 }
@@ -191,8 +188,8 @@ func (m *SilentModeManager) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 检查 IP 是否在活跃期内（用于前端页面访问）
-		if m.isIPActive(clientIP, cfg.SilentModeTimeout) {
+		// 检查是否有用户获取过订阅（允许所有IP访问）
+		if m.isGlobalActive(cfg.SilentModeTimeout) {
 			next.ServeHTTP(w, r)
 			return
 		}
