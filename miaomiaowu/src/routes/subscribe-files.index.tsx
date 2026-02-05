@@ -31,7 +31,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { Copy } from 'lucide-react'
-import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon, Plus } from 'lucide-react'
+import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon, Plus, Check } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -2670,44 +2670,85 @@ function SubscribeFilesPage() {
                   // V3 模板绑定列（仅 v3 模式显示）
                   ...(isV3Mode ? [{
                     header: 'V3 模板',
-                    cell: (file: SubscribeFile) => (
-                      <Select
-                        value={file.template_filename || '_none_'}
-                        onValueChange={(value) => {
-                          const templateFilename = value === '_none_' ? '' : value
-                          updateMetadataMutation.mutate({
-                            id: file.id,
-                            data: {
-                              name: file.name,
-                              description: file.description,
-                              auto_sync_custom_rules: file.auto_sync_custom_rules,
-                              template_filename: templateFilename,
-                            }
-                          }, {
-                            onSuccess: () => {
-                              if (templateFilename) {
-                                toast.success(`已绑定模板: ${templateFilename}`)
-                              } else {
-                                toast.success('已解除模板绑定')
-                              }
-                            }
-                          })
-                        }}
-                        disabled={updateMetadataMutation.isPending}
-                      >
-                        <SelectTrigger className="w-[140px] h-8 text-xs">
-                          <SelectValue placeholder="选择模板" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none_">无</SelectItem>
-                          {v3Templates.map((template) => (
-                            <SelectItem key={template.filename} value={template.filename}>
-                              {template.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ),
+                    cell: (file: SubscribeFile) => {
+                      const selectedTemplate = v3Templates.find(t => t.filename === file.template_filename)
+                      return (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-[140px] h-8 text-xs justify-between"
+                              disabled={updateMetadataMutation.isPending}
+                            >
+                              <span className="truncate">
+                                {selectedTemplate ? selectedTemplate.name : '选择模板'}
+                              </span>
+                              <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[200px] p-1" align="start">
+                            <div className="flex flex-col">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  "justify-start text-xs h-8",
+                                  !file.template_filename && "bg-accent"
+                                )}
+                                onClick={() => {
+                                  updateMetadataMutation.mutate({
+                                    id: file.id,
+                                    data: {
+                                      name: file.name,
+                                      description: file.description,
+                                      auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                      template_filename: '',
+                                    }
+                                  }, {
+                                    onSuccess: () => {
+                                      toast.success('已解除模板绑定')
+                                    }
+                                  })
+                                }}
+                              >
+                                {!file.template_filename && <Check className="h-3 w-3 mr-2" />}
+                                <span className={!file.template_filename ? '' : 'ml-5'}>无</span>
+                              </Button>
+                              {v3Templates.map((template) => (
+                                <Button
+                                  key={template.filename}
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    "justify-start text-xs h-8",
+                                    file.template_filename === template.filename && "bg-accent"
+                                  )}
+                                  onClick={() => {
+                                    updateMetadataMutation.mutate({
+                                      id: file.id,
+                                      data: {
+                                        name: file.name,
+                                        description: file.description,
+                                        auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                        template_filename: template.filename,
+                                      }
+                                    }, {
+                                      onSuccess: () => {
+                                        toast.success(`已绑定模板: ${template.name}`)
+                                      }
+                                    })
+                                  }}
+                                >
+                                  {file.template_filename === template.filename && <Check className="h-3 w-3 mr-2" />}
+                                  <span className={file.template_filename === template.filename ? '' : 'ml-5'}>{template.name}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )
+                    },
                     headerClassName: 'text-center',
                     cellClassName: 'text-center',
                     width: '160px'
@@ -4065,22 +4106,52 @@ function SubscribeFilesPage() {
             </div>
             <div className='space-y-2'>
               <Label>绑定 V3 模板（可选）</Label>
-              <Select
-                value={metadataForm.template_filename || '_none_'}
-                onValueChange={(value) => setMetadataForm({ ...metadataForm, template_filename: value === '_none_' ? '' : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder='不绑定模板' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='_none_'>不绑定模板</SelectItem>
-                  {v3Templates.map((template) => (
-                    <SelectItem key={template.filename} value={template.filename}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between"
+                  >
+                    <span className="truncate">
+                      {metadataForm.template_filename
+                        ? v3Templates.find(t => t.filename === metadataForm.template_filename)?.name || metadataForm.template_filename
+                        : '不绑定模板'}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                  <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "justify-start h-9",
+                        !metadataForm.template_filename && "bg-accent"
+                      )}
+                      onClick={() => setMetadataForm({ ...metadataForm, template_filename: '' })}
+                    >
+                      {!metadataForm.template_filename && <Check className="h-4 w-4 mr-2" />}
+                      <span className={!metadataForm.template_filename ? '' : 'ml-6'}>不绑定模板</span>
+                    </Button>
+                    {v3Templates.map((template) => (
+                      <Button
+                        key={template.filename}
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "justify-start h-9",
+                          metadataForm.template_filename === template.filename && "bg-accent"
+                        )}
+                        onClick={() => setMetadataForm({ ...metadataForm, template_filename: template.filename })}
+                      >
+                        {metadataForm.template_filename === template.filename && <Check className="h-4 w-4 mr-2" />}
+                        <span className={metadataForm.template_filename === template.filename ? '' : 'ml-6'}>{template.name}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <p className='text-xs text-muted-foreground'>
                 绑定模板后，获取订阅时将根据模板动态生成配置。绑定模板会自动禁用规则同步。
               </p>

@@ -49,7 +49,7 @@ function SystemSettingsPage() {
   const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
   const [silentMode, setSilentMode] = useState(false)
   const [silentModeTimeout, setSilentModeTimeout] = useState(15)
-  const [nodeNameFilter, setNodeNameFilter] = useState('剩余|流量|到期|订阅|时间')
+  const [nodeNameFilter, setNodeNameFilter] = useState('剩余|流量|到期|订阅|时间|重置')
 
   // Sync proxy group categories mutation
   const syncProxyGroupsMutation = useSyncProxyGroupCategories()
@@ -96,7 +96,7 @@ function SystemSettingsPage() {
       setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
       setSilentMode(userConfig.silent_mode || false)
       setSilentModeTimeout(userConfig.silent_mode_timeout || 15)
-      setNodeNameFilter(userConfig.node_name_filter || '剩余|流量|到期|订阅|时间')
+      setNodeNameFilter(userConfig.node_name_filter || '剩余|流量|到期|订阅|时间|重置')
     }
   }, [userConfig])
 
@@ -244,7 +244,7 @@ function SystemSettingsPage() {
                   onChange={(e) => setNodeNameFilter(e.target.value)}
                   onBlur={() => updateConfig({ node_name_filter: nodeNameFilter })}
                   disabled={loadingConfig || updateConfigMutation.isPending}
-                  placeholder='剩余|流量|到期|订阅|时间'
+                  placeholder='剩余|流量|到期|订阅|时间|重置'
                 />
                 <p className='text-xs text-muted-foreground'>正则表达式，匹配的节点将在同步时被过滤掉</p>
               </div>

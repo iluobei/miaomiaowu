@@ -222,41 +222,41 @@ type Node struct {
 
 // SubscribeFile represents a subscription file configuration.
 type SubscribeFile struct {
-	ID                   int64
-	Name                 string
-	Description          string
-	URL                  string
-	Type                 string
-	Filename             string
-	FileShortCode        string     // 3-character code for file identification in composite short links
-	AutoSyncCustomRules  bool       // Whether to automatically sync custom rules to this file
-	TemplateFilename     string     // 绑定的 V3 模板文件名，为空表示未绑定模板
-	ExpireAt             *time.Time // Optional expiration timestamp
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	ID                  int64
+	Name                string
+	Description         string
+	URL                 string
+	Type                string
+	Filename            string
+	FileShortCode       string     // 3-character code for file identification in composite short links
+	AutoSyncCustomRules bool       // Whether to automatically sync custom rules to this file
+	TemplateFilename    string     // 绑定的 V3 模板文件名，为空表示未绑定模板
+	ExpireAt            *time.Time // Optional expiration timestamp
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // UserSettings represents user-specific configuration.
 type UserSettings struct {
-	Username             string
-	ForceSyncExternal    bool
-	MatchRule            string // "node_name", "server_port", or "type_server_port"
-	SyncScope            string // "saved_only" or "all"
-	KeepNodeName         bool   // Keep current node name when syncing
-	CacheExpireMinutes   int    // Cache expiration time in minutes
-	SyncTraffic          bool   // Sync traffic info from external subscriptions
-	EnableProbeBinding   bool   // Enable probe server binding for nodes
-	CustomRulesEnabled   bool   // Enable custom rules feature
-	EnableShortLink     bool   // Enable short link feature for subscriptions
-	TemplateVersion     string // Template version: "v1" (file-based), "v2" (database/ACL), "v3" (mihomo-style)
-	EnableProxyProvider bool   // Enable proxy provider feature
-	NodeOrder            []int64   // Node display order (array of node IDs)
-	NodeNameFilter       string    // Regex pattern to filter out nodes by name during sync
-	DebugEnabled         bool      // Enable debug logging to file
-	DebugLogPath         string    // Path to current debug log file
-	DebugStartedAt       *time.Time // When debug logging was started
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	Username            string
+	ForceSyncExternal   bool
+	MatchRule           string     // "node_name", "server_port", or "type_server_port"
+	SyncScope           string     // "saved_only" or "all"
+	KeepNodeName        bool       // Keep current node name when syncing
+	CacheExpireMinutes  int        // Cache expiration time in minutes
+	SyncTraffic         bool       // Sync traffic info from external subscriptions
+	EnableProbeBinding  bool       // Enable probe server binding for nodes
+	CustomRulesEnabled  bool       // Enable custom rules feature
+	EnableShortLink     bool       // Enable short link feature for subscriptions
+	TemplateVersion     string     // Template version: "v1" (file-based), "v2" (database/ACL), "v3" (mihomo-style)
+	EnableProxyProvider bool       // Enable proxy provider feature
+	NodeOrder           []int64    // Node display order (array of node IDs)
+	NodeNameFilter      string     // Regex pattern to filter out nodes by name during sync
+	DebugEnabled        bool       // Enable debug logging to file
+	DebugLogPath        string     // Path to current debug log file
+	DebugStartedAt      *time.Time // When debug logging was started
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // SystemConfig represents global system configuration shared across all users.
@@ -311,29 +311,29 @@ type CustomRuleApplication struct {
 
 // ProxyProviderConfig represents a proxy-provider configuration for external subscription
 type ProxyProviderConfig struct {
-	ID                       int64
-	Username                 string
-	ExternalSubscriptionID   int64
-	Name                     string // 代理集合名称
-	Type                     string // http/file
-	Interval                 int    // 更新间隔(秒)
-	Proxy                    string // 下载代理
-	SizeLimit                int    // 文件大小限制
-	Header                   string // JSON: {"User-Agent": [...], "Authorization": [...]}
-	HealthCheckEnabled       bool
-	HealthCheckURL           string
-	HealthCheckInterval      int
-	HealthCheckTimeout       int
-	HealthCheckLazy          bool
+	ID                        int64
+	Username                  string
+	ExternalSubscriptionID    int64
+	Name                      string // 代理集合名称
+	Type                      string // http/file
+	Interval                  int    // 更新间隔(秒)
+	Proxy                     string // 下载代理
+	SizeLimit                 int    // 文件大小限制
+	Header                    string // JSON: {"User-Agent": [...], "Authorization": [...]}
+	HealthCheckEnabled        bool
+	HealthCheckURL            string
+	HealthCheckInterval       int
+	HealthCheckTimeout        int
+	HealthCheckLazy           bool
 	HealthCheckExpectedStatus int
-	Filter                   string // 正则: 保留匹配的节点
-	ExcludeFilter            string // 正则: 排除匹配的节点
-	ExcludeType              string // 排除的协议类型，逗号分隔
-	GeoIPFilter              string // 地理位置过滤，国家代码如 "HK" 或 "HK,TW"（仅 MMW 模式生效）
-	Override                 string // JSON: 覆写配置
-	ProcessMode              string // 'client'=客户端处理, 'mmw'=妙妙屋处理
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
+	Filter                    string // 正则: 保留匹配的节点
+	ExcludeFilter             string // 正则: 排除匹配的节点
+	ExcludeType               string // 排除的协议类型，逗号分隔
+	GeoIPFilter               string // 地理位置过滤，国家代码如 "HK" 或 "HK,TW"（仅 MMW 模式生效）
+	Override                  string // JSON: 覆写配置
+	ProcessMode               string // 'client'=客户端处理, 'mmw'=妙妙屋处理
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 var (
@@ -802,7 +802,7 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 	}
 
 	// Add node_name_filter to user_settings table (regex pattern to filter nodes)
-	if err := r.ensureUserSettingsColumn("node_name_filter", "TEXT NOT NULL DEFAULT '剩余|流量|到期|订阅|时间'"); err != nil {
+	if err := r.ensureUserSettingsColumn("node_name_filter", "TEXT NOT NULL DEFAULT '剩余|流量|到期|订阅|时间|重置'"); err != nil {
 		return err
 	}
 
@@ -3167,7 +3167,7 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(template_version, 'v2'), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(node_name_filter, '剩余|流量|到期|订阅|时间'), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(enable_short_link, 0), COALESCE(template_version, 'v2'), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(node_name_filter, '剩余|流量|到期|订阅|时间|重置'), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
 	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableShortLinkInt, enableProxyProviderInt, debugEnabledInt int
 	var nodeOrderJSON string
 	var debugStartedAt sql.NullTime
@@ -3290,7 +3290,7 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	// Handle node_name_filter, default to common filter patterns
 	nodeNameFilter := settings.NodeNameFilter
 	if nodeNameFilter == "" {
-		nodeNameFilter = "剩余|流量|到期|订阅|时间"
+		nodeNameFilter = "剩余|流量|到期|订阅|时间|重置"
 	}
 
 	const stmt = `
@@ -4317,7 +4317,6 @@ func (r *TrafficRepository) DeleteProxyProviderConfig(ctx context.Context, id in
 
 	return nil
 }
-
 
 // GetSystemConfig retrieves the global system configuration.
 // Returns an empty SystemConfig if the row doesn't exist (should not happen after migration).
