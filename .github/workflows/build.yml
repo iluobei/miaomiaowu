@@ -161,30 +161,19 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # 建议：如果是手动触发且想发版，可以去掉这个 if，或者确保你在 Tag 上触发
+    if: startsWith(github.ref, 'refs/tags/v') 
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Linux AMD64 artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: mmw-linux-amd64
           path: release
-
-      - name: Download Linux ARM64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mmw-linux-arm64
-          path: release
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mmw-windows-amd64.exe
-          path: release
+          merge-multiple: true # 这样可以直接把所有 artifact 下载到 release 文件夹
 
       - name: Add executable permissions
         run: |
@@ -194,16 +183,17 @@ jobs:
       - name: Create checksums
         run: |
           cd release
-          sha256sum mmw-linux-amd64 > checksums.txt
-          sha256sum mmw-linux-arm64 >> checksums.txt
-          sha256sum mmw-windows-amd64.exe >> checksums.txt
+          # 使用通配符更简洁
+          sha256sum mmw-* > checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }} # 显式指定 Tag 名字
           draft: false
           prerelease: false
           generate_release_notes: true
+          make_latest: true   # 强制设为 Latest，有助于 Finalizing 成功
           files: |
             release/mmw-linux-amd64
             release/mmw-linux-arm64
