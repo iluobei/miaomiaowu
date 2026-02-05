@@ -665,3 +665,208 @@ proxy-groups:
 		t.Logf("  [%d] %s", i, p.(string))
 	}
 }
+
+// TestTemplateV3Processor_EmptyGroupReferenceCleanup tests that references to removed empty groups are cleaned up
+func TestTemplateV3Processor_EmptyGroupReferenceCleanup(t *testing.T) {
+	// Template with region groups where some will be empty due to no matching proxies
+	templateContent := `
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - ♻️ 自动选择
+      - 🇭🇰 香港节点
+      - 🇺🇸 美国节点
+      - 🇯🇵 日本节点
+      - DIRECT
+  - name: ♻️ 自动选择
+    type: url-test
+    include-all-proxies: true
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+  - name: 🇭🇰 香港节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇭🇰|港|HK
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+  - name: 🇺🇸 美国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇺🇸|美|US
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+  - name: 🇯🇵 日本节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇯🇵|日本|JP
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+`
+
+	// Only provide Hong Kong proxies - US and JP groups will be empty
+	proxies := []map[string]any{
+		{"name": "🇭🇰 香港 01", "type": "vmess", "server": "hk1.example.com", "port": 443},
+		{"name": "🇭🇰 香港 02", "type": "trojan", "server": "hk2.example.com", "port": 443},
+	}
+
+	processor := NewTemplateV3Processor(nil, nil)
+	result, err := processor.ProcessTemplate(templateContent, proxies)
+	if err != nil {
+		t.Fatalf("ProcessTemplate failed: %v", err)
+	}
+
+	// Parse result
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("Result is not valid YAML: %v", err)
+	}
+
+	proxyGroups, ok := parsed["proxy-groups"].([]any)
+	if !ok {
+		t.Fatal("proxy-groups not found in result")
+	}
+
+	// Find 🚀 节点选择 group and check its proxies
+	var nodeSelectGroup map[string]any
+	groupNames := make(map[string]bool)
+	for _, g := range proxyGroups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := group["name"].(string)
+		groupNames[name] = true
+		if name == "🚀 节点选择" {
+			nodeSelectGroup = group
+		}
+	}
+
+	// Verify that empty groups (🇺🇸 美国节点, 🇯🇵 日本节点) are removed
+	if groupNames["🇺🇸 美国节点"] {
+		t.Error("🇺🇸 美国节点 should be removed (no matching proxies)")
+	}
+	if groupNames["🇯🇵 日本节点"] {
+		t.Error("🇯🇵 日本节点 should be removed (no matching proxies)")
+	}
+
+	// Verify that 🇭🇰 香港节点 still exists (has matching proxies)
+	if !groupNames["🇭🇰 香港节点"] {
+		t.Error("🇭🇰 香港节点 should exist (has matching proxies)")
+	}
+
+	// Verify that references to removed groups are cleaned up in 🚀 节点选择
+	if nodeSelectGroup == nil {
+		t.Fatal("🚀 节点选择 group not found")
+	}
+
+	proxiesList, ok := nodeSelectGroup["proxies"].([]any)
+	if !ok {
+		t.Fatal("proxies not found in 🚀 节点选择 group")
+	}
+
+	// Check that removed groups are not in the proxies list
+	for _, p := range proxiesList {
+		proxyName, _ := p.(string)
+		if proxyName == "🇺🇸 美国节点" {
+			t.Error("Reference to removed group 🇺🇸 美国节点 should be cleaned up")
+		}
+		if proxyName == "🇯🇵 日本节点" {
+			t.Error("Reference to removed group 🇯🇵 日本节点 should be cleaned up")
+		}
+	}
+
+	// Log the final proxies list for debugging
+	t.Logf("🚀 节点选择 proxies after cleanup: %v", proxiesList)
+	t.Logf("Remaining groups: %v", groupNames)
+}
+
+// TestTemplateV3Processor_LandingNodeDialerProxy tests that landing node proxies get dialer-proxy added
+func TestTemplateV3Processor_LandingNodeDialerProxy(t *testing.T) {
+	// Template with landing nodes and relay nodes
+	templateContent := `
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - 🌠 中转节点
+      - 🌄 落地节点
+      - DIRECT
+  - name: 🌠 中转节点
+    type: select
+    include-all-proxies: true
+    filter: 中转|CO|co
+  - name: 🌄 落地节点
+    type: select
+    include-all-proxies: true
+    filter: LD|落地
+`
+
+	// Provide both relay and landing proxies
+	proxies := []map[string]any{
+		{"name": "中转-HK-01", "type": "vmess", "server": "relay1.example.com", "port": 443},
+		{"name": "CO-Premium", "type": "trojan", "server": "relay2.example.com", "port": 443},
+		{"name": "LD-US-01", "type": "vmess", "server": "ld1.example.com", "port": 443},
+		{"name": "落地-JP", "type": "trojan", "server": "ld2.example.com", "port": 443},
+	}
+
+	processor := NewTemplateV3Processor(nil, nil)
+	result, err := processor.ProcessTemplate(templateContent, proxies)
+	if err != nil {
+		t.Fatalf("ProcessTemplate failed: %v", err)
+	}
+
+	// Parse result
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("Result is not valid YAML: %v", err)
+	}
+
+	// Check top-level proxies
+	topProxies, ok := parsed["proxies"].([]any)
+	if !ok {
+		t.Fatal("proxies not found in result")
+	}
+
+	// Verify landing node proxies have dialer-proxy
+	landingProxiesWithDialer := 0
+	relayProxiesWithoutDialer := 0
+
+	for _, p := range topProxies {
+		proxy, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := proxy["name"].(string)
+		dialerProxy, hasDialer := proxy["dialer-proxy"].(string)
+
+		t.Logf("Proxy %q: dialer-proxy=%v", name, dialerProxy)
+
+		// Landing nodes should have dialer-proxy
+		if name == "LD-US-01" || name == "落地-JP" {
+			if !hasDialer || dialerProxy != "🌠 中转节点" {
+				t.Errorf("Landing node %q should have dialer-proxy: 🌠 中转节点, got: %v", name, dialerProxy)
+			} else {
+				landingProxiesWithDialer++
+			}
+		}
+
+		// Relay nodes should NOT have dialer-proxy
+		if name == "中转-HK-01" || name == "CO-Premium" {
+			if hasDialer {
+				t.Errorf("Relay node %q should NOT have dialer-proxy, got: %v", name, dialerProxy)
+			} else {
+				relayProxiesWithoutDialer++
+			}
+		}
+	}
+
+	if landingProxiesWithDialer != 2 {
+		t.Errorf("Expected 2 landing proxies with dialer-proxy, got %d", landingProxiesWithDialer)
+	}
+	if relayProxiesWithoutDialer != 2 {
+		t.Errorf("Expected 2 relay proxies without dialer-proxy, got %d", relayProxiesWithoutDialer)
+	}
+
+	t.Logf("Test passed: %d landing proxies with dialer-proxy, %d relay proxies without", landingProxiesWithDialer, relayProxiesWithoutDialer)
+}

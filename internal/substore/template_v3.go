@@ -194,13 +194,16 @@ func (p *TemplateV3Processor) ProcessTemplate(templateContent string, proxies []
 
 				// Collect used proxy names from processed proxy-groups
 				usedProxyNames = p.collectUsedProxyNames(valueNode)
+
+				// Collect proxies that belong to specific groups (for dialer-proxy)
+				landingNodeProxies := p.collectProxiesByGroupName(valueNode, "🌄 落地节点")
+
+				// Add or update top-level proxies with used proxy configs
+				p.updateTopLevelProxies(rootMap, proxies, usedProxyNames, landingNodeProxies)
 			}
 
 			// Remove add-region-proxy-groups from output
 			p.removeGlobalConfig(rootMap, "add-region-proxy-groups")
-
-			// Add or update top-level proxies with used proxy configs
-			p.updateTopLevelProxies(rootMap, proxies, usedProxyNames)
 		}
 	}
 
@@ -359,19 +362,70 @@ func (p *TemplateV3Processor) removeGlobalConfig(rootMap *yaml.Node, key string)
 // processProxyGroups processes all proxy groups in the template
 func (p *TemplateV3Processor) processProxyGroups(groupsNode *yaml.Node) error {
 	var newContent []*yaml.Node
+	removedGroups := make(map[string]bool)
+
+	// First pass: process each proxy group and identify empty ones
 	for _, groupNode := range groupsNode.Content {
 		if groupNode.Kind == yaml.MappingNode {
 			if err := p.processProxyGroup(groupNode); err != nil {
 				return err
 			}
 			// Check if proxies is empty after processing
-			if !p.hasEmptyProxies(groupNode) {
+			if p.hasEmptyProxies(groupNode) {
+				// Record the removed group name
+				for i := 0; i < len(groupNode.Content); i += 2 {
+					if groupNode.Content[i].Value == "name" {
+						removedGroups[groupNode.Content[i+1].Value] = true
+						break
+					}
+				}
+			} else {
 				newContent = append(newContent, groupNode)
 			}
 		}
 	}
+
+	// Second pass: remove references to removed groups from remaining groups
+	if len(removedGroups) > 0 {
+		for _, groupNode := range newContent {
+			p.removeGroupReferences(groupNode, removedGroups)
+		}
+		// Update proxy group names list
+		p.proxyGroups = p.filterProxyGroupNames(p.proxyGroups, removedGroups)
+	}
+
 	groupsNode.Content = newContent
 	return nil
+}
+
+// removeGroupReferences removes references to removed groups from a proxy group's proxies list
+func (p *TemplateV3Processor) removeGroupReferences(groupNode *yaml.Node, removedGroups map[string]bool) {
+	for i := 0; i < len(groupNode.Content); i += 2 {
+		if groupNode.Content[i].Value == "proxies" {
+			proxiesNode := groupNode.Content[i+1]
+			if proxiesNode.Kind == yaml.SequenceNode {
+				var newProxies []*yaml.Node
+				for _, proxyNode := range proxiesNode.Content {
+					if !removedGroups[proxyNode.Value] {
+						newProxies = append(newProxies, proxyNode)
+					}
+				}
+				proxiesNode.Content = newProxies
+			}
+			break
+		}
+	}
+}
+
+// filterProxyGroupNames filters out removed group names from the list
+func (p *TemplateV3Processor) filterProxyGroupNames(names []string, removedGroups map[string]bool) []string {
+	var result []string
+	for _, name := range names {
+		if !removedGroups[name] {
+			result = append(result, name)
+		}
+	}
+	return result
 }
 
 // hasEmptyProxies checks if a proxy group has empty or no proxies
@@ -903,8 +957,54 @@ func (p *TemplateV3Processor) collectUsedProxyNames(groupsNode *yaml.Node) map[s
 	return usedNames
 }
 
+// collectProxiesByGroupName collects proxy names that belong to a specific group
+func (p *TemplateV3Processor) collectProxiesByGroupName(groupsNode *yaml.Node, targetGroupName string) map[string]bool {
+	result := make(map[string]bool)
+	proxyGroupNames := make(map[string]bool)
+
+	// First, collect all proxy group names
+	for _, name := range p.proxyGroups {
+		proxyGroupNames[name] = true
+	}
+	for _, name := range p.regionGroupNames {
+		proxyGroupNames[name] = true
+	}
+
+	// Find the target group and collect its proxy names
+	for _, groupNode := range groupsNode.Content {
+		if groupNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		var groupName string
+		var proxiesNode *yaml.Node
+
+		for i := 0; i < len(groupNode.Content); i += 2 {
+			key := groupNode.Content[i].Value
+			if key == "name" {
+				groupName = groupNode.Content[i+1].Value
+			} else if key == "proxies" {
+				proxiesNode = groupNode.Content[i+1]
+			}
+		}
+
+		if groupName == targetGroupName && proxiesNode != nil && proxiesNode.Kind == yaml.SequenceNode {
+			for _, proxyNode := range proxiesNode.Content {
+				name := proxyNode.Value
+				// Exclude group names and built-in keywords
+				if !proxyGroupNames[name] && name != "DIRECT" && name != "REJECT" && name != "PASS" {
+					result[name] = true
+				}
+			}
+			break
+		}
+	}
+
+	return result
+}
+
 // updateTopLevelProxies adds or updates the top-level proxies list with used proxy configs
-func (p *TemplateV3Processor) updateTopLevelProxies(rootMap *yaml.Node, proxies []map[string]any, usedProxyNames map[string]bool) {
+func (p *TemplateV3Processor) updateTopLevelProxies(rootMap *yaml.Node, proxies []map[string]any, usedProxyNames map[string]bool, landingNodeProxies map[string]bool) {
 	if len(usedProxyNames) == 0 {
 		return
 	}
@@ -918,10 +1018,16 @@ func (p *TemplateV3Processor) updateTopLevelProxies(rootMap *yaml.Node, proxies 
 	}
 
 	// Create ordered list of proxies (maintain order from p.allProxies)
+	// Add dialer-proxy to landing node proxies
 	var orderedProxies []map[string]any
 	for _, proxyNode := range p.allProxies {
 		if usedProxyNames[proxyNode.Name] {
 			if config, exists := proxyConfigMap[proxyNode.Name]; exists {
+				// If this proxy belongs to landing nodes group, add dialer-proxy
+				// Modify the original map so that injectProxiesIntoTemplate will also have the change
+				if landingNodeProxies[proxyNode.Name] {
+					config["dialer-proxy"] = "🌠 中转节点"
+				}
 				orderedProxies = append(orderedProxies, config)
 			}
 		}
