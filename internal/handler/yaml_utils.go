@@ -43,7 +43,16 @@ func MarshalWithIndent(v interface{}) ([]byte, error) {
 // RemoveUnicodeEscapeQuotes removes quotes from strings that contain Unicode escape sequences
 // and converts the escape sequences back to actual Unicode characters (like emoji).
 // For known numeric fields (port, interval, etc.), removes quotes to ensure proper numeric type.
+// Note: nameserver-policy values are preserved with quotes to maintain DNS policy format.
 func RemoveUnicodeEscapeQuotes(yamlContent string) string {
+	// 使用占位符保留原始nameserver-policy配置
+	var nameserverPolicyBlock string
+	nameserverPolicyRe := regexp.MustCompile(`(?ms)^(nameserver-policy:\s*\n)((?:[ \t]+.+\n?)*)`)
+	yamlContent = nameserverPolicyRe.ReplaceAllStringFunc(yamlContent, func(match string) string {
+		nameserverPolicyBlock = match
+		return "___NAMESERVER_POLICY_PLACEHOLDER___\n"
+	})
+
 	// Step 1: Remove quotes from strings that contain Unicode escape sequences
 	// Pattern: "...\U000XXXXX..." or "...\uXXXX..."
 	// But keep quotes if the unquoted string would start with YAML special characters
@@ -89,6 +98,11 @@ func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 	numericFieldsPattern := fmt.Sprintf(`(?m)^(\s*)(%s):\s+"(\d+)"`, strings.Join(numericFields, "|"))
 	numericQuotesRe := regexp.MustCompile(numericFieldsPattern)
 	result = numericQuotesRe.ReplaceAllString(result, `$1$2: $3`)
+
+	// 回复nameserver-policy配置
+	if nameserverPolicyBlock != "" {
+		result = strings.Replace(result, "___NAMESERVER_POLICY_PLACEHOLDER___\n", nameserverPolicyBlock, 1)
+	}
 
 	return result
 }
