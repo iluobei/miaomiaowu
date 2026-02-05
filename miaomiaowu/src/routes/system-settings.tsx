@@ -49,6 +49,7 @@ function SystemSettingsPage() {
   const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
   const [silentMode, setSilentMode] = useState(false)
   const [silentModeTimeout, setSilentModeTimeout] = useState(15)
+  const [nodeNameFilter, setNodeNameFilter] = useState('剩余|流量|到期|订阅|时间')
 
   // Sync proxy group categories mutation
   const syncProxyGroupsMutation = useSyncProxyGroupCategories()
@@ -72,6 +73,7 @@ function SystemSettingsPage() {
         client_compatibility_mode: boolean
         silent_mode: boolean
         silent_mode_timeout: number
+        node_name_filter: string
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -94,6 +96,7 @@ function SystemSettingsPage() {
       setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
       setSilentMode(userConfig.silent_mode || false)
       setSilentModeTimeout(userConfig.silent_mode_timeout || 15)
+      setNodeNameFilter(userConfig.node_name_filter || '剩余|流量|到期|订阅|时间')
     }
   }, [userConfig])
 
@@ -113,6 +116,7 @@ function SystemSettingsPage() {
       client_compatibility_mode: boolean
       silent_mode: boolean
       silent_mode_timeout: number
+      node_name_filter: string
     }) => {
       await api.put('/api/user/config', data)
     },
@@ -136,6 +140,7 @@ function SystemSettingsPage() {
       setClientCompatibilityMode(variables.client_compatibility_mode)
       setSilentMode(variables.silent_mode)
       setSilentModeTimeout(variables.silent_mode_timeout)
+      setNodeNameFilter(variables.node_name_filter)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -160,6 +165,7 @@ function SystemSettingsPage() {
     client_compatibility_mode: boolean
     silent_mode: boolean
     silent_mode_timeout: number
+    node_name_filter: string
   }>) => {
     updateConfigMutation.mutate({
       force_sync_external: forceSyncExternal,
@@ -176,6 +182,7 @@ function SystemSettingsPage() {
       client_compatibility_mode: clientCompatibilityMode,
       silent_mode: silentMode,
       silent_mode_timeout: silentModeTimeout,
+      node_name_filter: nodeNameFilter,
       ...updates,
     })
   }
@@ -217,6 +224,29 @@ function SystemSettingsPage() {
                   onCheckedChange={(checked) => updateConfig({ sync_traffic: checked })}
                   disabled={loadingConfig || updateConfigMutation.isPending}
                 />
+              </div>
+
+              <div className='space-y-2 pt-3 border-t'>
+                <div className='flex items-center gap-2'>
+                  <Label htmlFor='node-name-filter'>节点名称过滤</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                    </TooltipTrigger>
+                    <TooltipContent side='right' className='max-w-xs'>
+                      <p>使用正则表达式过滤节点名称，匹配的节点将被排除。留空则不过滤。</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  id='node-name-filter'
+                  value={nodeNameFilter}
+                  onChange={(e) => setNodeNameFilter(e.target.value)}
+                  onBlur={() => updateConfig({ node_name_filter: nodeNameFilter })}
+                  disabled={loadingConfig || updateConfigMutation.isPending}
+                  placeholder='剩余|流量|到期|订阅|时间'
+                />
+                <p className='text-xs text-muted-foreground'>正则表达式，匹配的节点将在同步时被过滤掉</p>
               </div>
 
               <div className='flex items-center justify-between pt-3 border-t'>
