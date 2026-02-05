@@ -231,6 +231,7 @@ type SubscribeFile struct {
 	FileShortCode       string     // 3-character code for file identification in composite short links
 	AutoSyncCustomRules bool       // Whether to automatically sync custom rules to this file
 	TemplateFilename    string     // 绑定的 V3 模板文件名，为空表示未绑定模板
+	SelectedTags        []string   // 选中的节点标签，为空表示使用所有节点
 	ExpireAt            *time.Time // Optional expiration timestamp
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
@@ -896,6 +897,11 @@ CREATE INDEX IF NOT EXISTS idx_custom_rules_enabled ON custom_rules(enabled);
 
 	// 添加 template_filename 字段，用于绑定 V3 模板
 	if err := r.ensureSubscribeFileColumn("template_filename", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
+	// 添加 selected_tags 字段，用于存储选中的节点标签（JSON 数组）
+	if err := r.ensureSubscribeFileColumn("selected_tags", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
 

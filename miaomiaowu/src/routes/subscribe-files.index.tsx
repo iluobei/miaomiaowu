@@ -57,6 +57,7 @@ type SubscribeFile = {
   filename: string
   auto_sync_custom_rules: boolean
   template_filename: string
+  selected_tags: string[]
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -341,6 +342,7 @@ function SubscribeFilesPage() {
     description: '',
     filename: '',
     template_filename: '',
+    selected_tags: [] as string[],
     expire: undefined as Date | undefined,
   })
 
@@ -495,6 +497,18 @@ function SubscribeFilesPage() {
     return grouped
   }, [allNodesData])
 
+  // 获取所有唯一的节点标签
+  const allNodeTags = useMemo(() => {
+    const nodes = allNodesData?.nodes ?? []
+    const tags = new Set<string>()
+    for (const node of nodes) {
+      if (node.tag) {
+        tags.add(node.tag)
+      }
+    }
+    return Array.from(tags).sort()
+  }, [allNodesData])
+
   // 导入订阅
   const importMutation = useMutation({
     mutationFn: async (data: typeof importForm) => {
@@ -573,7 +587,7 @@ function SubscribeFilesPage() {
       toast.success('订阅信息已更新')
       setEditMetadataDialogOpen(false)
       setEditingMetadata(null)
-      setMetadataForm({ name: '', description: '', filename: '', template_filename: '' })
+      setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [] })
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '更新失败')
@@ -1402,6 +1416,7 @@ function SubscribeFilesPage() {
       description: file.description,
       filename: file.filename,
       template_filename: file.template_filename || '',
+      selected_tags: file.selected_tags || [],
       expire: file.expire_at ? new Date(file.expire_at) : undefined,
     })
     setEditMetadataDialogOpen(true)
@@ -1424,6 +1439,7 @@ function SubscribeFilesPage() {
         description: metadataForm.description,
         filename: metadataForm.filename,
         template_filename: metadataForm.template_filename || null,
+        selected_tags: metadataForm.selected_tags,
         expire_at: metadataForm.expire
           ? (() => {
               const endOfDay = new Date(metadataForm.expire)
@@ -2752,6 +2768,103 @@ function SubscribeFilesPage() {
                     headerClassName: 'text-center',
                     cellClassName: 'text-center',
                     width: '160px'
+                  },
+                  // 节点标签选择列（仅绑定模板时显示）
+                  {
+                    header: '节点标签',
+                    cell: (file: SubscribeFile) => {
+                      if (!file.template_filename) {
+                        return <span className="text-muted-foreground text-xs">-</span>
+                      }
+                      const selectedTags = file.selected_tags || []
+                      return (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-[120px] h-8 text-xs justify-between"
+                              disabled={updateMetadataMutation.isPending}
+                            >
+                              <span className="truncate">
+                                {selectedTags.length > 0 ? `${selectedTags.length} 个标签` : '全部节点'}
+                              </span>
+                              <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[200px] p-1" align="start">
+                            <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  "justify-start text-xs h-8",
+                                  selectedTags.length === 0 && "bg-accent"
+                                )}
+                                onClick={() => {
+                                  updateMetadataMutation.mutate({
+                                    id: file.id,
+                                    data: {
+                                      name: file.name,
+                                      description: file.description,
+                                      auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                      template_filename: file.template_filename,
+                                      selected_tags: [],
+                                    }
+                                  }, {
+                                    onSuccess: () => {
+                                      toast.success('已设置为使用全部节点')
+                                    }
+                                  })
+                                }}
+                              >
+                                {selectedTags.length === 0 && <Check className="h-3 w-3 mr-2" />}
+                                <span className={selectedTags.length === 0 ? '' : 'ml-5'}>全部节点</span>
+                              </Button>
+                              {allNodeTags.map((tag) => {
+                                const isSelected = selectedTags.includes(tag)
+                                return (
+                                  <Button
+                                    key={tag}
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                      "justify-start text-xs h-8",
+                                      isSelected && "bg-accent"
+                                    )}
+                                    onClick={() => {
+                                      const newTags = isSelected
+                                        ? selectedTags.filter(t => t !== tag)
+                                        : [...selectedTags, tag]
+                                      updateMetadataMutation.mutate({
+                                        id: file.id,
+                                        data: {
+                                          name: file.name,
+                                          description: file.description,
+                                          auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                          template_filename: file.template_filename,
+                                          selected_tags: newTags,
+                                        }
+                                      }, {
+                                        onSuccess: () => {
+                                          toast.success(isSelected ? `已移除标签: ${tag}` : `已添加标签: ${tag}`)
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    {isSelected && <Check className="h-3 w-3 mr-2" />}
+                                    <span className={isSelected ? '' : 'ml-5'}>{tag}</span>
+                                  </Button>
+                                )
+                              })}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )
+                    },
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center',
+                    width: '140px'
                   }] as DataTableColumn<SubscribeFile>[] : []),
                   {
                     header: '操作',
@@ -4034,7 +4147,7 @@ function SubscribeFilesPage() {
         setEditMetadataDialogOpen(open)
         if (!open) {
           setEditingMetadata(null)
-          setMetadataForm({ name: '', description: '', filename: '', template_filename: '', expire: undefined })
+          setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [], expire: undefined })
         }
       }}>
         <DialogContent className='sm:max-w-lg'>
@@ -4156,6 +4269,67 @@ function SubscribeFilesPage() {
                 绑定模板后，获取订阅时将根据模板动态生成配置。绑定模板会自动禁用规则同步。
               </p>
             </div>
+            {/* 节点标签选择（仅绑定模板时显示） */}
+            {metadataForm.template_filename && (
+              <div className='space-y-2'>
+                <Label>节点标签筛选</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
+                      {metadataForm.selected_tags.length > 0
+                        ? `已选择 ${metadataForm.selected_tags.length} 个标签`
+                        : '使用全部节点'}
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-1" align="start">
+                    <div className="flex flex-col max-h-[300px] overflow-y-auto">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "justify-start h-9",
+                          metadataForm.selected_tags.length === 0 && "bg-accent"
+                        )}
+                        onClick={() => setMetadataForm({ ...metadataForm, selected_tags: [] })}
+                      >
+                        {metadataForm.selected_tags.length === 0 && <Check className="h-4 w-4 mr-2" />}
+                        <span className={metadataForm.selected_tags.length === 0 ? '' : 'ml-6'}>全部节点</span>
+                      </Button>
+                      {allNodeTags.map((tag) => {
+                        const isSelected = metadataForm.selected_tags.includes(tag)
+                        return (
+                          <Button
+                            key={tag}
+                            variant="ghost"
+                            size="sm"
+                            className={cn(
+                              "justify-start h-9",
+                              isSelected && "bg-accent"
+                            )}
+                            onClick={() => {
+                              const newTags = isSelected
+                                ? metadataForm.selected_tags.filter(t => t !== tag)
+                                : [...metadataForm.selected_tags, tag]
+                              setMetadataForm({ ...metadataForm, selected_tags: newTags })
+                            }}
+                          >
+                            {isSelected && <Check className="h-4 w-4 mr-2" />}
+                            <span className={isSelected ? '' : 'ml-6'}>{tag}</span>
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <p className='text-xs text-muted-foreground'>
+                  选择节点标签后，生成订阅时只使用选中标签的节点。不选择则使用全部节点。
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
