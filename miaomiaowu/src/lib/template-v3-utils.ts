@@ -34,12 +34,13 @@ export const PROXY_GROUP_TYPES = [
 
 export type ProxyGroupType = typeof PROXY_GROUP_TYPES[number]
 
-// Special markers for proxy order
+// 代理节点、代理集合、区域代理组占位符
 export const PROXY_NODES_MARKER = '__PROXY_NODES__'
 export const PROXY_PROVIDERS_MARKER = '__PROXY_PROVIDERS__'
+export const REGION_PROXY_GROUPS_MARKER = '__REGION_PROXY_GROUPS__'
 
 // Type for proxy order item
-export type ProxyOrderItem = string // Can be group name, PROXY_NODES_MARKER, or PROXY_PROVIDERS_MARKER
+export type ProxyOrderItem = string // Can be group name, PROXY_NODES_MARKER, PROXY_PROVIDERS_MARKER, or REGION_PROXY_GROUPS_MARKER
 
 // V3 Proxy Group configuration (matches backend ProxyGroupV3)
 export interface ProxyGroupV3Config {
@@ -153,6 +154,11 @@ export function hasProxyProviders(state: ProxyGroupFormState): boolean {
 export function getDefaultProxyOrder(state: ProxyGroupFormState): ProxyOrderItem[] {
   const order: ProxyOrderItem[] = []
 
+  // Add region proxy groups marker if enabled
+  if (state.includeRegionProxyGroups) {
+    order.push(REGION_PROXY_GROUPS_MARKER)
+  }
+
   // For include-all, providers come before nodes
   if (state.includeAll) {
     order.push(PROXY_PROVIDERS_MARKER)
@@ -203,6 +209,7 @@ export function formStateToConfig(state: ProxyGroupFormState): ProxyGroupV3Confi
   const proxiesFromOrder = state.proxyOrder.filter(item => {
     if (item === PROXY_NODES_MARKER) return hasProxyNodes(state)
     if (item === PROXY_PROVIDERS_MARKER) return hasProxyProviders(state)
+    if (item === REGION_PROXY_GROUPS_MARKER) return state.includeRegionProxyGroups
     return true
   })
   const allProxies = [...proxiesFromOrder, ...state.staticProxies]
@@ -228,7 +235,7 @@ export function configToFormState(config: ProxyGroupV3Config, allGroupNames: str
   const staticProxies: string[] = []
 
   for (const p of proxies) {
-    if (p === PROXY_NODES_MARKER || p === PROXY_PROVIDERS_MARKER) {
+    if (p === PROXY_NODES_MARKER || p === PROXY_PROVIDERS_MARKER || p === REGION_PROXY_GROUPS_MARKER) {
       proxyOrder.push(p)
     } else if (allGroupNames.includes(p)) {
       proxyOrder.push(p)
@@ -237,6 +244,11 @@ export function configToFormState(config: ProxyGroupV3Config, allGroupNames: str
     }
   }
 
+  // include-all 等同于同时开启 include-all-proxies 和 include-all-providers
+  const includeAll = config['include-all'] || false
+  const includeAllProxies = config['include-all-proxies'] || includeAll
+  const includeAllProviders = config['include-all-providers'] || includeAll
+
   const state: ProxyGroupFormState = {
     name: config.name,
     type: config.type,
@@ -244,11 +256,11 @@ export function configToFormState(config: ProxyGroupV3Config, allGroupNames: str
     excludeFilterKeywords: regexToKeywords(config['exclude-filter'] || ''),
     includeTypes: (config['include-type']?.split('|').filter(t => PROXY_TYPES.includes(t as ProxyType)) || []) as ProxyType[],
     excludeTypes: (config['exclude-type']?.split('|').filter(t => PROXY_TYPES.includes(t as ProxyType)) || []) as ProxyType[],
-    includeAll: config['include-all'] || false,
-    includeAllProxies: config['include-all-proxies'] || false,
-    includeAllProviders: config['include-all-providers'] || false,
+    includeAll,
+    includeAllProxies,
+    includeAllProviders,
     includeRegionProxyGroups: config['include-region-proxy-groups'] || false,
-    includedProxyGroups: proxyOrder.filter(p => p !== PROXY_NODES_MARKER && p !== PROXY_PROVIDERS_MARKER),
+    includedProxyGroups: proxyOrder.filter(p => p !== PROXY_NODES_MARKER && p !== PROXY_PROVIDERS_MARKER && p !== REGION_PROXY_GROUPS_MARKER),
     proxyOrder,
     staticProxies,
     url: config.url || 'https://www.gstatic.com/generate_204',
@@ -301,6 +313,7 @@ export function updateProxyGroups(content: string, groups: ProxyGroupFormState[]
 // Display names for markers in preview (Chinese for better user understanding)
 export const PROXY_NODES_DISPLAY = '⛓️‍💥 代理节点'
 export const PROXY_PROVIDERS_DISPLAY = '📦 代理集合'
+export const REGION_PROXY_GROUPS_DISPLAY = '🌏 区域代理组'
 
 // Generate proxy-groups YAML preview from form states
 export function generateProxyGroupsPreview(groups: ProxyGroupFormState[]): string {
@@ -310,6 +323,7 @@ export function generateProxyGroupsPreview(groups: ProxyGroupFormState[]): strin
       config.proxies = config.proxies.map(p => {
         if (p === PROXY_NODES_MARKER) return PROXY_NODES_DISPLAY
         if (p === PROXY_PROVIDERS_MARKER) return PROXY_PROVIDERS_DISPLAY
+        if (p === REGION_PROXY_GROUPS_MARKER) return REGION_PROXY_GROUPS_DISPLAY
         return p
       })
     }

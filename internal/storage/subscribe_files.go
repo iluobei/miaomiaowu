@@ -344,3 +344,42 @@ func (r *TrafficRepository) GetSubscribeFilesByTemplate(ctx context.Context, tem
 
 	return files, nil
 }
+
+// GetSubscribeFilesWithTemplate 获取所有绑定了模板的订阅文件
+func (r *TrafficRepository) GetSubscribeFilesWithTemplate(ctx context.Context) ([]SubscribeFile, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+
+	const query = `SELECT id, name, COALESCE(description, ''), url, type, filename, COALESCE(file_short_code, ''), COALESCE(auto_sync_custom_rules, 0), COALESCE(template_filename, ''), expire_at, created_at, updated_at
+		FROM subscribe_files
+		WHERE template_filename IS NOT NULL AND template_filename != ''
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("get subscribe files with template: %w", err)
+	}
+	defer rows.Close()
+
+	var files []SubscribeFile
+	for rows.Next() {
+		var file SubscribeFile
+		var autoSync int
+		var expireAt sql.NullTime
+		if err := rows.Scan(&file.ID, &file.Name, &file.Description, &file.URL, &file.Type, &file.Filename, &file.FileShortCode, &autoSync, &file.TemplateFilename, &expireAt, &file.CreatedAt, &file.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan subscribe file: %w", err)
+		}
+		file.AutoSyncCustomRules = autoSync != 0
+		if expireAt.Valid {
+			file.ExpireAt = &expireAt.Time
+		}
+		files = append(files, file)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate subscribe files with template: %w", err)
+	}
+
+	return files, nil
+}

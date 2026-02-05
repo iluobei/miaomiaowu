@@ -582,3 +582,86 @@ func TestContainsType(t *testing.T) {
 		t.Error("Expected containsType to return false for 'ss'")
 	}
 }
+
+func TestTemplateV3Processor_ProxyOrderWithMarkers(t *testing.T) {
+	// 测试 proxies 列表中标记的顺序
+	templateContent := `
+proxy-groups:
+  - name: 🚀 手动选择
+    type: select
+    include-all-proxies: true
+    include-region-proxy-groups: true
+    proxies:
+      - ♻️ 自动选择
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+      - 🌄 落地节点
+      - __REGION_PROXY_GROUPS__
+`
+	processor := NewTemplateV3Processor(nil, nil)
+	proxies := []map[string]any{
+		{"name": "🇭🇰 香港 01", "type": "vmess", "server": "hk1.example.com", "port": 443},
+		{"name": "🇺🇸 美国 01", "type": "vmess", "server": "us1.example.com", "port": 443},
+	}
+
+	result, err := processor.ProcessTemplate(templateContent, proxies)
+	if err != nil {
+		t.Fatalf("ProcessTemplate failed: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("Result is not valid YAML: %v", err)
+	}
+
+	proxyGroups := parsed["proxy-groups"].([]any)
+
+	// 找到 🚀 手动选择 代理组
+	var manualGroup map[string]any
+	for _, g := range proxyGroups {
+		group := g.(map[string]any)
+		if group["name"] == "🚀 手动选择" {
+			manualGroup = group
+			break
+		}
+	}
+
+	if manualGroup == nil {
+		t.Fatal("Manual select proxy group not found")
+	}
+
+	groupProxies := manualGroup["proxies"].([]any)
+
+	// 验证顺序：♻️ 自动选择 应该在最前面
+	if len(groupProxies) < 1 || groupProxies[0].(string) != "♻️ 自动选择" {
+		t.Errorf("First proxy should be '♻️ 自动选择', got %v", groupProxies[0])
+	}
+
+	// 验证 __REGION_PROXY_GROUPS__ 被替换为区域代理组名称，且在最后
+	// 区域代理组名称应该在 🌄 落地节点 之后
+	foundLuodi := false
+	foundRegionAfterLuodi := false
+	for i, p := range groupProxies {
+		name := p.(string)
+		if name == "🌄 落地节点" {
+			foundLuodi = true
+		}
+		if foundLuodi && (name == "🇭🇰 香港节点" || name == "🇺🇸 美国节点" || name == "🇯🇵 日本节点") {
+			foundRegionAfterLuodi = true
+			t.Logf("Found region group %q at position %d (after 🌄 落地节点)", name, i)
+		}
+	}
+
+	if !foundLuodi {
+		t.Error("🌄 落地节点 not found in proxies list")
+	}
+
+	if !foundRegionAfterLuodi {
+		t.Error("Region proxy groups should be after 🌄 落地节点")
+	}
+
+	t.Logf("Proxy order test passed! Total proxies: %d", len(groupProxies))
+	for i, p := range groupProxies {
+		t.Logf("  [%d] %s", i, p.(string))
+	}
+}
