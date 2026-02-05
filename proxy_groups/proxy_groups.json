@@ -856,7 +856,7 @@
         "behavior": "domain",
         "type": "http",
         "format": "yaml",
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/Jimleerx/clash-pt-rules/refs/heads/main/pttracker.yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/iluobei/clash-pt-rules/refs/heads/main/pttracker.yaml",
         "path": "./ruleset/pttracker.yaml",
         "interval": 86400
       }
@@ -877,7 +877,7 @@
         "behavior": "domain",
         "type": "http",
         "format": "yaml",
-        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/Jimleerx/clash-pt-rules/refs/heads/main/ptdomain.yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/iluobei/clash-pt-rules/refs/heads/main/ptdomain.yaml",
         "path": "./ruleset/ptdomain.yaml",
         "interval": 86400
       }

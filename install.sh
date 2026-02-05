@@ -7,7 +7,7 @@ set -e
 
 # 配置
 VERSION="v0.5.1"
-GITHUB_REPO="Jimleerx/miaomiaowu"
+GITHUB_REPO="iluobei/miaomiaowu"
 BINARY_NAME=""  # 将根据架构自动设置
 INSTALL_DIR="/usr/local/bin"
 SERVICE_NAME="mmw"
