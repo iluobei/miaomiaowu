@@ -1496,10 +1496,11 @@ function SubscribeFilesPage() {
     setShowAllNodes(false)
   }
 
-  // 验证 rules 中的节点是否存在于 proxy-groups 中
+  // 验证 rules 中的节点是否存在于 proxy-groups 或 proxies 中
   const validateRulesNodes = (parsedConfig: any) => {
     const rules = parsedConfig.rules || []
     const proxyGroupNames = new Set(parsedConfig['proxy-groups']?.map((g: any) => g.name) || [])
+    const proxyNames = new Set(parsedConfig.proxies?.map((p: any) => p.name) || [])
 
     // 添加特殊节点
     proxyGroupNames.add('DIRECT')
@@ -1525,8 +1526,8 @@ function SubscribeFilesPage() {
         return
       }
 
-      // 如果节点名称不在 proxy-groups 中，添加到缺失列表
-      if (nodeName && !proxyGroupNames.has(nodeName)) {
+      // 如果节点名称不在 proxy-groups 和 proxies 中，添加到缺失列表
+      if (nodeName && !proxyGroupNames.has(nodeName) && !proxyNames.has(nodeName)) {
         console.log(`[validateRulesNodes] 发现缺失节点: "${nodeName}"`)
         missingNodes.add(nodeName)
       }
@@ -1543,6 +1544,7 @@ function SubscribeFilesPage() {
       const parsedConfig = parseYAML(pendingConfigAfterSave) as any
       const rules = parsedConfig.rules || []
       const proxyGroupNames = new Set(parsedConfig['proxy-groups']?.map((g: any) => g.name) || [])
+      const proxyNames = new Set(parsedConfig.proxies?.map((p: any) => p.name) || [])
 
       // 添加特殊节点
       proxyGroupNames.add('DIRECT')
@@ -1556,15 +1558,15 @@ function SubscribeFilesPage() {
           const parts = rule.split(',')
           if (parts.length < 2) return rule
           const nodeName = parts[parts.length - 1].trim()
-          // 如果节点缺失，替换为用户选择的值
-          if (nodeName && !proxyGroupNames.has(nodeName)) {
+          // 如果节点缺失（不在代理组和节点中），替换为用户选择的值
+          if (nodeName && !proxyGroupNames.has(nodeName) && !proxyNames.has(nodeName)) {
             parts[parts.length - 1] = replacementChoice
             return parts.join(',')
           }
         } else if (typeof rule === 'object' && rule !== null) {
           // 对象格式的规则，检查并替换可能的节点字段
           const nodeName = rule.target || rule.group || rule.proxy || rule.ruleset
-          if (nodeName && !proxyGroupNames.has(nodeName)) {
+          if (nodeName && !proxyGroupNames.has(nodeName) && !proxyNames.has(nodeName)) {
             const updatedRule = { ...rule }
             if (updatedRule.target) updatedRule.target = replacementChoice
             else if (updatedRule.group) updatedRule.group = replacementChoice
@@ -4787,7 +4789,7 @@ function SubscribeFilesPage() {
           <DialogHeader>
             <DialogTitle>发现缺失节点</DialogTitle>
             <DialogDescription>
-              以下节点在 rules 中被引用，但不存在于 proxy-groups 中
+              以下节点在 rules 中被引用，但不存在于代理组与节点中
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4'>
