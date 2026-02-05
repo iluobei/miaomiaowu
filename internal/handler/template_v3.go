@@ -234,7 +234,7 @@ func mapToYAMLNode(m map[string]any) *yaml.Node {
 	}
 
 	// Define preferred key order for proxy nodes
-	keyOrder := []string{"name", "type", "server", "port", "password", "uuid", "alterId", "cipher", "udp", "tls", "skip-cert-verify", "sni", "servername", "network", "ws-opts", "grpc-opts", "reality-opts", "flow", "client-fingerprint"}
+	keyOrder := []string{"name", "type", "server", "port", "password", "uuid", "alterId", "cipher", "udp", "tls", "skip-cert-verify", "sni", "servername", "network", "ws-opts", "grpc-opts", "reality-opts", "flow", "client-fingerprint", "dialer-proxy"}
 
 	// Add keys in preferred order first
 	addedKeys := make(map[string]bool)
