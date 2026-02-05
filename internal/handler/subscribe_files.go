@@ -394,6 +394,7 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	}
 	// 更新模板绑定（绑定模板后禁用规则同步）
 	templateJustBound := false
+	tagsChanged := false
 	if req.TemplateFilename != nil {
 		existing.TemplateFilename = *req.TemplateFilename
 		// 绑定模板后自动禁用规则同步，因为配置将由模板生成
@@ -402,6 +403,11 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 			templateJustBound = true
 			logger.Info("[订阅更新] 绑定模板，已禁用规则同步", "subscribe_id", existing.ID, "template", *req.TemplateFilename)
 		}
+	}
+	// 更新选中的节点标签
+	if req.SelectedTags != nil {
+		existing.SelectedTags = req.SelectedTags
+		tagsChanged = true
 	}
 	if req.ExpireAt != nil {
 		expireAt, parseErr := parseExpireAt(req.ExpireAt)
@@ -484,8 +490,8 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 		}()
 	}
 
-	// 如果绑定了V3模板，从模板重新生成订阅文件
-	if templateJustBound && updated.TemplateFilename != "" {
+	// 如果绑定了V3模板或标签变化，从模板重新生成订阅文件
+	if (templateJustBound || tagsChanged) && updated.TemplateFilename != "" {
 		go func() {
 			ctx := context.Background()
 			username := auth.UsernameFromContext(r.Context())
@@ -572,14 +578,15 @@ func parseFilenameFromContentDisposition(header string) string {
 }
 
 type subscribeFileRequest struct {
-	Name                string  `json:"name"`
-	Description         string  `json:"description"`
-	URL                 string  `json:"url"`
-	Type                string  `json:"type"`
-	Filename            string  `json:"filename"`
-	AutoSyncCustomRules *bool   `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
-	TemplateFilename    *string `json:"template_filename,omitempty"`      // 绑定的 V3 模板文件名
-	ExpireAt            *string `json:"expire_at,omitempty"`
+	Name                string   `json:"name"`
+	Description         string   `json:"description"`
+	URL                 string   `json:"url"`
+	Type                string   `json:"type"`
+	Filename            string   `json:"filename"`
+	AutoSyncCustomRules *bool    `json:"auto_sync_custom_rules,omitempty"` // Pointer to distinguish between false and not provided
+	TemplateFilename    *string  `json:"template_filename,omitempty"`      // 绑定的 V3 模板文件名
+	SelectedTags        []string `json:"selected_tags,omitempty"`          // 选中的节点标签
+	ExpireAt            *string  `json:"expire_at,omitempty"`
 }
 
 type subscribeFileDTO struct {
@@ -591,12 +598,17 @@ type subscribeFileDTO struct {
 	ExpireAt            *time.Time `json:"expire_at,omitempty"`
 	AutoSyncCustomRules bool       `json:"auto_sync_custom_rules"`
 	TemplateFilename    string     `json:"template_filename"`
+	SelectedTags        []string   `json:"selected_tags"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
 	LatestVersion       int64      `json:"latest_version,omitempty"`
 }
 
 func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
+	selectedTags := file.SelectedTags
+	if selectedTags == nil {
+		selectedTags = []string{}
+	}
 	return subscribeFileDTO{
 		ID:                  file.ID,
 		Name:                file.Name,
@@ -606,6 +618,7 @@ func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 		ExpireAt:            file.ExpireAt,
 		AutoSyncCustomRules: file.AutoSyncCustomRules,
 		TemplateFilename:    file.TemplateFilename,
+		SelectedTags:        selectedTags,
 		CreatedAt:           file.CreatedAt,
 		UpdatedAt:           file.UpdatedAt,
 	}
@@ -1352,11 +1365,30 @@ func (h *subscribeFilesHandler) regenerateFromTemplate(ctx context.Context, user
 		return fmt.Errorf("获取节点列表失败: %w", err)
 	}
 
+	// 构建选中标签的 map 用于快速查找
+	selectedTagsMap := make(map[string]bool)
+	for _, tag := range subscribeFile.SelectedTags {
+		selectedTagsMap[tag] = true
+	}
+	hasTagFilter := len(selectedTagsMap) > 0
+
+	if hasTagFilter {
+		logger.Info("[模板生成] 启用标签过滤", "selected_tags", subscribeFile.SelectedTags, "tag_count", len(subscribeFile.SelectedTags))
+	}
+
 	// 将节点转换为 proxies 格式（[]map[string]any）
 	var proxies []map[string]any
+	enabledCount := 0
+	filteredByTagCount := 0
 	for _, node := range nodes {
 		if !node.Enabled {
 			continue // 跳过禁用的节点
+		}
+		enabledCount++
+		// 如果设置了标签过滤，只使用选中标签的节点
+		if hasTagFilter && !selectedTagsMap[node.Tag] {
+			filteredByTagCount++
+			continue
 		}
 		// ClashConfig 是 JSON 格式的字符串，需要解析
 		var proxyConfig map[string]any
@@ -1368,7 +1400,7 @@ func (h *subscribeFilesHandler) regenerateFromTemplate(ctx context.Context, user
 		proxyConfig["name"] = node.NodeName
 		proxies = append(proxies, proxyConfig)
 	}
-	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies))
+	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", enabledCount, "filtered_by_tag", filteredByTagCount, "used", len(proxies))
 
 	// 3. 从代理集合表获取用户的代理集合配置（用于 proxy-providers）
 	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, username)
