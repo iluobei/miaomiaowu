@@ -3,9 +3,16 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Check, ChevronsUpDown, GripVertical, X, Server, Database } from 'lucide-react'
+import { Check, ChevronsUpDown, GripVertical, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { PROXY_NODES_MARKER, PROXY_PROVIDERS_MARKER } from '@/lib/template-v3-utils'
+import {
+  PROXY_NODES_MARKER,
+  PROXY_PROVIDERS_MARKER,
+  REGION_PROXY_GROUPS_MARKER,
+  PROXY_NODES_DISPLAY,
+  PROXY_PROVIDERS_DISPLAY,
+  REGION_PROXY_GROUPS_DISPLAY,
+} from '@/lib/template-v3-utils'
 import {
   DndContext,
   DragOverlay,
@@ -34,6 +41,7 @@ interface ProxyGroupSelectProps {
   availableGroups: string[]
   showNodesMarker?: boolean
   showProvidersMarker?: boolean
+  showRegionGroupsMarker?: boolean
   placeholder?: string
 }
 
@@ -44,7 +52,7 @@ interface SortableItemProps {
 
 function SortableItem({ id, onRemove }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const isMarker = id === PROXY_NODES_MARKER || id === PROXY_PROVIDERS_MARKER
+  const isMarker = id === PROXY_NODES_MARKER || id === PROXY_PROVIDERS_MARKER || id === REGION_PROXY_GROUPS_MARKER
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -54,21 +62,18 @@ function SortableItem({ id, onRemove }: SortableItemProps) {
   }
 
   const getDisplayName = () => {
-    if (id === PROXY_NODES_MARKER) return '代理节点'
-    if (id === PROXY_PROVIDERS_MARKER) return '代理集合'
+    if (id === PROXY_NODES_MARKER) return PROXY_NODES_DISPLAY
+    if (id === PROXY_PROVIDERS_MARKER) return PROXY_PROVIDERS_DISPLAY
+    if (id === REGION_PROXY_GROUPS_MARKER) return REGION_PROXY_GROUPS_DISPLAY
     return id
-  }
-
-  const getIcon = () => {
-    if (id === PROXY_NODES_MARKER) return <Server className="h-3 w-3 mr-1" />
-    if (id === PROXY_PROVIDERS_MARKER) return <Database className="h-3 w-3 mr-1" />
-    return null
   }
 
   const bgClass = isMarker
     ? id === PROXY_NODES_MARKER
       ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
-      : 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+      : id === PROXY_PROVIDERS_MARKER
+        ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+        : 'bg-orange-100 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700'
     : 'bg-secondary'
 
   return (
@@ -78,7 +83,6 @@ function SortableItem({ id, onRemove }: SortableItemProps) {
       className={cn('flex items-center gap-1 rounded-md px-2 py-1', bgClass)}
     >
       <GripVertical className="h-3 w-3 cursor-grab text-muted-foreground" {...attributes} {...listeners} />
-      {getIcon()}
       <span className="text-sm">{getDisplayName()}</span>
       {!isMarker && onRemove && (
         <Button
@@ -95,30 +99,26 @@ function SortableItem({ id, onRemove }: SortableItemProps) {
 }
 
 function DragOverlayItem({ id }: { id: string }) {
-  const isMarker = id === PROXY_NODES_MARKER || id === PROXY_PROVIDERS_MARKER
+  const isMarker = id === PROXY_NODES_MARKER || id === PROXY_PROVIDERS_MARKER || id === REGION_PROXY_GROUPS_MARKER
 
   const getDisplayName = () => {
-    if (id === PROXY_NODES_MARKER) return '代理节点'
-    if (id === PROXY_PROVIDERS_MARKER) return '代理集合'
+    if (id === PROXY_NODES_MARKER) return PROXY_NODES_DISPLAY
+    if (id === PROXY_PROVIDERS_MARKER) return PROXY_PROVIDERS_DISPLAY
+    if (id === REGION_PROXY_GROUPS_MARKER) return REGION_PROXY_GROUPS_DISPLAY
     return id
-  }
-
-  const getIcon = () => {
-    if (id === PROXY_NODES_MARKER) return <Server className="h-3 w-3 mr-1" />
-    if (id === PROXY_PROVIDERS_MARKER) return <Database className="h-3 w-3 mr-1" />
-    return null
   }
 
   const bgClass = isMarker
     ? id === PROXY_NODES_MARKER
       ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
-      : 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+      : id === PROXY_PROVIDERS_MARKER
+        ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+        : 'bg-orange-100 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700'
     : 'bg-secondary'
 
   return (
     <div className={cn('flex items-center gap-1 rounded-md px-2 py-1 shadow-lg', bgClass)}>
       <GripVertical className="h-3 w-3 cursor-grab text-muted-foreground" />
-      {getIcon()}
       <span className="text-sm">{getDisplayName()}</span>
     </div>
   )
@@ -131,6 +131,7 @@ export function ProxyGroupSelect({
   availableGroups,
   showNodesMarker = false,
   showProvidersMarker = false,
+  showRegionGroupsMarker = false,
   placeholder = '选择代理组',
 }: ProxyGroupSelectProps) {
   const [open, setOpen] = useState(false)
@@ -194,12 +195,16 @@ export function ProxyGroupSelect({
   const displayItems = internalOrder.filter(item => {
     if (item === PROXY_NODES_MARKER) return showNodesMarker
     if (item === PROXY_PROVIDERS_MARKER) return showProvidersMarker
+    if (item === REGION_PROXY_GROUPS_MARKER) return showRegionGroupsMarker
     return true
   })
 
   // Ensure markers are in value if they should be shown
   const ensureMarkers = (newValue: string[]) => {
     let result = [...newValue]
+    if (showRegionGroupsMarker && !result.includes(REGION_PROXY_GROUPS_MARKER)) {
+      result.push(REGION_PROXY_GROUPS_MARKER)
+    }
     if (showNodesMarker && !result.includes(PROXY_NODES_MARKER)) {
       result.push(PROXY_NODES_MARKER)
     }
@@ -212,6 +217,9 @@ export function ProxyGroupSelect({
     }
     if (!showProvidersMarker) {
       result = result.filter(v => v !== PROXY_PROVIDERS_MARKER)
+    }
+    if (!showRegionGroupsMarker) {
+      result = result.filter(v => v !== REGION_PROXY_GROUPS_MARKER)
     }
     return result
   }

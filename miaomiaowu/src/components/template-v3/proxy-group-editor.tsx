@@ -214,6 +214,7 @@ export function ProxyGroupEditor({
               availableGroups={allGroupNames.filter(n => n !== group.name)}
               showNodesMarker={hasProxyNodes(group)}
               showProvidersMarker={hasProxyProviders(group)}
+              showRegionGroupsMarker={group.includeRegionProxyGroups}
               placeholder="选择要引用的代理组"
             />
 

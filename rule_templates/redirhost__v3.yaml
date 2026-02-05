@@ -20,15 +20,18 @@ proxy-groups:
   - name: 🚀 手动选择
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - ♻️ 自动选择
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
       - 🌄 落地节点
-      - 🇭🇰 香港节点
   - name: ♻️ 自动选择
     type: url-test
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - __PROXY_PROVIDERS__
       - __PROXY_NODES__
@@ -38,6 +41,8 @@ proxy-groups:
   - name: 🌠 中转节点
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     filter: 中转|CO|co
     proxies:
       - __PROXY_PROVIDERS__
@@ -45,6 +50,8 @@ proxy-groups:
   - name: 🌄 落地节点
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     filter: LD|落地|Bage|bage|jinx|ctc|Jinx|JINX|CTC|Luodi|luodi|LUODI|zouter|legend|Alice|alice
     proxies:
       - __PROXY_PROVIDERS__
@@ -52,6 +59,8 @@ proxy-groups:
   - name: 🚀 GitHub
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 手动选择
       - ♻️ 自动选择
@@ -61,6 +70,8 @@ proxy-groups:
   - name: 📢 谷歌FCM
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 手动选择
       - ♻️ 自动选择
@@ -70,6 +81,8 @@ proxy-groups:
   - name: 🇬 谷歌服务
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 手动选择
       - ♻️ 自动选择
@@ -79,6 +92,8 @@ proxy-groups:
   - name: 🍎 苹果服务
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🎯 全球直连
       - 🚀 手动选择
@@ -88,6 +103,8 @@ proxy-groups:
   - name: Ⓜ️ 微软服务
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🎯 全球直连
       - 🚀 手动选择
@@ -97,6 +114,8 @@ proxy-groups:
   - name: 🎮 游戏平台
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🎯 全球直连
       - 🚀 手动选择
@@ -106,6 +125,8 @@ proxy-groups:
   - name: 🎮 Steam
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🎯 全球直连
       - 🚀 手动选择
@@ -115,6 +136,8 @@ proxy-groups:
   - name: 🚀 测速工具
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🎯 全球直连
       - 🚀 手动选择
@@ -124,6 +147,8 @@ proxy-groups:
   - name: 🐟 漏网之鱼
     type: select
     include-all: true
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 手动选择
       - ♻️ 自动选择
@@ -135,110 +160,6 @@ proxy-groups:
     proxies:
       - 🐟 遵循规则
       - 🎯 全球直连
-  - name: 🇭🇰 香港节点
-    type: url-test
-    filter: 🇭🇰|港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|九龙|Kowloon|新界|沙田|荃湾|葵涌
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇺🇸 美国节点
-    type: url-test
-    filter: 🇺🇸|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇯🇵 日本节点
-    type: url-test
-    filter: 🇯🇵|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|关西|Kansai|KANSAI
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇸🇬 新加坡节点
-    type: url-test
-    filter: 🇸🇬|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Singapore|SINGAPORE|SIN
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇼🇸 台湾节点
-    type: url-test
-    filter: 🇹🇼|🇼🇸|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇰🇷 韩国节点
-    type: url-test
-    filter: 🇰🇷|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇨🇦 加拿大节点
-    type: url-test
-    filter: 🇨🇦|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇬🇧 英国节点
-    type: url-test
-    filter: 🇬🇧|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|GBR|LHR|MAN
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇫🇷 法国节点
-    type: url-test
-    filter: 🇫🇷|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇩🇪 德国节点
-    type: url-test
-    filter: 🇩🇪|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇳🇱 荷兰节点
-    type: url-test
-    filter: 🇳🇱|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|NLD|阿姆斯特丹|AMS
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🇹🇷 土耳其节点
-    type: url-test
-    filter: 🇹🇷|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|TUR|IST|ANK
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
-  - name: 🌐 其他地区
-    type: url-test
-    filter: (^(?!.*(港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|🇭🇰|九龙|Kowloon|新界|沙田|荃湾|葵涌|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC|🇺🇸|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|🇯🇵|关西|Kansai|KANSAI|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Singapore|SINGAPORE|SIN|🇸🇬|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC|🇹🇼|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN|🇰🇷|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL|🇨🇦|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|GBR|LHR|MAN|🇬🇧|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS|🇫🇷|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC|🇩🇪|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|NLD|阿姆斯特丹|AMS|🇳🇱|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|TUR|IST|ANK|🇹🇷)).*)
-    proxies:
-      - __PROXY_NODES__
-    url: https://cp.cloudflare.com/generate_204
-    interval: 300
-    tolerance: 50
   - name: 🎯 全球直连
     type: select
     proxies:
@@ -247,6 +168,123 @@ proxy-groups:
     type: select
     proxies:
       - 🐟 漏网之鱼
+  - name: 🇭🇰 香港节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇭🇰|港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|九龙|Kowloon|新界|沙田|荃湾|葵涌
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇺🇸 美国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇺🇸|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇯🇵 日本节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇯🇵|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|关西|Kansai|KANSAI
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇸🇬 新加坡节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇸🇬|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Singapore|SINGAPORE|SIN
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇼🇸 台湾节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇹🇼|🇼🇸|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇰🇷 韩国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇰🇷|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇨🇦 加拿大节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇨🇦|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇬🇧 英国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇬🇧|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|GBR|LHR|MAN
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇫🇷 法国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇫🇷|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇩🇪 德国节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇩🇪|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇳🇱 荷兰节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇳🇱|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|NLD|阿姆斯特丹|AMS
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🇹🇷 土耳其节点
+    type: url-test
+    include-all-proxies: true
+    filter: 🇹🇷|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|TUR|IST|ANK
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: 🌐 其他地区
+    type: url-test
+    include-all-proxies: true
+    filter: (^(?!.*(港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|🇭🇰|九龙|Kowloon|新界|沙田|荃湾|葵涌|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC|🇺🇸|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|🇯🇵|关西|Kansai|KANSAI|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Singapore|SINGAPORE|SIN|🇸🇬|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC|🇹🇼|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN|🇰🇷|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL|🇨🇦|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|GBR|LHR|MAN|🇬🇧|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS|🇫🇷|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC|🇩🇪|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|NLD|阿姆斯特丹|AMS|🇳🇱|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2|})?)?\b|TUR|IST|ANK|🇹🇷)).*)
+    proxies:
+      - __PROXY_NODES__
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
 rules:
   - GEOSITE,private,🎯 全球直连
   - GEOIP,private,🎯 全球直连,no-resolve

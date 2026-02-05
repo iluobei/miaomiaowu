@@ -730,6 +730,9 @@ func (h *nodesHandler) handleDelete(w http.ResponseWriter, r *http.Request, idSe
 		}
 	}
 
+	// 刷新所有绑定模板的订阅（异步执行）
+	go RefreshAllTemplateSubscriptions(h.repo, username)
+
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
@@ -744,6 +747,9 @@ func (h *nodesHandler) handleClearAll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	// 刷新所有绑定模板的订阅（异步执行）
+	go RefreshAllTemplateSubscriptions(h.repo, username)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
@@ -798,6 +804,11 @@ func (h *nodesHandler) handleBatchDelete(w http.ResponseWriter, r *http.Request)
 		if err := h.yamlSyncManager.BatchDeleteNodes(nodeNames); err != nil {
 			// Log error but don't fail the request
 		}
+	}
+
+	// 刷新所有绑定模板的订阅（异步执行）
+	if deletedCount > 0 {
+		go RefreshAllTemplateSubscriptions(h.repo, username)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

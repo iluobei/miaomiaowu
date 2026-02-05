@@ -39,8 +39,10 @@ import {
   getRegionProxyGroupNames,
   PROXY_NODES_MARKER,
   PROXY_PROVIDERS_MARKER,
+  REGION_PROXY_GROUPS_MARKER,
   PROXY_NODES_DISPLAY,
   PROXY_PROVIDERS_DISPLAY,
+  REGION_PROXY_GROUPS_DISPLAY,
   type ProxyGroupFormState,
 } from '@/lib/template-v3-utils'
 
@@ -229,7 +231,11 @@ function TemplatesV3Page() {
   useEffect(() => {
     if (templateData && isEditorOpen) {
       setTemplateContent(templateData)
-      setProxyGroups(extractProxyGroups(templateData))
+      const groups = extractProxyGroups(templateData)
+      setProxyGroups(groups)
+      // Auto-enable region proxy groups toggle if any group has includeRegionProxyGroups
+      const hasRegionProxyGroups = groups.some(g => g.includeRegionProxyGroups)
+      setEnableRegionProxyGroups(hasRegionProxyGroups)
       setIsDirty(false)
     }
   }, [templateData, isEditorOpen])
@@ -372,8 +378,16 @@ function TemplatesV3Page() {
       const nonRegionGroups = proxyGroups.filter(g => !regionGroupNames.includes(g.name))
       setProxyGroups([...nonRegionGroups, ...regionGroups])
     } else {
-      // Remove region proxy groups
-      setProxyGroups(proxyGroups.filter(g => !regionGroupNames.includes(g.name)))
+      // Remove region proxy groups and clear includeRegionProxyGroups from all groups
+      const updatedGroups = proxyGroups
+        .filter(g => !regionGroupNames.includes(g.name))
+        .map(g => ({
+          ...g,
+          includeRegionProxyGroups: false,
+          // Remove REGION_PROXY_GROUPS_MARKER from proxyOrder
+          proxyOrder: g.proxyOrder.filter(item => item !== REGION_PROXY_GROUPS_MARKER),
+        }))
+      setProxyGroups(updatedGroups)
     }
   }
 
@@ -445,6 +459,7 @@ function TemplatesV3Page() {
     return content
       .replace(new RegExp(PROXY_NODES_MARKER, 'g'), PROXY_NODES_DISPLAY)
       .replace(new RegExp(PROXY_PROVIDERS_MARKER, 'g'), PROXY_PROVIDERS_DISPLAY)
+      .replace(new RegExp(REGION_PROXY_GROUPS_MARKER, 'g'), REGION_PROXY_GROUPS_DISPLAY)
   }
 
   // Table columns

@@ -1416,3 +1416,38 @@ func (h *subscribeFilesHandler) regenerateFromTemplate(ctx context.Context, user
 	logger.Info("[模板生成] 模板处理完成", "subscribe", subscribeFile.Name, "template", subscribeFile.TemplateFilename, "result_bytes", len(result))
 	return nil
 }
+
+// RefreshAllTemplateSubscriptions 刷新所有绑定了模板的订阅
+// 当节点发生变化（新增、删除、修改）时调用此函数
+func RefreshAllTemplateSubscriptions(repo *storage.TrafficRepository, username string) {
+	ctx := context.Background()
+
+	// 获取所有绑定了模板的订阅
+	files, err := repo.GetSubscribeFilesWithTemplate(ctx)
+	if err != nil {
+		logger.Info("[模板刷新] 获取绑定模板的订阅失败", "error", err)
+		return
+	}
+
+	if len(files) == 0 {
+		logger.Info("[模板刷新] 没有绑定模板的订阅需要刷新")
+		return
+	}
+
+	logger.Info("[模板刷新] 开始刷新绑定模板的订阅", "count", len(files))
+
+	// 创建临时 handler 用于调用 regenerateFromTemplate
+	h := &subscribeFilesHandler{repo: repo}
+
+	successCount := 0
+	for _, file := range files {
+		if err := h.regenerateFromTemplate(ctx, username, file); err != nil {
+			logger.Info("[模板刷新] 刷新订阅失败", "subscribe", file.Name, "template", file.TemplateFilename, "error", err)
+		} else {
+			logger.Info("[模板刷新] 刷新订阅成功", "subscribe", file.Name, "template", file.TemplateFilename)
+			successCount++
+		}
+	}
+
+	logger.Info("[模板刷新] 刷新完成", "total", len(files), "success", successCount)
+}

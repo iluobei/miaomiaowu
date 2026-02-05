@@ -15,24 +15,26 @@ type RegionProxyGroup struct {
 
 // Predefined region proxy groups
 var RegionProxyGroups = []RegionProxyGroup{
-	{Name: "🇭🇰 香港", Filter: "港|HK|Hong Kong|🇭🇰"},
-	{Name: "🇺🇸 美国", Filter: "美|US|USA|United States|🇺🇸"},
-	{Name: "🇯🇵 日本", Filter: "日|JP|Japan|🇯🇵"},
-	{Name: "🇸🇬 新加坡", Filter: "新|SG|Singapore|🇸🇬"},
-	{Name: "🇹🇼 台湾", Filter: "台|TW|Taiwan|🇹🇼"},
-	{Name: "🇰🇷 韩国", Filter: "韩|KR|Korea|🇰🇷"},
-	{Name: "🇨🇦 加拿大", Filter: "加拿大|CA|Canada|🇨🇦"},
-	{Name: "🇬🇧 英国", Filter: "英|UK|GB|Britain|🇬🇧"},
-	{Name: "🇫🇷 法国", Filter: "法|FR|France|🇫🇷"},
-	{Name: "🇩🇪 德国", Filter: "德|DE|Germany|🇩🇪"},
-	{Name: "🇳🇱 荷兰", Filter: "荷|NL|Netherlands|🇳🇱"},
-	{Name: "🇹🇷 土耳其", Filter: "土|TR|Turkey|🇹🇷"},
+	{Name: "🇭🇰 香港节点", Filter: `🇭🇰|港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|九龙|Kowloon|新界|沙田|荃湾|葵涌`},
+	{Name: "🇺🇸 美国节点", Filter: `🇺🇸|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC`},
+	{Name: "🇯🇵 日本节点", Filter: `🇯🇵|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|关西|Kansai|KANSAI`},
+	{Name: "🇸🇬 新加坡节点", Filter: `🇸🇬|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Singapore|SINGAPORE|SIN`},
+	{Name: "🇼🇸 台湾节点", Filter: `🇹🇼|🇼🇸|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC`},
+	{Name: "🇰🇷 韩国节点", Filter: `🇰🇷|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN`},
+	{Name: "🇨🇦 加拿大节点", Filter: `🇨🇦|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL`},
+	{Name: "🇬🇧 英国节点", Filter: `🇬🇧|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|GBR|LHR|MAN`},
+	{Name: "🇫🇷 法国节点", Filter: `🇫🇷|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS`},
+	{Name: "🇩🇪 德国节点", Filter: `🇩🇪|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC`},
+	{Name: "🇳🇱 荷兰节点", Filter: `🇳🇱|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|NLD|阿姆斯特丹|AMS`},
+	{Name: "🇹🇷 土耳其节点", Filter: `🇹🇷|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|TUR|IST|ANK`},
+	{Name: "🌐 其他地区", Filter: `(^(?!.*(港|\bHK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|hk|Hong Kong|HongKong|hongkong|HONG KONG|HONGKONG|深港|HKG|🇭🇰|九龙|Kowloon|新界|沙田|荃湾|葵涌|美|波特兰|达拉斯|俄勒冈|凤凰城|费利蒙|硅谷|拉斯维加斯|洛杉矶|圣何塞|圣克拉拉|西雅图|芝加哥|纽约|纽纽|亚特兰大|迈阿密|华盛顿|\bUS(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|United States|UnitedStates|UNITED STATES|USA|America|AMERICA|JFK|EWR|IAD|ATL|ORD|MIA|NYC|LAX|SFO|SEA|DFW|SJC|🇺🇸|日本|川日|东京|大阪|泉日|埼玉|沪日|深日|(?<!尼|-)日|\bJP(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Japan|JAPAN|JPN|NRT|HND|KIX|TYO|OSA|🇯🇵|关西|Kansai|KANSAI|新加坡|坡|狮城|\bSG(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Singapore|SINGAPORE|SIN|🇸🇬|台|新北|彰化|\bTW(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Taiwan|TAIWAN|TWN|TPE|ROC|🇹🇼|\bKR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Korea|KOREA|KOR|首尔|韩|韓|春川|Chuncheon|ICN|🇰🇷|加拿大|\bCA(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|Canada|CANADA|CAN|渥太华|温哥华|卡尔加里|蒙特利尔|Montreal|YVR|YYZ|YUL|🇨🇦|英国|Britain|United Kingdom|UNITED KINGDOM|England|伦敦|曼彻斯特|Manchester|\bUK(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|GBR|LHR|MAN|🇬🇧|法国|\bFR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|France|FRANCE|FRA|巴黎|马赛|Marseille|CDG|MRS|🇫🇷|德国|Germany|GERMANY|\bDE(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|DEU|柏林|法兰克福|慕尼黑|Munich|MUC|🇩🇪|荷兰|Netherlands|NETHERLANDS|\bNL(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|NLD|阿姆斯特丹|AMS|🇳🇱|土耳其|Turkey|TURKEY|Türkiye|\bTR(?:[-_ ]?\d+(?:[-_ ]?[A-Za-z]{2,})?)?\b|TUR|IST|ANK|🇹🇷)).*)`},
 }
 
 // Special markers for proxy order
 const (
-	ProxyNodesMarker     = "__PROXY_NODES__"
-	ProxyProvidersMarker = "__PROXY_PROVIDERS__"
+	ProxyNodesMarker        = "__PROXY_NODES__"
+	ProxyProvidersMarker    = "__PROXY_PROVIDERS__"
+	RegionProxyGroupsMarker = "__REGION_PROXY_GROUPS__"
 )
 
 // GetOtherRegionsExcludeFilter returns the exclude filter for "Other regions" group
@@ -50,7 +52,7 @@ func GetRegionProxyGroupNames() []string {
 	for _, r := range RegionProxyGroups {
 		names = append(names, r.Name)
 	}
-	names = append(names, "🌍 其他地区")
+	names = append(names, "🌐 其他地区")
 	return names
 }
 
@@ -90,15 +92,15 @@ type ProxyGroupV3 struct {
 	Name                     string   `yaml:"name"`
 	Type                     string   `yaml:"type"`
 	Proxies                  []string `yaml:"proxies,omitempty"`
-	Use                      []string `yaml:"use,omitempty"`                            // 引入代理集合
-	IncludeAll               bool     `yaml:"include-all,omitempty"`                    // 引入所有出站代理和代理集合
-	IncludeType              string   `yaml:"include-type,omitempty"`                   // 根据节点类型引入节点
-	IncludeAllProxies        bool     `yaml:"include-all-proxies,omitempty"`            // 引入所有出站代理
-	IncludeAllProviders      bool     `yaml:"include-all-providers,omitempty"`          // 引入所有代理集合
-	IncludeRegionProxyGroups bool     `yaml:"include-region-proxy-groups,omitempty"`    // 引入地区代理组
-	Filter                   string   `yaml:"filter,omitempty"`                         // 筛选节点的正则表达式
-	ExcludeFilter            string   `yaml:"exclude-filter,omitempty"`                 // 排除节点的正则表达式
-	ExcludeType              string   `yaml:"exclude-type,omitempty"`                   // 根据类型排除节点
+	Use                      []string `yaml:"use,omitempty"`                         // 引入代理集合
+	IncludeAll               bool     `yaml:"include-all,omitempty"`                 // 引入所有出站代理和代理集合
+	IncludeType              string   `yaml:"include-type,omitempty"`                // 根据节点类型引入节点
+	IncludeAllProxies        bool     `yaml:"include-all-proxies,omitempty"`         // 引入所有出站代理
+	IncludeAllProviders      bool     `yaml:"include-all-providers,omitempty"`       // 引入所有代理集合
+	IncludeRegionProxyGroups bool     `yaml:"include-region-proxy-groups,omitempty"` // 引入地区代理组
+	Filter                   string   `yaml:"filter,omitempty"`                      // 筛选节点的正则表达式
+	ExcludeFilter            string   `yaml:"exclude-filter,omitempty"`              // 排除节点的正则表达式
+	ExcludeType              string   `yaml:"exclude-type,omitempty"`                // 根据类型排除节点
 	URL                      string   `yaml:"url,omitempty"`
 	Interval                 int      `yaml:"interval,omitempty"`
 	Tolerance                int      `yaml:"tolerance,omitempty"`
@@ -117,11 +119,11 @@ type ProxyNode struct {
 
 // TemplateV3Processor processes v3 templates with mihomo-style proxy group options
 type TemplateV3Processor struct {
-	allProxies          []ProxyNode         // All available proxy nodes
-	proxyGroups         []string            // Names of proxy groups (for reference)
-	providers           map[string][]string // Provider name -> proxy names
-	regionGroupsAdded   bool                // Whether region proxy groups have been added
-	regionGroupNames    []string            // Names of region proxy groups
+	allProxies        []ProxyNode         // All available proxy nodes
+	proxyGroups       []string            // Names of proxy groups (for reference)
+	providers         map[string][]string // Provider name -> proxy names
+	regionGroupsAdded bool                // Whether region proxy groups have been added
+	regionGroupNames  []string            // Names of region proxy groups
 }
 
 // NewTemplateV3Processor creates a new v3 template processor
@@ -172,7 +174,12 @@ func (p *TemplateV3Processor) ProcessTemplate(templateContent string, proxies []
 			if proxyGroupsIndex >= 0 {
 				valueNode := rootMap.Content[proxyGroupsIndex]
 
-				// If add-region-proxy-groups is true, insert region groups at the beginning
+				// Check if any proxy group has include-region-proxy-groups: true or __REGION_PROXY_GROUPS__ marker
+				if !addRegionProxyGroups {
+					addRegionProxyGroups = p.hasIncludeRegionProxyGroups(valueNode) || p.hasRegionProxyGroupsMarker(valueNode)
+				}
+
+				// If add-region-proxy-groups is true or any group has include-region-proxy-groups, insert region groups
 				if addRegionProxyGroups {
 					p.insertRegionProxyGroups(valueNode)
 				}
@@ -226,6 +233,43 @@ func (p *TemplateV3Processor) collectProxyGroupNames(groupsNode *yaml.Node) {
 	}
 }
 
+// hasIncludeRegionProxyGroups checks if any proxy group has include-region-proxy-groups: true
+func (p *TemplateV3Processor) hasIncludeRegionProxyGroups(groupsNode *yaml.Node) bool {
+	for _, groupNode := range groupsNode.Content {
+		if groupNode.Kind == yaml.MappingNode {
+			for i := 0; i < len(groupNode.Content); i += 2 {
+				if groupNode.Content[i].Value == "include-region-proxy-groups" {
+					if groupNode.Content[i+1].Value == "true" {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// hasRegionProxyGroupsMarker checks if any proxy group's proxies list contains __REGION_PROXY_GROUPS__ marker
+func (p *TemplateV3Processor) hasRegionProxyGroupsMarker(groupsNode *yaml.Node) bool {
+	for _, groupNode := range groupsNode.Content {
+		if groupNode.Kind == yaml.MappingNode {
+			for i := 0; i < len(groupNode.Content); i += 2 {
+				if groupNode.Content[i].Value == "proxies" {
+					proxiesNode := groupNode.Content[i+1]
+					if proxiesNode.Kind == yaml.SequenceNode {
+						for _, item := range proxiesNode.Content {
+							if item.Value == RegionProxyGroupsMarker {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // insertRegionProxyGroups inserts predefined region proxy groups at the beginning
 func (p *TemplateV3Processor) insertRegionProxyGroups(groupsNode *yaml.Node) {
 	if p.regionGroupsAdded {
@@ -241,7 +285,7 @@ func (p *TemplateV3Processor) insertRegionProxyGroups(groupsNode *yaml.Node) {
 	}
 
 	// Create "Other regions" group with exclude filter
-	otherRegionNode := p.createRegionGroupNode("🌍 其他地区", "", GetOtherRegionsExcludeFilter())
+	otherRegionNode := p.createRegionGroupNode("🌐 其他地区", "", GetOtherRegionsExcludeFilter())
 	newGroups = append(newGroups, otherRegionNode)
 
 	// Prepend new groups to existing groups
@@ -291,7 +335,7 @@ func (p *TemplateV3Processor) createRegionGroupNode(name, filter, excludeFilter 
 	// Add url-test options
 	groupNode.Content = append(groupNode.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "url"},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "https://www.gstatic.com/generate_204"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "https://cp.cloudflare.com/generate_204"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "interval"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "300"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tolerance"},
@@ -420,11 +464,6 @@ func (p *TemplateV3Processor) parseProxyGroup(groupNode *yaml.Node) ProxyGroupV3
 func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 	var result []string
 
-	// Handle include-region-proxy-groups first (add region group names to proxies)
-	if group.IncludeRegionProxyGroups {
-		result = append(result, p.regionGroupNames...)
-	}
-
 	// Calculate proxy nodes (from include-all-proxies, include-type, filter)
 	proxyNodes := p.calculateProxyNodes(group)
 
@@ -434,6 +473,7 @@ func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 	// Check if proxies list contains markers
 	hasNodesMarker := false
 	hasProvidersMarker := false
+	hasRegionGroupsMarker := false
 	for _, proxy := range group.Proxies {
 		if proxy == ProxyNodesMarker {
 			hasNodesMarker = true
@@ -441,21 +481,29 @@ func (p *TemplateV3Processor) calculateProxies(group ProxyGroupV3) []string {
 		if proxy == ProxyProvidersMarker {
 			hasProvidersMarker = true
 		}
+		if proxy == RegionProxyGroupsMarker {
+			hasRegionGroupsMarker = true
+		}
 	}
 
 	// If markers are present, use them to determine order
-	if hasNodesMarker || hasProvidersMarker {
+	if hasNodesMarker || hasProvidersMarker || hasRegionGroupsMarker {
 		for _, proxy := range group.Proxies {
 			if proxy == ProxyNodesMarker {
 				result = append(result, proxyNodes...)
 			} else if proxy == ProxyProvidersMarker {
 				result = append(result, proxyProviders...)
+			} else if proxy == RegionProxyGroupsMarker {
+				result = append(result, p.regionGroupNames...)
 			} else {
 				result = append(result, proxy)
 			}
 		}
 	} else {
-		// No markers, use default order: proxies, then nodes, then providers
+		// No markers, use default order: region groups (if enabled), proxies, then nodes, then providers
+		if group.IncludeRegionProxyGroups {
+			result = append(result, p.regionGroupNames...)
+		}
 		result = append(result, group.Proxies...)
 		result = append(result, proxyNodes...)
 		result = append(result, proxyProviders...)
@@ -626,15 +674,15 @@ func (p *TemplateV3Processor) updateProxiesInNode(groupNode *yaml.Node, proxies 
 // removeMihomoFields removes mihomo-specific fields from the proxy group
 func (p *TemplateV3Processor) removeMihomoFields(groupNode *yaml.Node) {
 	fieldsToRemove := map[string]bool{
-		"use":                        true,
-		"include-all":                true,
-		"include-type":               true,
-		"include-all-proxies":        true,
-		"include-all-providers":      true,
+		"use":                         true,
+		"include-all":                 true,
+		"include-type":                true,
+		"include-all-proxies":         true,
+		"include-all-providers":       true,
 		"include-region-proxy-groups": true,
-		"filter":                     true,
-		"exclude-filter":             true,
-		"exclude-type":               true,
+		"filter":                      true,
+		"exclude-filter":              true,
+		"exclude-type":                true,
 	}
 
 	newContent := make([]*yaml.Node, 0, len(groupNode.Content))
