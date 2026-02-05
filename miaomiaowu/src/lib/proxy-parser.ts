@@ -957,7 +957,8 @@ function parseGenericProtocol(url: string, protocol: string): ProxyNode | null {
         node.skipCertVerify = queryParams.allowInsecure === '1' || queryParams.allow_insecure === '1'
         node['congestion-controller'] = queryParams.congestion_control || 'bbr'
         node['udp-relay-mode'] = queryParams.udp_relay_mode || 'native'
-
+        // 证书验证添加默认值
+        node['skip-cert-verify'] = queryParams.insecure === '1' || queryParams.allowInsecure === '1' || queryParams['skip-cert-verify'] === '1'
         // UDP 支持 - 如果 URL 中明确指定了 udp 参数，使用指定的值；否则默认为 true（基于 QUIC）
         if (queryParams.udp !== undefined) {
           node.udp = queryParams.udp === 'true' || queryParams.udp === '1'
