@@ -250,6 +250,14 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.5.2 (2026-02-05)
+- 🌈 添加模板管理v3 [文档](https://miaomiaowu.net/docs/templatesV3)
+- 🌈 增加外部订阅节点名称过滤
+- 🛠️ fix:tuic协议skip-cert-verify添加默认值[#56](https://github.com/iluobei/miaomiaowu/issues/56)
+- 🛠️ fix:规则引用代理节点时误判
+- 🛠️ fix:shadowsocks没有解析udp-over-tcp参数与smux
+- 🛠️ fix:tuic协议skip-cert-verify添加默认值[#56](https://github.com/iluobei/miaomiaowu/issues/56)
+- 🌈 nameserver-policy下的配置保留引号
 ### v0.5.1 (2026-01-30)
 - 🛠️ fix:开启静默模式后无法访问页面
 ### v0.5.0 (2026-01-29)
