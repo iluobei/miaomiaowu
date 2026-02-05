@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 const CURRENT_VERSION = '0.5.1'
-const GITHUB_API_URL = 'https://api.github.com/repos/Jimleerx/miaomiaowu/releases/latest'
+const GITHUB_API_URL = 'https://api.github.com/repos/iluobei/miaomiaowu/releases/latest'
 
 interface GitHubRelease {
   tag_name: string
@@ -49,7 +49,7 @@ async function fetchLatestVersion(): Promise<{ version: string; hasUpdate: boole
     return {
       version: CURRENT_VERSION,
       hasUpdate: false,
-      url: 'https://github.com/Jimleerx/miaomiaowu/releases'
+      url: 'https://github.com/iluobei/miaomiaowu/releases'
     }
   }
 }
@@ -68,6 +68,6 @@ export function useVersionCheck() {
     currentVersion: CURRENT_VERSION,
     latestVersion: data?.version || CURRENT_VERSION,
     hasUpdate: data?.hasUpdate || false,
-    releaseUrl: data?.url || 'https://github.com/Jimleerx/miaomiaowu/releases'
+    releaseUrl: data?.url || 'https://github.com/iluobei/miaomiaowu/releases'
   }
 }
