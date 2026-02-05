@@ -9,6 +9,7 @@ import (
 	"miaomiaowu/internal/logger"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -365,6 +366,34 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	}
 
 	logger.Info("[外部订阅同步] 解析到节点", "name", sub.Name, "count", len(proxies))
+
+	// Apply node name filter if configured
+	nodeNameFilter := strings.TrimSpace(settings.NodeNameFilter)
+	if nodeNameFilter != "" {
+		filterRegex, err := regexp.Compile(nodeNameFilter)
+		if err != nil {
+			logger.Info("[外部订阅同步] 节点名称过滤正则表达式无效，跳过过滤", "pattern", nodeNameFilter, "error", err)
+		} else {
+			filteredProxies := make([]any, 0, len(proxies))
+			filteredCount := 0
+			for _, proxy := range proxies {
+				if proxyMap, ok := proxy.(map[string]any); ok {
+					if proxyName, ok := proxyMap["name"].(string); ok {
+						if filterRegex.MatchString(proxyName) {
+							filteredCount++
+							logger.Info("[外部订阅同步] 过滤节点", "name", proxyName, "pattern", nodeNameFilter)
+							continue
+						}
+					}
+				}
+				filteredProxies = append(filteredProxies, proxy)
+			}
+			if filteredCount > 0 {
+				logger.Info("[外部订阅同步] 节点过滤完成", "filtered_count", filteredCount, "remaining_count", len(filteredProxies))
+			}
+			proxies = filteredProxies
+		}
+	}
 
 	// Convert to storage.Node format
 	nodesToUpdate := make([]storage.Node, 0, len(proxies))
