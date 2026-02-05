@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/storage"
 )
 
@@ -36,18 +37,42 @@ func NewSetupStatusHandler(repo *storage.TrafficRepository) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("[初始化检查] 收到初始化状态检查请求",
+			"method", r.Method,
+			"remote_addr", r.RemoteAddr,
+		)
+
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, errors.New("only GET is supported"))
 			return
 		}
 
-		users, err := repo.ListUsers(r.Context(), 1)
+		users, err := repo.ListUsers(r.Context(), 10)
 		if err != nil {
+			logger.Error("[初始化检查] 查询用户列表失败", "error", err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 
 		needsSetup := len(users) == 0
+
+		// 详细记录用户列表信息
+		if len(users) > 0 {
+			usernames := make([]string, len(users))
+			for i, u := range users {
+				usernames[i] = u.Username
+			}
+			logger.Info("[初始化检查] 数据库中已存在用户",
+				"user_count", len(users),
+				"usernames", usernames,
+				"needs_setup", needsSetup,
+			)
+		} else {
+			logger.Info("[初始化检查] 数据库中没有用户，需要初始化",
+				"user_count", 0,
+				"needs_setup", needsSetup,
+			)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -62,6 +87,11 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("[初始化] 收到初始化请求",
+			"method", r.Method,
+			"remote_addr", r.RemoteAddr,
+		)
+
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, errors.New("only POST is supported"))
 			return
@@ -70,17 +100,23 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 		// Check if setup is still needed
 		users, err := repo.ListUsers(r.Context(), 1)
 		if err != nil {
+			logger.Error("[初始化] 查询用户列表失败", "error", err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 
 		if len(users) > 0 {
+			logger.Warn("[初始化] 系统已初始化，拒绝重复初始化",
+				"existing_user_count", len(users),
+				"first_user", users[0].Username,
+			)
 			writeError(w, http.StatusConflict, errors.New("系统已初始化，无法再次注册"))
 			return
 		}
 
 		var payload setupRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			logger.Error("[初始化] 解析请求体失败", "error", err)
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -90,6 +126,12 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 		nickname := strings.TrimSpace(payload.Nickname)
 		email := strings.TrimSpace(payload.Email)
 		avatarURL := strings.TrimSpace(payload.AvatarURL)
+
+		logger.Info("[初始化] 准备创建管理员用户",
+			"username", username,
+			"nickname", nickname,
+			"email", email,
+		)
 
 		if username == "" {
 			writeError(w, http.StatusBadRequest, errors.New("用户名不能为空"))
@@ -108,6 +150,7 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 		// Hash the password
 		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
+			logger.Error("[初始化] 密码哈希失败", "error", err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -115,9 +158,11 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 		// Create the admin user
 		if err := repo.CreateUser(r.Context(), username, email, nickname, string(hash), storage.RoleAdmin, ""); err != nil {
 			if errors.Is(err, storage.ErrUserExists) {
+				logger.Warn("[初始化] 用户已存在", "username", username)
 				writeError(w, http.StatusConflict, errors.New("用户已存在"))
 				return
 			}
+			logger.Error("[初始化] 创建用户失败", "username", username, "error", err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -133,6 +178,12 @@ func NewInitialSetupHandler(repo *storage.TrafficRepository) http.Handler {
 				AvatarURL: avatarURL,
 			})
 		}
+
+		logger.Info("[初始化] 管理员用户创建成功",
+			"username", username,
+			"nickname", nickname,
+			"role", storage.RoleAdmin,
+		)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
