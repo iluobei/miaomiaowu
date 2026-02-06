@@ -231,7 +231,7 @@ curl -sL https://raw.githubusercontent.com/Jimleerx/miaomiaowu/main/quick-instal
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Jimleerx/miaomiaowu&type=date&legend=top-left)](https://www.star-history.com/#Jimleerx/miaomiaowu&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=iluobei/miaomiaowu&type=date&legend=top-left)](https://www.star-history.com/#iluobei/miaomiaowu&type=date&legend=top-left)
 
 
 ## 许可证
