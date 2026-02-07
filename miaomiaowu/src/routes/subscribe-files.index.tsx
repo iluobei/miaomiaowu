@@ -474,14 +474,17 @@ function SubscribeFilesPage() {
   })
   const proxyProviderConfigs = proxyProviderConfigsData ?? []
 
-  // 获取所有节点（用于在外部订阅卡片中显示节点名称）
+  // 绑定v3模板
+  const hasTemplateBindings = files.some(f => f.template_filename)
+
+  // 获取所有节点（用于在外部订阅卡片中显示节点名称, v3模板订阅标签）
   const { data: allNodesData } = useQuery({
     queryKey: ['all-nodes-with-tags'],
     queryFn: async () => {
       const response = await api.get('/api/admin/nodes')
       return response.data as { nodes: Array<{ id: number; node_name: string; tag: string }> }
     },
-    enabled: Boolean(auth.accessToken && isExternalSubsExpanded),
+    enabled: Boolean(auth.accessToken && (isExternalSubsExpanded || hasTemplateBindings)),
   })
 
   // 按 tag 分组的节点名称
