@@ -670,10 +670,12 @@ func parseExpireAt(raw *string) (*time.Time, error) {
 // handleCreateFromConfig 保存生成的配置为订阅文件
 func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Filename    string `json:"filename"`
-		Content     string `json:"content"`
+		Name             string   `json:"name"`
+		Description      string   `json:"description"`
+		Filename         string   `json:"filename"`
+		Content          string   `json:"content"`
+		TemplateFilename string   `json:"template_filename"` // V3 模板文件名
+		SelectedTags     []string `json:"selected_tags"`     // V3 模式下选择的标签
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -809,11 +811,13 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 
 	// 保存到数据库
 	file := storage.SubscribeFile{
-		Name:        req.Name,
-		Description: req.Description,
-		URL:         "",
-		Type:        storage.SubscribeTypeCreate,
-		Filename:    filename,
+		Name:             req.Name,
+		Description:      req.Description,
+		URL:              "",
+		Type:             storage.SubscribeTypeCreate,
+		Filename:         filename,
+		TemplateFilename: req.TemplateFilename,
+		SelectedTags:     req.SelectedTags,
 	}
 
 	created, err := h.repo.CreateSubscribeFile(r.Context(), file)

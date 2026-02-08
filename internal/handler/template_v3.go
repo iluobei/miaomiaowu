@@ -47,6 +47,12 @@ func (h *TemplateV3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handlePreviewTemplate(w, r)
+	case path == "/preview-with-tags" || path == "/preview-with-tags/":
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handlePreviewWithTags(w, r)
 	case path == "/convert-v2" || path == "/convert-v2/":
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -144,6 +150,92 @@ func (h *TemplateV3Handler) handlePreviewTemplate(w http.ResponseWriter, r *http
 
 	// Process the template
 	result, err := h.processV3Template(req.TemplateContent, req.Proxies)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "处理模板失败: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"content": result,
+	})
+}
+
+// handlePreviewWithTags previews a v3 template with template filename and selected tags
+func (h *TemplateV3Handler) handlePreviewWithTags(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TemplateFilename string   `json:"template_filename"`
+		SelectedTags     []string `json:"selected_tags"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "无效的请求格式")
+		return
+	}
+
+	if req.TemplateFilename == "" {
+		writeJSONError(w, http.StatusBadRequest, "模板文件名不能为空")
+		return
+	}
+
+	// Security: Prevent directory traversal
+	if strings.Contains(req.TemplateFilename, "..") || strings.Contains(req.TemplateFilename, "/") || strings.Contains(req.TemplateFilename, "\\") {
+		writeJSONError(w, http.StatusBadRequest, "无效的模板文件名")
+		return
+	}
+
+	// Read template file
+	templatesDir := "rule_templates"
+	templatePath := filepath.Join(templatesDir, req.TemplateFilename)
+
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSONError(w, http.StatusNotFound, "模板文件不存在")
+		} else {
+			writeJSONError(w, http.StatusInternalServerError, "读取模板文件失败")
+		}
+		return
+	}
+
+	// Get nodes from database
+	username := auth.UsernameFromContext(r.Context())
+	nodes, err := h.repo.ListNodes(r.Context(), username)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "获取节点列表失败")
+		return
+	}
+
+	// Filter nodes by selected tags and enabled status
+	var proxies []map[string]any
+	selectedTagsSet := make(map[string]bool)
+	for _, tag := range req.SelectedTags {
+		selectedTagsSet[tag] = true
+	}
+
+	for _, node := range nodes {
+		if !node.Enabled {
+			continue
+		}
+		// If tags are specified, filter by tags
+		if len(req.SelectedTags) > 0 && !selectedTagsSet[node.Tag] {
+			continue
+		}
+		// Parse clash config
+		var proxyConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &proxyConfig); err != nil {
+			continue
+		}
+		proxies = append(proxies, proxyConfig)
+	}
+
+	if len(proxies) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "没有符合条件的节点")
+		return
+	}
+
+	// Process the template
+	result, err := h.processV3Template(string(templateContent), proxies)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "处理模板失败: "+err.Error())
 		return

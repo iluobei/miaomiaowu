@@ -312,6 +312,7 @@ function SubscriptionGeneratorPage() {
         use_new_template_system: boolean
         enable_proxy_provider: boolean
         node_order?: number[]
+        template_version?: 'v1' | 'v2' | 'v3'
       }
     },
     enabled: Boolean(auth.accessToken),
@@ -320,6 +321,8 @@ function SubscriptionGeneratorPage() {
 
   const useNewTemplateSystem = userConfig?.use_new_template_system !== false // 默认 true
   const enableProxyProvider = userConfig?.enable_proxy_provider ?? false
+  const templateVersion = userConfig?.template_version || 'v2'
+  const isV3Mode = templateVersion === 'v3'
 
   // 获取已保存的节点
   const { data: nodesData } = useQuery({
@@ -350,6 +353,21 @@ function SubscriptionGeneratorPage() {
     },
     enabled: Boolean(auth.accessToken) && !useNewTemplateSystem,
   })
+
+  // 获取 V3 模板列表
+  const { data: v3TemplatesData } = useQuery({
+    queryKey: ['template-v3-list'],
+    queryFn: async () => {
+      const response = await api.get('/api/admin/template-v3')
+      return response.data as { templates: Array<{ name: string; filename: string }> }
+    },
+    enabled: Boolean(auth.accessToken) && isV3Mode,
+  })
+  const v3Templates = v3TemplatesData?.templates ?? []
+
+  // V3 模式下选择的模板和标签
+  const [selectedV3Template, setSelectedV3Template] = useState<string>('')
+  const [selectedV3Tags, setSelectedV3Tags] = useState<string[]>([])
 
   // 获取代理集合配置列表
   const { data: proxyProviderConfigsData } = useQuery({
@@ -846,18 +864,39 @@ function SubscriptionGeneratorPage() {
 
   // 加载模板（根据模板系统选择不同的加载方式）
   const handleLoadTemplate = async () => {
-    if (selectedNodeIds.size === 0) {
-      toast.error('请选择至少一个节点')
-      return
-    }
-
-    if (!selectedTemplateUrl) {
-      toast.error('请选择一个模板')
-      return
+    // V3 模式下使用不同的验证逻辑
+    if (isV3Mode) {
+      if (!selectedV3Template) {
+        toast.error('请选择一个 V3 模板')
+        return
+      }
+      // selectedV3Tags 为空表示选择全部节点，这是有效的
+    } else {
+      if (selectedNodeIds.size === 0) {
+        toast.error('请选择至少一个节点')
+        return
+      }
+      if (!selectedTemplateUrl) {
+        toast.error('请选择一个模板')
+        return
+      }
     }
 
     setLoading(true)
     try {
+      // V3 模式：使用 V3 模板处理器
+      if (isV3Mode) {
+        const response = await api.post('/api/admin/template-v3/preview-with-tags', {
+          template_filename: selectedV3Template,
+          selected_tags: selectedV3Tags.length > 0 ? selectedV3Tags : undefined,
+        })
+
+        setClashConfig(response.data.content)
+        setHasManuallyGrouped(true) // V3 模式下不需要手动分组
+        toast.success('成功加载 V3 模板')
+        return
+      }
+
       // 获取选中的节点并转换为ProxyConfig（使用排序后的节点列表）
       const selectedNodes = sortedEnabledNodes.filter(n => selectedNodeIds.has(n.id))
       const proxies: ProxyConfig[] = selectedNodes.map(node => {
@@ -1117,7 +1156,14 @@ function SubscriptionGeneratorPage() {
 
   // 保存订阅 mutation
   const saveSubscribeMutation = useMutation({
-    mutationFn: async (data: { name: string; filename: string; description: string; content: string }) => {
+    mutationFn: async (data: {
+      name: string
+      filename: string
+      description: string
+      content: string
+      template_filename?: string
+      selected_tags?: string[]
+    }) => {
       const response = await api.post('/api/admin/subscribe-files/create-from-config', data)
       return response.data
     },
@@ -1142,8 +1188,8 @@ function SubscriptionGeneratorPage() {
       toast.error('请先生成配置')
       return
     }
-    // 使用旧模板系统时，必须先手动分组
-    if (ruleMode === 'template' && !hasManuallyGrouped && !useNewTemplateSystem) {
+    // 使用旧模板系统时，必须先手动分组（V3 模式不需要）
+    if (ruleMode === 'template' && !hasManuallyGrouped && !useNewTemplateSystem && !isV3Mode) {
       toast.error('请先手动分组节点')
       return
     }
@@ -1156,12 +1202,27 @@ function SubscriptionGeneratorPage() {
       return
     }
 
-    saveSubscribeMutation.mutate({
+    const data: {
+      name: string
+      filename: string
+      description: string
+      content: string
+      template_filename?: string
+      selected_tags?: string[]
+    } = {
       name: subscribeName.trim(),
       filename: subscribeFilename.trim(),
       description: subscribeDescription.trim(),
       content: clashConfig,
-    })
+    }
+
+    // V3 模式下传递模板和标签信息
+    if (isV3Mode && selectedV3Template) {
+      data.template_filename = selectedV3Template
+      data.selected_tags = selectedV3Tags.length > 0 ? selectedV3Tags : undefined
+    }
+
+    saveSubscribeMutation.mutate(data)
   }
 
   // 手动分组功能
@@ -2431,7 +2492,7 @@ function SubscriptionGeneratorPage() {
               )}
 
               {/* 模板模式 */}
-              {ruleMode === 'template' && (
+              {ruleMode === 'template' && !isV3Mode && (
                 <div className='space-y-4'>
                   <div className='space-y-2'>
                     <Label htmlFor='template-select'>选择模板</Label>
@@ -2510,6 +2571,85 @@ function SubscriptionGeneratorPage() {
                 </div>
               )}
 
+              {/* V3 模板模式 */}
+              {ruleMode === 'template' && isV3Mode && (
+                <div className='space-y-4'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='v3-template-select'>选择 V3 模板</Label>
+                    <p className='text-sm text-muted-foreground'>
+                      使用 V3 模板生成配置，支持按标签筛选节点。
+                    </p>
+                  </div>
+                  <div className='space-y-2'>
+                    <Select
+                      value={selectedV3Template}
+                      onValueChange={setSelectedV3Template}
+                    >
+                      <SelectTrigger id='v3-template-select'>
+                        <SelectValue placeholder='请选择 V3 模板' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {v3Templates.map((template) => (
+                          <SelectItem key={template.filename} value={template.filename}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 选择模板后显示标签选择 */}
+                  {selectedV3Template && (
+                    <div className='space-y-2'>
+                      <Label>选择节点标签</Label>
+                      <p className='text-sm text-muted-foreground'>
+                        选择要包含在订阅中的节点标签（已选择 {selectedV3Tags.length} 个）
+                      </p>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          variant={selectedV3Tags.length === 0 ? 'default' : 'outline'}
+                          size='sm'
+                          onClick={() => setSelectedV3Tags([])}
+                        >
+                          全部节点
+                        </Button>
+                        {tags.map((tag) => {
+                          const isSelected = selectedV3Tags.includes(tag)
+                          const count = sortedEnabledNodes.filter(n => n.tag === tag).length
+                          return (
+                            <Button
+                              key={tag}
+                              variant={isSelected ? 'default' : 'outline'}
+                              size='sm'
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedV3Tags(prev => prev.filter(t => t !== tag))
+                                } else {
+                                  setSelectedV3Tags(prev => [...prev, tag])
+                                }
+                              }}
+                            >
+                              {tag} ({count})
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className='flex gap-2'>
+                    <Button
+                      className='w-full'
+                      onClick={handleLoadTemplate}
+                      disabled={loading || !selectedV3Template}
+                    >
+                      {loading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+                      加载
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {ruleMode === 'custom' && (
                 <div className='flex gap-2'>
                   <div
@@ -2546,14 +2686,18 @@ function SubscriptionGeneratorPage() {
                     </CardDescription>
                   </div>
                   <ButtonGroup mode='responsive' hideIconOnMobile>
-                    <Button variant='outline' size='sm' onClick={handleAutoGroupByRegion}>
-                      <MapPin className='h-4 w-4' />
-                      地域分组
-                    </Button>
-                    <Button variant='outline' size='sm' onClick={handleOpenGroupDialog}>
-                      <Layers className='h-4 w-4' />
-                      手动分组
-                    </Button>
+                    {!isV3Mode && (
+                      <>
+                        <Button variant='outline' size='sm' onClick={handleAutoGroupByRegion}>
+                          <MapPin className='h-4 w-4' />
+                          地域分组
+                        </Button>
+                        <Button variant='outline' size='sm' onClick={handleOpenGroupDialog}>
+                          <Layers className='h-4 w-4' />
+                          手动分组
+                        </Button>
+                      </>
+                    )}
                     <Button size='sm' onClick={handleOpenSaveDialog}>
                       <Save className='h-4 w-4' />
                       保存订阅
@@ -2571,14 +2715,18 @@ function SubscriptionGeneratorPage() {
                   />
                 </div>
                 <div className='mt-4 flex justify-end gap-2'>
-                  <Button variant='outline' onClick={handleAutoGroupByRegion}>
-                    <MapPin className='mr-2 h-4 w-4' />
-                    地域分组
-                  </Button>
-                  <Button variant='outline' onClick={handleOpenGroupDialog}>
-                    <Layers className='mr-2 h-4 w-4' />
-                    手动分组
-                  </Button>
+                  {!isV3Mode && (
+                    <>
+                      <Button variant='outline' onClick={handleAutoGroupByRegion}>
+                        <MapPin className='mr-2 h-4 w-4' />
+                        地域分组
+                      </Button>
+                      <Button variant='outline' onClick={handleOpenGroupDialog}>
+                        <Layers className='mr-2 h-4 w-4' />
+                        手动分组
+                      </Button>
+                    </>
+                  )}
                   <Button onClick={handleOpenSaveDialog}>
                     <Save className='mr-2 h-4 w-4' />
                     保存订阅
