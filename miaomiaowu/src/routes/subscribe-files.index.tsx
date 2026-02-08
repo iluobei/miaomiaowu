@@ -2295,150 +2295,6 @@ function SubscribeFilesPage() {
               从Clash订阅链接导入或上传本地文件
             </p>
           </div>
-
-          <div className='flex gap-1 sm:gap-2 md:justify-start'>
-            {/* 导入订阅 */}
-            {/* <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
-                  <Download className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
-                  <span className='truncate'>导入订阅</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>导入订阅</DialogTitle>
-                  <DialogDescription>
-                    从 Clash 订阅链接导入，系统会自动下载并保存文件
-                  </DialogDescription>
-                </DialogHeader>
-                <div className='space-y-4 py-4'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='import-name'>订阅名称 *</Label>
-                    <Input
-                      id='import-name'
-                      placeholder='例如：机场A'
-                      value={importForm.name}
-                      onChange={(e) => setImportForm({ ...importForm, name: e.target.value })}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='import-url'>订阅链接 *</Label>
-                    <Input
-                      id='import-url'
-                      placeholder='https://example.com/subscribe?token=xxx'
-                      value={importForm.url}
-                      onChange={(e) => setImportForm({ ...importForm, url: e.target.value })}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='import-filename'>文件名（可选）</Label>
-                    <Input
-                      id='import-filename'
-                      placeholder='留空则自动获取'
-                      value={importForm.filename}
-                      onChange={(e) => setImportForm({ ...importForm, filename: e.target.value })}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='import-description'>说明（可选）</Label>
-                    <Textarea
-                      id='import-description'
-                      placeholder='订阅说明信息'
-                      value={importForm.description}
-                      onChange={(e) => setImportForm({ ...importForm, description: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant='outline' onClick={() => setImportDialogOpen(false)}>
-                    取消
-                  </Button>
-                  <Button onClick={handleImport} disabled={importMutation.isPending}>
-                    {importMutation.isPending ? '导入中...' : '导入'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog> */}
-
-            {/* 上传文件 */}
-            {/* <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2'>
-                  <Upload className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
-                  <span className='truncate'>上传文件</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>上传文件</DialogTitle>
-                  <DialogDescription>
-                    上传本地 YAML 格式的 Clash 订阅文件
-                  </DialogDescription>
-                </DialogHeader>
-                <div className='space-y-4 py-4'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='upload-file'>选择文件 *</Label>
-                    <Input
-                      id='upload-file'
-                      type='file'
-                      accept='.yaml,.yml'
-                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='upload-name'>订阅名称（可选）</Label>
-                    <Input
-                      id='upload-name'
-                      placeholder='留空则使用文件名'
-                      value={uploadForm.name}
-                      onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='upload-filename'>文件名（可选）</Label>
-                    <Input
-                      id='upload-filename'
-                      placeholder='留空则使用原文件名'
-                      value={uploadForm.filename}
-                      onChange={(e) => setUploadForm({ ...uploadForm, filename: e.target.value })}
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='upload-description'>说明（可选）</Label>
-                    <Textarea
-                      id='upload-description'
-                      placeholder='订阅说明信息'
-                      value={uploadForm.description}
-                      onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant='outline' onClick={() => setUploadDialogOpen(false)}>
-                    取消
-                  </Button>
-                  <Button onClick={handleUpload} disabled={uploadMutation.isPending}>
-                    {uploadMutation.isPending ? '上传中...' : '上传'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog> */}
-
-            {/* 生成订阅 */}
-            {/* <Button variant='outline' className='flex-1 md:flex-none text-xs sm:text-sm px-1.5 py-2 sm:px-4 sm:py-2' onClick={() => navigate({ to: '/generator' })}>
-              <FileText className='mr-0.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0' />
-              <span className='truncate'>生成订阅</span>
-            </Button> */}
-
-            {/* 自定义代理组 - 保留入口 */}
-            {/* <Link to='/subscribe-files/custom'>
-              <Button>
-                <Plus className='mr-2 h-4 w-4' />
-                自定义代理组
-              </Button>
-            </Link> */}
-          </div>
         </div>
 
         <Card>
@@ -2448,18 +2304,88 @@ function SubscribeFilesPage() {
                 <CardTitle>订阅列表 ({files.length})</CardTitle>
                 <CardDescription>已添加的订阅文件</CardDescription>
               </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => navigate({ to: '/generator' })}
-                  >
-                    <Plus className='h-4 w-4' />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>生成订阅</TooltipContent>
-              </Tooltip>
+              <div className='flex items-center gap-2'>
+                {/* 上传文件 */}
+                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button variant='outline' size='sm'>
+                          <Upload className='h-4 w-4' />
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>上传文件</TooltipContent>
+                  </Tooltip>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>上传文件</DialogTitle>
+                      <DialogDescription>
+                        上传本地 YAML 格式的 Clash 订阅文件
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className='space-y-4 py-4'>
+                      <div className='space-y-2'>
+                        <Label htmlFor='upload-file'>选择文件 *</Label>
+                        <Input
+                          id='upload-file'
+                          type='file'
+                          accept='.yaml,.yml'
+                          onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='upload-name'>订阅名称（可选）</Label>
+                        <Input
+                          id='upload-name'
+                          placeholder='留空则使用文件名'
+                          value={uploadForm.name}
+                          onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='upload-filename'>文件名（可选）</Label>
+                        <Input
+                          id='upload-filename'
+                          placeholder='留空则使用原文件名'
+                          value={uploadForm.filename}
+                          onChange={(e) => setUploadForm({ ...uploadForm, filename: e.target.value })}
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='upload-description'>说明（可选）</Label>
+                        <Textarea
+                          id='upload-description'
+                          placeholder='订阅说明信息'
+                          value={uploadForm.description}
+                          onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant='outline' onClick={() => setUploadDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button onClick={handleUpload} disabled={uploadMutation.isPending}>
+                        {uploadMutation.isPending ? '上传中...' : '上传'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {/* 生成订阅 */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => navigate({ to: '/generator' })}
+                    >
+                      <Plus className='h-4 w-4' />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>生成订阅</TooltipContent>
+                </Tooltip>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
