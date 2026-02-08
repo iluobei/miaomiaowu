@@ -501,9 +501,10 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 			continue
 		}
 		name := entry.Name()
-		// 只返回 V3 模板（以 _v3.yaml 或 __v3.yaml 结尾）
-		if strings.HasSuffix(name, "_v3.yaml") || strings.HasSuffix(name, "__v3.yaml") {
+		// 返回所有 yaml 文件（rule_templates 目录下的都是 V3 模板）
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
 			displayName := strings.TrimSuffix(name, ".yaml")
+			displayName = strings.TrimSuffix(displayName, ".yml")
 			displayName = strings.TrimSuffix(displayName, "_v3")
 			displayName = strings.TrimSuffix(displayName, "__v3")
 			displayName = strings.ReplaceAll(displayName, "_", " ")

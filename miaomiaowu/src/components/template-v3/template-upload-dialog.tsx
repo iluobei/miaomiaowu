@@ -187,7 +187,7 @@ export function TemplateUploadDialog({
 
       let name = newTemplateName.trim()
       if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
-        name += '__v3.yaml'
+        name += '.yaml'
       }
 
       onCreate(name, template_content)
@@ -216,7 +216,7 @@ export function TemplateUploadDialog({
       // Auto-fill template name from subscription
       const sub = subscribeFiles.find(s => s.filename === selectedSubscription)
       if (sub && !newTemplateName) {
-        setNewTemplateName(sub.name + '__v3')
+        setNewTemplateName(sub.name)
       }
     } catch (error: any) {
       toast.error(error.response?.data?.error || '分析订阅失败')
@@ -279,9 +279,7 @@ export function TemplateUploadDialog({
 
       let name = newTemplateName.trim()
       if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
-        name += '__v3.yaml'
-      } else if (!name.includes('v3')) {
-        name = name.replace(/\.(yaml|yml)$/, '__v3.$1')
+        name += '.yaml'
       }
 
       onCreate(name, v3Content)
@@ -383,7 +381,7 @@ export function TemplateUploadDialog({
     return lines.join('\n')
   }
 
-  // Auto-fill template name when selecting a template (append __v3)
+  // Auto-fill template name when selecting a template
   const handleV2TemplateSelect = (value: string) => {
     setSelectedV2Template(value)
     let baseName = ''
@@ -401,8 +399,7 @@ export function TemplateUploadDialog({
       }
     }
     if (baseName) {
-      // Append __v3 to the base name
-      setNewTemplateName(baseName + '__v3')
+      setNewTemplateName(baseName)
     }
   }
 
@@ -462,7 +459,7 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="my_template__v3.yaml"
+                placeholder="my_template.yaml"
               />
             </div>
             <div className="space-y-2">
@@ -482,7 +479,7 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="my_template__v3.yaml"
+                placeholder="my_template.yaml"
               />
             </div>
             <p className="text-sm text-muted-foreground">
@@ -529,7 +526,7 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="my_template__v3.yaml"
+                placeholder="my_template.yaml"
               />
             </div>
 
@@ -584,7 +581,7 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="my_template__v3.yaml"
+                placeholder="my_template.yaml"
               />
             </div>
 
