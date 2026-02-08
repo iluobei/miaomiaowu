@@ -319,10 +319,12 @@ function SubscriptionGeneratorPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const useNewTemplateSystem = userConfig?.use_new_template_system !== false // 默认 true
   const enableProxyProvider = userConfig?.enable_proxy_provider ?? false
   const templateVersion = userConfig?.template_version || 'v2'
   const isV3Mode = templateVersion === 'v3'
+  const isV1Mode = templateVersion === 'v1'
+  // V1 使用旧模板系统，V2/V3 使用新模板系统
+  const useNewTemplateSystem = !isV1Mode
 
   // 获取已保存的节点
   const { data: nodesData } = useQuery({
@@ -1188,8 +1190,8 @@ function SubscriptionGeneratorPage() {
       toast.error('请先生成配置')
       return
     }
-    // 使用旧模板系统时，必须先手动分组（V3 模式不需要）
-    if (ruleMode === 'template' && !hasManuallyGrouped && !useNewTemplateSystem && !isV3Mode) {
+    // V1 模式（旧模板系统）必须先手动分组
+    if (ruleMode === 'template' && !hasManuallyGrouped && isV1Mode) {
       toast.error('请先手动分组节点')
       return
     }
