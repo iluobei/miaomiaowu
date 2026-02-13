@@ -648,7 +648,8 @@ func ParseTrafficInfoHeader(userInfo string) (upload, download, total int64, exp
 				total = v
 			}
 		case "expire":
-			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+			// 修复remnawave永不过期expire值为0导致过期时间错误设置为1970-01-01
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil && v > 0 {
 				expireTime := time.Unix(v, 0)
 				expire = &expireTime
 			}
@@ -713,17 +714,14 @@ func parseAndUpdateTrafficInfo(ctx context.Context, repo *storage.TrafficReposit
 				logger.Info("[外部订阅同步] 解析总流量失败", "value", value, "error", err)
 			}
 		case "expire":
-			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil && v > 0 {
 				expireTime := time.Unix(v, 0)
 				sub.Expire = &expireTime
 				logger.Info("[外部订阅同步] 解析过期时间", "expire", expireTime.Format("2006-01-02 15:04:05"))
-			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
-				// 支持带小数点的值，取整
+			} else if f, err := strconv.ParseFloat(value, 64); err == nil && int64(f) > 0 {
 				expireTime := time.Unix(int64(f), 0)
 				sub.Expire = &expireTime
 				logger.Info("[外部订阅同步] 解析过期时间(浮点)", "expire", expireTime.Format("2006-01-02 15:04:05"))
-			} else {
-				logger.Info("[外部订阅同步] 解析过期时间失败", "value", value, "error", err)
 			}
 		}
 	}
