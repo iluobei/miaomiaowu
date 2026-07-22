@@ -30,7 +30,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-import { Copy } from 'lucide-react'
+import { Copy, Layers} from 'lucide-react'
 import { Upload, Download, Edit, Settings, FileText, Save, Trash2, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Eye, Calendar as CalendarIcon, Plus, Check, Ban, Info, Clock } from 'lucide-react'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
@@ -299,6 +299,14 @@ function SubscribeFilesPage() {
   // 对话框状态
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [aggregateDialogOpen, setAggregateDialogOpen] = useState(false)
+  const [aggregateForm, setAggregateForm] = useState({
+    name: '',
+    description: '',
+    filename: '',
+    selected_tags: [] as string[],
+    template_filename: '',
+  })
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingFile, setEditingFile] = useState<SubscribeFile | null>(null)
   const [editMetadataDialogOpen, setEditMetadataDialogOpen] = useState(false)
@@ -704,6 +712,29 @@ function SubscribeFilesPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '删除失败')
+    },
+  })
+
+  // 创建聚合订阅
+  const createAggregateMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string
+      description?: string
+      filename?: string
+      selected_tags: string[]
+      template_filename?: string
+    }) => {
+      const response = await api.post('/api/admin/subscribe-files/create-aggregate', payload)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
+      setAggregateDialogOpen(false)
+      setAggregateForm({ name: '', description: '', filename: '', selected_tags: [], template_filename: '' })
+      toast.success('聚合订阅已创建，将随源订阅节点自动更新')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '创建聚合订阅失败')
     },
   })
 
@@ -1598,7 +1629,26 @@ function SubscribeFilesPage() {
     importMutation.mutate(importForm)
   }
 
-  const handleUpload = () => {
+  
+  const handleCreateAggregate = () => {
+    if (!aggregateForm.name.trim()) {
+      toast.error('请输入订阅名称')
+      return
+    }
+    if (aggregateForm.selected_tags.length === 0) {
+      toast.error('请至少选择一个源订阅/标签')
+      return
+    }
+    createAggregateMutation.mutate({
+      name: aggregateForm.name.trim(),
+      description: aggregateForm.description.trim() || undefined,
+      filename: aggregateForm.filename.trim() || undefined,
+      selected_tags: aggregateForm.selected_tags,
+      template_filename: aggregateForm.template_filename || undefined,
+    })
+  }
+
+const handleUpload = () => {
     if (!uploadFile) {
       toast.error('请选择文件')
       return
@@ -2686,6 +2736,140 @@ function SubscribeFilesPage() {
                       </Button>
                       <Button onClick={handleUpload} disabled={uploadMutation.isPending}>
                         {uploadMutation.isPending ? '上传中...' : (uploadForm.overwrite_id > 0 ? '覆盖上传' : '上传')}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {/* 聚合订阅 */}
+                <Dialog open={aggregateDialogOpen} onOpenChange={(open) => {
+                  setAggregateDialogOpen(open)
+                  if (!open) {
+                    setAggregateForm({ name: '', description: '', filename: '', selected_tags: [], template_filename: '' })
+                  }
+                }}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button variant='outline' size='sm'>
+                          <Layers className='h-4 w-4' />
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>聚合订阅</TooltipContent>
+                  </Tooltip>
+                  <DialogContent className='sm:max-w-lg max-h-[90vh] flex flex-col'>
+                    <DialogHeader>
+                      <DialogTitle>聚合订阅</DialogTitle>
+                      <DialogDescription>
+                        选择多个外部订阅（按标签），生成一个会随源订阅节点自动更新的新订阅。
+                        源订阅节点从 100 变为 20 时，聚合订阅也会同步变为 20。
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className='space-y-4 py-2 overflow-y-auto flex-1 min-h-0'>
+                      <div className='space-y-2'>
+                        <Label htmlFor='aggregate-name'>订阅名称 *</Label>
+                        <Input
+                          id='aggregate-name'
+                          value={aggregateForm.name}
+                          onChange={(e) => setAggregateForm({ ...aggregateForm, name: e.target.value })}
+                          placeholder='例如：聚合机场'
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='aggregate-desc'>说明（可选）</Label>
+                        <Textarea
+                          id='aggregate-desc'
+                          value={aggregateForm.description}
+                          onChange={(e) => setAggregateForm({ ...aggregateForm, description: e.target.value })}
+                          placeholder='留空将自动生成说明'
+                          rows={2}
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label htmlFor='aggregate-filename'>文件名（可选）</Label>
+                        <Input
+                          id='aggregate-filename'
+                          value={aggregateForm.filename}
+                          onChange={(e) => setAggregateForm({ ...aggregateForm, filename: e.target.value })}
+                          placeholder='留空则使用订阅名称'
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <Label>源订阅 / 标签 *</Label>
+                        <p className='text-xs text-muted-foreground'>
+                          外部订阅同步后会以订阅名作为节点标签。也可选择其它节点标签。
+                        </p>
+                        <div className='flex flex-wrap gap-2 max-h-[220px] overflow-y-auto border rounded-md p-3'>
+                          {(() => {
+                            const externalNames = externalSubs.map((s: any) => s.name).filter(Boolean)
+                            const tagSet = new Set<string>([...externalNames, ...allNodeTags])
+                            const options = Array.from(tagSet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+                            if (options.length === 0) {
+                              return <span className='text-sm text-muted-foreground'>暂无可用标签，请先导入外部订阅或为节点打标签</span>
+                            }
+                            return options.map((tag) => {
+                              const selected = aggregateForm.selected_tags.includes(tag)
+                              const isExternal = externalNames.includes(tag)
+                              return (
+                                <Button
+                                  key={tag}
+                                  type='button'
+                                  size='sm'
+                                  variant={selected ? 'default' : 'outline'}
+                                  onClick={() => {
+                                    const next = selected
+                                      ? aggregateForm.selected_tags.filter((t) => t !== tag)
+                                      : [...aggregateForm.selected_tags, tag]
+                                    setAggregateForm({ ...aggregateForm, selected_tags: next })
+                                  }}
+                                >
+                                  {tag}
+                                </Button>
+                              )
+                            })
+                          })()}
+                        </div>
+                        {aggregateForm.selected_tags.length > 0 && (
+                          <p className='text-xs text-muted-foreground'>
+                            已选 {aggregateForm.selected_tags.length} 个：{aggregateForm.selected_tags.join('、')}
+                          </p>
+                        )}
+                      </div>
+                      <div className='space-y-2'>
+                        <Label>绑定 V3 模板（可选）</Label>
+                        <Select
+                          value={aggregateForm.template_filename || '__none__'}
+                          onValueChange={(v) => setAggregateForm({
+                            ...aggregateForm,
+                            template_filename: v === '__none__' ? '' : v,
+                          })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder='不绑定模板' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='__none__'>不绑定模板（精简配置，实时节点）</SelectItem>
+                            {v3Templates.map((template: any) => (
+                              <SelectItem key={template.filename} value={template.filename}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className='text-xs text-muted-foreground'>
+                          绑定模板后，获取订阅时会按模板 + 所选标签动态生成；不绑定则输出精简 Clash 配置，节点同样实时更新。
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter className='shrink-0'>
+                      <Button variant='outline' onClick={() => setAggregateDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button
+                        onClick={handleCreateAggregate}
+                        disabled={createAggregateMutation.isPending}
+                      >
+                        {createAggregateMutation.isPending ? '创建中...' : '创建聚合订阅'}
                       </Button>
                     </DialogFooter>
                   </DialogContent>

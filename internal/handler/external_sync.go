@@ -514,6 +514,7 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 	updatedCount := 0
 	createdCount := 0
 	skippedCount := 0
+	touchedNodeIDs := make(map[int64]bool)
 
 	for _, node := range nodesToUpdate {
 		var existingNode *storage.Node
@@ -608,6 +609,7 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			existingNode.ClashConfig = node.ClashConfig
 			existingNode.Enabled = node.Enabled
 			existingNode.Tag = node.Tag
+			existingNode.Tags = node.Tags
 
 			// Handle node name based on keepNodeName setting
 			if !keepNodeName {
@@ -640,6 +642,7 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 				continue
 			}
 
+			touchedNodeIDs[existingNode.ID] = true
 			logger.Info("[外部订阅同步] 成功更新节点 (ID)", "node_name", existingNode.NodeName, "id", existingNode.ID)
 
 			// Sync to YAML files (handle name change if needed)
@@ -655,11 +658,12 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 			// New node not found in existing nodes
 			// Check sync scope: only create new nodes if syncScope is "all"
 			if syncScope == "all" {
-				_, err := repo.CreateNode(ctx, node)
+				createdNode, err := repo.CreateNode(ctx, node)
 				if err != nil {
 					logger.Info("[外部订阅同步] 创建新节点 失败", "node_name", node.NodeName, "error", err)
 					continue
 				}
+				touchedNodeIDs[createdNode.ID] = true
 				logger.Info("[外部订阅同步] 成功创建新节点", "node_name", node.NodeName)
 				syncedCount++
 				createdCount++
@@ -672,11 +676,42 @@ func syncSingleExternalSubscription(ctx context.Context, client *http.Client, re
 
 	logger.Info("[外部订阅同步] 订阅同步完成", "name", sub.Name, "synced_count", syncedCount, "total_count", len(nodesToUpdate), "updated", updatedCount, "created", createdCount, "skipped", skippedCount)
 
+	// 清理该外部订阅中已不存在的节点（仅 syncScope=all），保证聚合订阅能随源节点减少而减少
+	if syncScope == "all" {
+		removedOrphans := 0
+		for _, existing := range existingNodes {
+			if existing.RawURL != sub.URL {
+				continue
+			}
+			if touchedNodeIDs[existing.ID] {
+				continue
+			}
+			if err := repo.DeleteNodeForSync(ctx, existing.ID, username); err != nil {
+				logger.Info("[外部订阅同步] 删除失效节点失败", "node_name", existing.NodeName, "id", existing.ID, "error", err)
+				continue
+			}
+			removedOrphans++
+			logger.Info("[外部订阅同步] 删除失效节点", "node_name", existing.NodeName, "id", existing.ID)
+			if subscribeDir != "" {
+				if err := deleteNodeFromYAMLFiles(subscribeDir, existing.NodeName); err != nil {
+					logger.Info("[外部订阅同步] 从YAML删除失效节点失败", "node_name", existing.NodeName, "error", err)
+				}
+			}
+		}
+		if removedOrphans > 0 {
+			logger.Info("[外部订阅同步] 清理失效节点完成", "name", sub.Name, "removed_count", removedOrphans)
+		}
+	}
+
+
 	// 同步代理集合节点到 YAML（仅处理 mmw 模式）
 	if err := syncProxyProviderNodesToYAML(ctx, repo, subscribeDir, username, sub); err != nil {
 		logger.Info("[外部订阅同步] 同步代理集合节点到YAML失败", "error", err)
 		// 不影响主流程，仅记录日志
 	}
+
+	// 刷新绑定模板的订阅，使聚合/模板订阅及时反映节点变化
+	go RefreshAllTemplateSubscriptions(repo, username)
 
 	return syncedCount, sub, nil
 }

@@ -376,6 +376,21 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// 聚合订阅/标签动态生成：未绑定模板但配置了 selected_tags 时，按标签实时从节点表生成配置
+	// 不使用 selected_node_ids（固定 ID 无法跟踪源订阅节点增删）
+	if len(data) == 0 && hasSubscribeFile && subscribeFile.TemplateFilename == "" &&
+		len(subscribeFile.SelectedTags) > 0 && len(subscribeFile.SelectedNodeIDs) == 0 {
+		stepStart = time.Now()
+		tagData, err := h.generateFromSelectedTags(r.Context(), username, subscribeFile)
+		if err != nil {
+			logger.Info("[Subscription] 按标签动态生成失败，回退到原始文件", "error", err, "tags", subscribeFile.SelectedTags)
+		} else {
+			data = tagData
+			fromTemplate = true // 跳过基于磁盘文件的 MMW 同步，避免覆盖动态内容
+			logger.Info("[Subscription] 按标签动态生成完成", "tags", subscribeFile.SelectedTags, "bytes", len(data), "duration_ms", time.Since(stepStart).Milliseconds())
+		}
+	}
+
 	// 文件读取（如果模板生成失败或未绑定模板）
 	if len(data) == 0 {
 		stepStart = time.Now()
@@ -2509,6 +2524,95 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	logger.Info("[模板生成] 模板处理完成", "subscribe", subscribeFile.Name, "template", subscribeFile.TemplateFilename, "result_bytes", len(result))
 
 	return []byte(result), nil
+}
+
+
+// generateFromSelectedTags 按订阅配置的 selected_tags 从节点表实时生成精简 Clash 配置。
+// 用于聚合订阅：源外部订阅节点增删/更新后，获取订阅时自动反映最新节点集合。
+func (h *SubscriptionHandler) generateFromSelectedTags(ctx context.Context, username string, subscribeFile storage.SubscribeFile) ([]byte, error) {
+	if len(subscribeFile.SelectedTags) == 0 {
+		return nil, errors.New("订阅未配置标签过滤")
+	}
+
+	nodeOwner := username
+	if user, err := h.repo.GetUser(ctx, username); err == nil && user.Role != storage.RoleAdmin {
+		if adminName, err := h.repo.GetAdminUsername(ctx); err == nil {
+			nodeOwner = adminName
+		}
+	}
+	nodes, err := h.repo.ListNodes(ctx, nodeOwner)
+	if err != nil {
+		return nil, fmt.Errorf("获取节点列表失败: %w", err)
+	}
+
+	if settings, err := h.repo.GetUserSettings(ctx, username); err == nil && len(settings.NodeOrder) > 0 {
+		sortNodesByNodeOrder(nodes, settings.NodeOrder)
+	}
+
+	selectedTagsMap := make(map[string]bool, len(subscribeFile.SelectedTags))
+	for _, tag := range subscribeFile.SelectedTags {
+		selectedTagsMap[tag] = true
+	}
+
+	nodeIDToName := make(map[int64]string, len(nodes))
+	for _, node := range nodes {
+		nodeIDToName[node.ID] = node.NodeName
+	}
+
+	var proxies []map[string]any
+	var proxyNames []string
+	for _, node := range nodes {
+		if !node.Enabled {
+			continue
+		}
+		if !node.HasAnyTag(selectedTagsMap) {
+			continue
+		}
+		var proxyConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &proxyConfig); err != nil {
+			logger.Info("[标签动态生成] 解析节点配置失败，跳过", "node", node.NodeName, "error", err)
+			continue
+		}
+		proxyConfig["name"] = node.NodeName
+		if node.ChainProxyNodeID != nil {
+			if targetName, ok := nodeIDToName[*node.ChainProxyNodeID]; ok {
+				proxyConfig["dialer-proxy"] = targetName
+			}
+		}
+		if len(node.RelayGroupNodeIDs) > 0 && node.RelayGroupName != "" {
+			proxyConfig["dialer-proxy"] = node.RelayGroupName
+		}
+		proxies = append(proxies, proxyConfig)
+		proxyNames = append(proxyNames, node.NodeName)
+	}
+
+	groupProxies := append([]string{}, proxyNames...)
+	groupProxies = append(groupProxies, "DIRECT")
+	cfg := map[string]any{
+		"mixed-port":          7890,
+		"allow-lan":           true,
+		"mode":                "rule",
+		"log-level":           "info",
+		"external-controller": "127.0.0.1:9090",
+		"proxies":             proxies,
+		"proxy-groups": []map[string]any{
+			{
+				"name":    "PROXY",
+				"type":    "select",
+				"proxies": groupProxies,
+			},
+		},
+		"rules": []string{
+			"MATCH,PROXY",
+		},
+	}
+
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("序列化配置失败: %w", err)
+	}
+	logger.Info("[标签动态生成] 完成", "subscribe", subscribeFile.Name, "tags", subscribeFile.SelectedTags, "proxy_count", len(proxies))
+	return out, nil
 }
 
 // createSubInfoNodes creates subscription info nodes (expire time and remaining traffic)
