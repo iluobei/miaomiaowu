@@ -14,26 +14,91 @@ import (
 )
 
 type externalSubscriptionRequest struct {
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	UserAgent   string `json:"user_agent"`
-	TrafficMode string `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
+	Name                  string `json:"name"`
+	URL                   string `json:"url"`
+	UserAgent             string `json:"user_agent"`
+	TrafficMode           string `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
+	AutoUpdate            *bool  `json:"auto_update"` // 是否启用定时更新
+	UpdateIntervalMinutes *int   `json:"update_interval_minutes"` // 更新间隔（分钟）
 }
 
 type externalSubscriptionResponse struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	URL         string  `json:"url"`
-	UserAgent   string  `json:"user_agent"`
-	NodeCount   int     `json:"node_count"`
-	LastSyncAt  *string `json:"last_sync_at"`
-	Upload      int64   `json:"upload"`       // 已上传流量（字节）
-	Download    int64   `json:"download"`     // 已下载流量（字节）
-	Total       int64   `json:"total"`        // 总流量（字节）
-	Expire      *string `json:"expire"`       // 过期时间
-	TrafficMode string  `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID                    int64   `json:"id"`
+	Name                  string  `json:"name"`
+	URL                   string  `json:"url"`
+	UserAgent             string  `json:"user_agent"`
+	NodeCount             int     `json:"node_count"`
+	LastSyncAt            *string `json:"last_sync_at"`
+	Upload                int64   `json:"upload"`       // 已上传流量（字节）
+	Download              int64   `json:"download"`     // 已下载流量（字节）
+	Total                 int64   `json:"total"`        // 总流量（字节）
+	Expire                *string `json:"expire"`       // 过期时间
+	TrafficMode           string  `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
+	AutoUpdate            bool    `json:"auto_update"`
+	UpdateIntervalMinutes int     `json:"update_interval_minutes"`
+	CreatedAt             string  `json:"created_at"`
+	UpdatedAt             string  `json:"updated_at"`
+}
+
+
+func normalizeUpdateIntervalMinutes(minutes int) int {
+	if minutes < 0 {
+		return 0
+	}
+	// 最短 5 分钟，避免过于频繁
+	if minutes > 0 && minutes < 5 {
+		return 5
+	}
+	return minutes
+}
+
+func resolveAutoUpdateSettings(payload externalSubscriptionRequest, existingAuto bool, existingInterval int) (bool, int) {
+	autoUpdate := existingAuto
+	if payload.AutoUpdate != nil {
+		autoUpdate = *payload.AutoUpdate
+	}
+	interval := existingInterval
+	if payload.UpdateIntervalMinutes != nil {
+		interval = normalizeUpdateIntervalMinutes(*payload.UpdateIntervalMinutes)
+	}
+	if !autoUpdate {
+		// 关闭定时更新时保留间隔配置，便于再次开启
+		return false, interval
+	}
+	if interval <= 0 {
+		interval = 60 // 默认 1 小时
+	}
+	return true, interval
+}
+
+func toExternalSubscriptionResponse(sub storage.ExternalSubscription) externalSubscriptionResponse {
+	var lastSyncAt *string
+	if sub.LastSyncAt != nil {
+		formatted := sub.LastSyncAt.Format(time.RFC3339)
+		lastSyncAt = &formatted
+	}
+	var expire *string
+	if sub.Expire != nil {
+		formatted := sub.Expire.Format(time.RFC3339)
+		expire = &formatted
+	}
+	return externalSubscriptionResponse{
+		ID:                    sub.ID,
+		Name:                  sub.Name,
+		URL:                   sub.URL,
+		UserAgent:             sub.UserAgent,
+		NodeCount:             sub.NodeCount,
+		LastSyncAt:            lastSyncAt,
+		Upload:                sub.Upload,
+		Download:              sub.Download,
+		Total:                 sub.Total,
+		Expire:                expire,
+		TrafficMode:           sub.TrafficMode,
+		AutoUpdate:            sub.AutoUpdate,
+		UpdateIntervalMinutes: sub.UpdateIntervalMinutes,
+		CreatedAt:             sub.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:             sub.UpdatedAt.Format(time.RFC3339),
+	}
 }
 
 func NewExternalSubscriptionsHandler(repo *storage.TrafficRepository) http.Handler {
@@ -72,33 +137,7 @@ func handleListExternalSubscriptions(w http.ResponseWriter, r *http.Request, rep
 
 	resp := make([]externalSubscriptionResponse, 0, len(subs))
 	for _, sub := range subs {
-		var lastSyncAt *string
-		if sub.LastSyncAt != nil {
-			formatted := sub.LastSyncAt.Format(time.RFC3339)
-			lastSyncAt = &formatted
-		}
-
-		var expire *string
-		if sub.Expire != nil {
-			formatted := sub.Expire.Format(time.RFC3339)
-			expire = &formatted
-		}
-
-		resp = append(resp, externalSubscriptionResponse{
-			ID:          sub.ID,
-			Name:        sub.Name,
-			URL:         sub.URL,
-			UserAgent:   sub.UserAgent,
-			NodeCount:   sub.NodeCount,
-			LastSyncAt:  lastSyncAt,
-			Upload:      sub.Upload,
-			Download:    sub.Download,
-			Total:       sub.Total,
-			Expire:      expire,
-			TrafficMode: sub.TrafficMode,
-			CreatedAt:   sub.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:   sub.UpdatedAt.Format(time.RFC3339),
-		})
+		resp = append(resp, toExternalSubscriptionResponse(sub))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -183,25 +222,60 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		}
 	}
 
+	autoUpdate, updateInterval := resolveAutoUpdateSettings(payload, false, 0)
+
 	now := time.Now()
 	sub := storage.ExternalSubscription{
-		Username:    username,
-		Name:        name,
-		URL:         url,
-		UserAgent:   payload.UserAgent,   // 会在存储层使用默认值如果为空
-		TrafficMode: payload.TrafficMode, // 会在存储层使用默认值如果为空
-		NodeCount:   0,
-		LastSyncAt:  &now,
-		Upload:      trafficUpload,
-		Download:    trafficDownload,
-		Total:       trafficTotal,
-		Expire:      trafficExpire,
+		Username:              username,
+		Name:                  name,
+		URL:                   url,
+		UserAgent:             payload.UserAgent,   // 会在存储层使用默认值如果为空
+		TrafficMode:           payload.TrafficMode, // 会在存储层使用默认值如果为空
+		NodeCount:             0,
+		LastSyncAt:            &now,
+		Upload:                trafficUpload,
+		Download:              trafficDownload,
+		Total:                 trafficTotal,
+		Expire:                trafficExpire,
+		AutoUpdate:            autoUpdate,
+		UpdateIntervalMinutes: updateInterval,
 	}
 
 	id, err := repo.CreateExternalSubscription(r.Context(), sub)
 	if err != nil {
 		if errors.Is(err, storage.ErrExternalSubscriptionExists) {
-			writeError(w, http.StatusConflict, errors.New("subscription with this URL already exists"))
+			// 已存在时更新 UA / 流量模式 / 定时更新设置，便于订阅导入再次配置
+			existing, getErr := repo.GetExternalSubscriptionByURL(r.Context(), username, url)
+			if getErr != nil {
+				writeError(w, http.StatusInternalServerError, getErr)
+				return
+			}
+			existing.Name = name
+			if strings.TrimSpace(payload.UserAgent) != "" {
+				existing.UserAgent = payload.UserAgent
+			}
+			if strings.TrimSpace(payload.TrafficMode) != "" {
+				existing.TrafficMode = payload.TrafficMode
+			}
+			existing.AutoUpdate, existing.UpdateIntervalMinutes = resolveAutoUpdateSettings(payload, existing.AutoUpdate, existing.UpdateIntervalMinutes)
+			if trafficTotal > 0 || trafficUpload > 0 || trafficDownload > 0 {
+				existing.Upload = trafficUpload
+				existing.Download = trafficDownload
+				existing.Total = trafficTotal
+				existing.Expire = trafficExpire
+			}
+			if err := repo.UpdateExternalSubscription(r.Context(), existing); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			updated, getErr := repo.GetExternalSubscription(r.Context(), existing.ID, username)
+			if getErr != nil {
+				writeError(w, http.StatusInternalServerError, getErr)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(toExternalSubscriptionResponse(updated))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -214,37 +288,9 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
-	var lastSyncAt *string
-	if created.LastSyncAt != nil {
-		formatted := created.LastSyncAt.Format(time.RFC3339)
-		lastSyncAt = &formatted
-	}
-
-	var expire *string
-	if created.Expire != nil {
-		formatted := created.Expire.Format(time.RFC3339)
-		expire = &formatted
-	}
-
-	resp := externalSubscriptionResponse{
-		ID:          created.ID,
-		Name:        created.Name,
-		URL:         created.URL,
-		UserAgent:   created.UserAgent,
-		NodeCount:   created.NodeCount,
-		LastSyncAt:  lastSyncAt,
-		Upload:      created.Upload,
-		Download:    created.Download,
-		Total:       created.Total,
-		Expire:      expire,
-		TrafficMode: created.TrafficMode,
-		CreatedAt:   created.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   created.UpdatedAt.Format(time.RFC3339),
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(toExternalSubscriptionResponse(created))
 }
 
 func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, username string) {
@@ -294,19 +340,23 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		trafficMode = existing.TrafficMode
 	}
 
+	autoUpdate, updateInterval := resolveAutoUpdateSettings(payload, existing.AutoUpdate, existing.UpdateIntervalMinutes)
+
 	sub := storage.ExternalSubscription{
-		ID:          id,
-		Username:    username,
-		Name:        name,
-		URL:         url,
-		UserAgent:   payload.UserAgent, // 会在存储层使用默认值如果为空
-		TrafficMode: trafficMode,
-		NodeCount:   existing.NodeCount,
-		LastSyncAt:  existing.LastSyncAt,
-		Upload:      existing.Upload,
-		Download:    existing.Download,
-		Total:       existing.Total,
-		Expire:      existing.Expire,
+		ID:                    id,
+		Username:              username,
+		Name:                  name,
+		URL:                   url,
+		UserAgent:             payload.UserAgent, // 会在存储层使用默认值如果为空
+		TrafficMode:           trafficMode,
+		NodeCount:             existing.NodeCount,
+		LastSyncAt:            existing.LastSyncAt,
+		Upload:                existing.Upload,
+		Download:              existing.Download,
+		Total:                 existing.Total,
+		Expire:                existing.Expire,
+		AutoUpdate:            autoUpdate,
+		UpdateIntervalMinutes: updateInterval,
 	}
 
 	if err := repo.UpdateExternalSubscription(r.Context(), sub); err != nil {
@@ -324,37 +374,9 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
-	var lastSyncAt *string
-	if updated.LastSyncAt != nil {
-		formatted := updated.LastSyncAt.Format(time.RFC3339)
-		lastSyncAt = &formatted
-	}
-
-	var expire *string
-	if updated.Expire != nil {
-		formatted := updated.Expire.Format(time.RFC3339)
-		expire = &formatted
-	}
-
-	resp := externalSubscriptionResponse{
-		ID:          updated.ID,
-		Name:        updated.Name,
-		URL:         updated.URL,
-		UserAgent:   updated.UserAgent,
-		NodeCount:   updated.NodeCount,
-		LastSyncAt:  lastSyncAt,
-		Upload:      updated.Upload,
-		Download:    updated.Download,
-		Total:       updated.Total,
-		Expire:      expire,
-		TrafficMode: updated.TrafficMode,
-		CreatedAt:   updated.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   updated.UpdatedAt.Format(time.RFC3339),
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(toExternalSubscriptionResponse(updated))
 }
 
 func handleDeleteExternalSubscription(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, username string) {

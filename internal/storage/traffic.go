@@ -313,20 +313,22 @@ type SystemConfig struct {
 
 // ExternalSubscription represents an external subscription URL imported by user.
 type ExternalSubscription struct {
-	ID          int64
-	Username    string
-	Name        string
-	URL         string
-	UserAgent   string // User-Agent 请求头
-	NodeCount   int
-	LastSyncAt  *time.Time
-	Upload      int64      // 已上传流量（字节）
-	Download    int64      // 已下载流量（字节）
-	Total       int64      // 总流量（字节）
-	Expire      *time.Time // 过期时间
-	TrafficMode string     // 流量统计方式: "download", "upload", "both", "none"
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                    int64
+	Username              string
+	Name                  string
+	URL                   string
+	UserAgent             string // User-Agent 请求头
+	NodeCount             int
+	LastSyncAt            *time.Time
+	Upload                int64      // 已上传流量（字节）
+	Download              int64      // 已下载流量（字节）
+	Total                 int64      // 总流量（字节）
+	Expire                *time.Time // 过期时间
+	TrafficMode           string     // 流量统计方式: "download", "upload", "both", "none"
+	AutoUpdate            bool       // 是否定时自动更新此订阅
+	UpdateIntervalMinutes int        // 定时更新间隔（分钟），>0 且 AutoUpdate 时生效
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 // OverrideScript represents a JavaScript override script.
@@ -844,6 +846,12 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 		return err
 	}
 	if err := r.ensureExternalSubscriptionColumn("traffic_mode", "TEXT NOT NULL DEFAULT 'both'"); err != nil {
+		return err
+	}
+	if err := r.ensureExternalSubscriptionColumn("auto_update", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := r.ensureExternalSubscriptionColumn("update_interval_minutes", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
 
@@ -3868,7 +3876,7 @@ func (r *TrafficRepository) ListExternalSubscriptions(ctx context.Context, usern
 		return nil, errors.New("username is required")
 	}
 
-	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), created_at, updated_at FROM external_subscriptions WHERE username = ? ORDER BY created_at DESC`
+	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), COALESCE(auto_update, 0), COALESCE(update_interval_minutes, 0), created_at, updated_at FROM external_subscriptions WHERE username = ? ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, stmt, username)
 	if err != nil {
 		return nil, fmt.Errorf("list external subscriptions: %w", err)
@@ -3879,9 +3887,11 @@ func (r *TrafficRepository) ListExternalSubscriptions(ctx context.Context, usern
 	for rows.Next() {
 		var sub ExternalSubscription
 		var lastSyncAt, expire sql.NullTime
-		if err := rows.Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+		var autoUpdate int
+		if err := rows.Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &autoUpdate, &sub.UpdateIntervalMinutes, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan external subscription: %w", err)
 		}
+		sub.AutoUpdate = autoUpdate != 0
 		if lastSyncAt.Valid {
 			sub.LastSyncAt = &lastSyncAt.Time
 		}
@@ -3914,15 +3924,17 @@ func (r *TrafficRepository) GetExternalSubscription(ctx context.Context, id int6
 		return sub, errors.New("username is required")
 	}
 
-	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), created_at, updated_at FROM external_subscriptions WHERE id = ? AND username = ? LIMIT 1`
+	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), COALESCE(auto_update, 0), COALESCE(update_interval_minutes, 0), created_at, updated_at FROM external_subscriptions WHERE id = ? AND username = ? LIMIT 1`
 	var lastSyncAt, expire sql.NullTime
-	err := r.db.QueryRowContext(ctx, stmt, id, username).Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &sub.CreatedAt, &sub.UpdatedAt)
+	var autoUpdate int
+	err := r.db.QueryRowContext(ctx, stmt, id, username).Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &autoUpdate, &sub.UpdateIntervalMinutes, &sub.CreatedAt, &sub.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return sub, ErrExternalSubscriptionNotFound
 		}
 		return sub, fmt.Errorf("get external subscription: %w", err)
 	}
+	sub.AutoUpdate = autoUpdate != 0
 
 	if lastSyncAt.Valid {
 		sub.LastSyncAt = &lastSyncAt.Time
@@ -3931,6 +3943,42 @@ func (r *TrafficRepository) GetExternalSubscription(ctx context.Context, id int6
 		sub.Expire = &expire.Time
 	}
 
+	return sub, nil
+}
+
+// GetExternalSubscriptionByURL retrieves an external subscription by username and URL.
+func (r *TrafficRepository) GetExternalSubscriptionByURL(ctx context.Context, username, url string) (ExternalSubscription, error) {
+	var sub ExternalSubscription
+	if r == nil || r.db == nil {
+		return sub, errors.New("traffic repository not initialized")
+	}
+
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return sub, errors.New("username is required")
+	}
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return sub, errors.New("subscription url is required")
+	}
+
+	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), COALESCE(auto_update, 0), COALESCE(update_interval_minutes, 0), created_at, updated_at FROM external_subscriptions WHERE username = ? AND url = ? LIMIT 1`
+	var lastSyncAt, expire sql.NullTime
+	var autoUpdate int
+	err := r.db.QueryRowContext(ctx, stmt, username, url).Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &autoUpdate, &sub.UpdateIntervalMinutes, &sub.CreatedAt, &sub.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sub, ErrExternalSubscriptionNotFound
+		}
+		return sub, fmt.Errorf("get external subscription by url: %w", err)
+	}
+	sub.AutoUpdate = autoUpdate != 0
+	if lastSyncAt.Valid {
+		sub.LastSyncAt = &lastSyncAt.Time
+	}
+	if expire.Valid {
+		sub.Expire = &expire.Time
+	}
 	return sub, nil
 }
 
@@ -3965,8 +4013,17 @@ func (r *TrafficRepository) CreateExternalSubscription(ctx context.Context, sub 
 		trafficMode = "both"
 	}
 
-	const stmt = `INSERT INTO external_subscriptions (username, name, url, user_agent, node_count, last_sync_at, upload, download, total, expire, traffic_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	result, err := r.db.ExecContext(ctx, stmt, username, name, url, userAgent, sub.NodeCount, sub.LastSyncAt, sub.Upload, sub.Download, sub.Total, sub.Expire, trafficMode)
+	autoUpdate := 0
+	if sub.AutoUpdate {
+		autoUpdate = 1
+	}
+	updateInterval := sub.UpdateIntervalMinutes
+	if updateInterval < 0 {
+		updateInterval = 0
+	}
+
+	const stmt = `INSERT INTO external_subscriptions (username, name, url, user_agent, node_count, last_sync_at, upload, download, total, expire, traffic_mode, auto_update, update_interval_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	result, err := r.db.ExecContext(ctx, stmt, username, name, url, userAgent, sub.NodeCount, sub.LastSyncAt, sub.Upload, sub.Download, sub.Total, sub.Expire, trafficMode, autoUpdate, updateInterval)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return 0, ErrExternalSubscriptionExists
@@ -4017,8 +4074,17 @@ func (r *TrafficRepository) UpdateExternalSubscription(ctx context.Context, sub 
 		trafficMode = "both"
 	}
 
-	const stmt = `UPDATE external_subscriptions SET name = ?, url = ?, user_agent = ?, node_count = ?, last_sync_at = ?, upload = ?, download = ?, total = ?, expire = ?, traffic_mode = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND username = ?`
-	result, err := r.db.ExecContext(ctx, stmt, name, url, userAgent, sub.NodeCount, sub.LastSyncAt, sub.Upload, sub.Download, sub.Total, sub.Expire, trafficMode, sub.ID, username)
+	autoUpdate := 0
+	if sub.AutoUpdate {
+		autoUpdate = 1
+	}
+	updateInterval := sub.UpdateIntervalMinutes
+	if updateInterval < 0 {
+		updateInterval = 0
+	}
+
+	const stmt = `UPDATE external_subscriptions SET name = ?, url = ?, user_agent = ?, node_count = ?, last_sync_at = ?, upload = ?, download = ?, total = ?, expire = ?, traffic_mode = ?, auto_update = ?, update_interval_minutes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND username = ?`
+	result, err := r.db.ExecContext(ctx, stmt, name, url, userAgent, sub.NodeCount, sub.LastSyncAt, sub.Upload, sub.Download, sub.Total, sub.Expire, trafficMode, autoUpdate, updateInterval, sub.ID, username)
 	if err != nil {
 		return fmt.Errorf("update external subscription: %w", err)
 	}
@@ -4365,7 +4431,7 @@ func (r *TrafficRepository) ListAllExternalSubscriptions(ctx context.Context) ([
 		return nil, errors.New("traffic repository not initialized")
 	}
 
-	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), created_at, updated_at FROM external_subscriptions ORDER BY created_at DESC`
+	const stmt = `SELECT id, username, name, url, COALESCE(user_agent, 'clash-meta/2.4.0'), node_count, last_sync_at, COALESCE(upload, 0), COALESCE(download, 0), COALESCE(total, 0), expire, COALESCE(traffic_mode, 'both'), COALESCE(auto_update, 0), COALESCE(update_interval_minutes, 0), created_at, updated_at FROM external_subscriptions ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, stmt)
 	if err != nil {
 		return nil, fmt.Errorf("list all external subscriptions: %w", err)
@@ -4377,9 +4443,11 @@ func (r *TrafficRepository) ListAllExternalSubscriptions(ctx context.Context) ([
 		var sub ExternalSubscription
 		var lastSyncAt sql.NullTime
 		var expire sql.NullTime
-		if err := rows.Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+		var autoUpdate int
+		if err := rows.Scan(&sub.ID, &sub.Username, &sub.Name, &sub.URL, &sub.UserAgent, &sub.NodeCount, &lastSyncAt, &sub.Upload, &sub.Download, &sub.Total, &expire, &sub.TrafficMode, &autoUpdate, &sub.UpdateIntervalMinutes, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan external subscription: %w", err)
 		}
+		sub.AutoUpdate = autoUpdate != 0
 		if lastSyncAt.Valid {
 			sub.LastSyncAt = &lastSyncAt.Time
 		}
