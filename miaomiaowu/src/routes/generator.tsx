@@ -16,6 +16,7 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ClashConfigViewer } from '@/components/clash-config-viewer'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -2983,7 +2984,7 @@ function SubscriptionGeneratorPage() {
                   <div>
                     <CardTitle>生成的 Clash 配置</CardTitle>
                     <CardDescription>
-                      预览生成的 YAML 配置文件
+                      大配置默认虚拟滚动预览，需要时可再编辑
                     </CardDescription>
                   </div>
                   <ButtonGroup mode='responsive' hideIconOnMobile>
@@ -3007,14 +3008,11 @@ function SubscriptionGeneratorPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className='rounded-lg border bg-muted/30'>
-                  <Textarea
-                    value={clashConfig}
-                    onChange={(e) => setClashConfig(e.target.value)}
-                    className='h-[400px] max-h-[400px] min-h-[400px] resize-none overflow-y-auto border-0 bg-transparent font-mono text-xs'
-                    placeholder='生成配置后显示在这里...'
-                  />
-                </div>
+                <ClashConfigViewer
+                  value={clashConfig}
+                  onChange={setClashConfig}
+                  height={400}
+                />
                 <div className='mt-4 flex justify-end gap-2'>
                   {(!isV3Mode || ruleMode === 'custom') && (
                     <>
