@@ -323,6 +323,9 @@ func main() {
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	go handler.StartNotifyScheduler(notifyCtx, repo, trafficHandler)
 
+	autoUpdateCtx, stopAutoUpdate := context.WithCancel(context.Background())
+	go handler.StartExternalSubscriptionAutoUpdateScheduler(autoUpdateCtx, repo, subscribeDir)
+
 	go func() {
 		logger.Info("HTTP服务器启动", "version", version.Version, "address", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -331,7 +334,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(srv, stopCollector, stopProxySync, stopNotify)
+	waitForShutdown(srv, stopCollector, stopProxySync, stopNotify, stopAutoUpdate)
 }
 
 func getAddr() string {

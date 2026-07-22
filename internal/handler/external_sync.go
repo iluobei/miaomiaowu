@@ -1490,3 +1490,111 @@ func formatTrafficShort(bytes int64) string {
 	}
 	return fmt.Sprintf("%.0fMB", float64(bytes)/float64(mb))
 }
+
+
+// StartExternalSubscriptionAutoUpdateScheduler periodically syncs external subscriptions
+// that have AutoUpdate enabled, based on each subscription's UpdateIntervalMinutes.
+func StartExternalSubscriptionAutoUpdateScheduler(ctx context.Context, repo *storage.TrafficRepository, subscribeDir string) {
+	if repo == nil {
+		return
+	}
+
+	// 每分钟检查一次是否有到期的订阅
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	logger.Info("[外部订阅定时更新] 调度器已启动", "check_interval", "1分钟")
+
+	// 启动后稍等再跑第一轮，避免和启动其他任务抢资源
+	runExternalSubscriptionAutoUpdates(ctx, repo, subscribeDir)
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("[外部订阅定时更新] 调度器已停止")
+			return
+		case <-ticker.C:
+			runExternalSubscriptionAutoUpdates(ctx, repo, subscribeDir)
+		}
+	}
+}
+
+func runExternalSubscriptionAutoUpdates(ctx context.Context, repo *storage.TrafficRepository, subscribeDir string) {
+	if repo == nil {
+		return
+	}
+
+	// 独立超时，避免单次任务拖垮后续检查
+	runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	subs, err := repo.ListAllExternalSubscriptions(runCtx)
+	if err != nil {
+		logger.Info("[外部订阅定时更新] 获取订阅列表失败", "error", err)
+		return
+	}
+
+	now := time.Now()
+	client := &http.Client{Timeout: 30 * time.Second}
+	settingsCache := make(map[string]storage.UserSettings)
+
+	synced := 0
+	for _, sub := range subs {
+		if !sub.AutoUpdate || sub.UpdateIntervalMinutes <= 0 {
+			continue
+		}
+
+		// 根据 last_sync_at 判断是否到期
+		if sub.LastSyncAt != nil {
+			elapsed := now.Sub(*sub.LastSyncAt)
+			if elapsed < time.Duration(sub.UpdateIntervalMinutes)*time.Minute {
+				continue
+			}
+		}
+
+		logger.Info("[外部订阅定时更新] 开始同步",
+			"user", sub.Username,
+			"name", sub.Name,
+			"interval_minutes", sub.UpdateIntervalMinutes)
+
+		userSettings, ok := settingsCache[sub.Username]
+		if !ok {
+			userSettings, err = repo.GetUserSettings(runCtx, sub.Username)
+			if err != nil {
+				logger.Info("[外部订阅定时更新] 获取用户设置失败，使用默认设置", "user", sub.Username, "error", err)
+				userSettings = storage.UserSettings{
+					MatchRule:      "node_name",
+					SyncScope:      "saved_only",
+					KeepNodeName:   true,
+					NodeNameFilter: defaultNodeNameFilterPattern,
+				}
+			}
+			settingsCache[sub.Username] = userSettings
+		}
+
+		nodeCount, updatedSub, err := syncSingleExternalSubscription(runCtx, client, repo, subscribeDir, sub.Username, sub, userSettings)
+		if err != nil {
+			logger.Info("[外部订阅定时更新] 同步失败", "user", sub.Username, "name", sub.Name, "error", err)
+			continue
+		}
+
+		syncTime := time.Now()
+		updatedSub.LastSyncAt = &syncTime
+		updatedSub.NodeCount = nodeCount
+		// 保留定时更新设置（sync 返回的 sub 已包含）
+		if err := repo.UpdateExternalSubscription(runCtx, updatedSub); err != nil {
+			logger.Info("[外部订阅定时更新] 更新同步时间失败", "user", sub.Username, "name", sub.Name, "error", err)
+			continue
+		}
+
+		synced++
+		logger.Info("[外部订阅定时更新] 同步完成",
+			"user", sub.Username,
+			"name", sub.Name,
+			"node_count", nodeCount)
+	}
+
+	if synced > 0 {
+		logger.Info("[外部订阅定时更新] 本轮完成", "synced", synced)
+	}
+}

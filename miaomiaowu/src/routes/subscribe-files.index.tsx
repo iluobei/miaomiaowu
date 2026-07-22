@@ -95,6 +95,8 @@ type ExternalSubscription = {
   total: number
   expire: string | null
   traffic_mode: 'download' | 'upload' | 'both' | 'none'
+  auto_update: boolean
+  update_interval_minutes: number
   created_at: string
   updated_at: string
 }
@@ -381,7 +383,9 @@ function SubscribeFilesPage() {
     name: '',
     url: '',
     user_agent: '',
-    traffic_mode: 'both' as 'download' | 'upload' | 'both' | 'none'
+    traffic_mode: 'both' as 'download' | 'upload' | 'both' | 'none',
+    auto_update: false,
+    update_interval_minutes: 60,
   })
 
   // 代理集合对话框状态
@@ -763,12 +767,22 @@ function SubscribeFilesPage() {
 
   // 更新外部订阅
   const updateExternalSubMutation = useMutation({
-    mutationFn: async (data: { id: number; name: string; url: string; user_agent: string; traffic_mode: string }) => {
+    mutationFn: async (data: {
+      id: number
+      name: string
+      url: string
+      user_agent: string
+      traffic_mode: string
+      auto_update?: boolean
+      update_interval_minutes?: number
+    }) => {
       await api.put(`/api/user/external-subscriptions?id=${data.id}`, {
         name: data.name,
         url: data.url,
         user_agent: data.user_agent,
-        traffic_mode: data.traffic_mode
+        traffic_mode: data.traffic_mode,
+        auto_update: data.auto_update,
+        update_interval_minutes: data.update_interval_minutes,
       })
     },
     onSuccess: () => {
@@ -4024,7 +4038,18 @@ function SubscribeFilesPage() {
                   columns={[
                     {
                       header: '名称',
-                      cell: (sub) => sub.name,
+                      cell: (sub) => (
+                        <div className='flex flex-col gap-1'>
+                          <span>{sub.name}</span>
+                          {sub.auto_update && (
+                            <Badge variant='secondary' className='w-fit text-[10px]'>
+                              定时 {sub.update_interval_minutes >= 60
+                                ? `${Math.round(sub.update_interval_minutes / 60)}h`
+                                : `${sub.update_interval_minutes}m`}
+                            </Badge>
+                          )}
+                        </div>
+                      ),
                       cellClassName: 'font-medium'
                     },
                     {
@@ -4242,7 +4267,9 @@ function SubscribeFilesPage() {
                                 name: sub.name,
                                 url: sub.url,
                                 user_agent: sub.user_agent,
-                                traffic_mode: sub.traffic_mode || 'both'
+                                traffic_mode: sub.traffic_mode || 'both',
+                                auto_update: Boolean(sub.auto_update),
+                                update_interval_minutes: sub.update_interval_minutes > 0 ? sub.update_interval_minutes : 60,
                               })
                               setEditExternalSubDialogOpen(true)
                             }}
@@ -4316,6 +4343,13 @@ function SubscribeFilesPage() {
                             </TooltipContent>
                           </Tooltip>
                           <div className='font-medium text-sm truncate'>{sub.name}</div>
+                          {sub.auto_update && (
+                            <div className='text-[10px] text-muted-foreground'>
+                              定时更新 · {sub.update_interval_minutes >= 60
+                                ? `${Math.round(sub.update_interval_minutes / 60)} 小时`
+                                : `${sub.update_interval_minutes} 分钟`}
+                            </div>
+                          )}
                         </div>
                         <div className='flex items-center gap-1'>
                           <Button
@@ -4329,7 +4363,9 @@ function SubscribeFilesPage() {
                                 name: sub.name,
                                 url: sub.url,
                                 user_agent: sub.user_agent,
-                                traffic_mode: sub.traffic_mode || 'both'
+                                traffic_mode: sub.traffic_mode || 'both',
+                                auto_update: Boolean(sub.auto_update),
+                                update_interval_minutes: sub.update_interval_minutes > 0 ? sub.update_interval_minutes : 60,
                               })
                               setEditExternalSubDialogOpen(true)
                             }}
@@ -6385,6 +6421,46 @@ function SubscribeFilesPage() {
                 选择如何计算已用流量：上下行为两者相加，仅下行或仅上行则只计算对应流量
               </p>
             </div>
+            <div className='space-y-2 rounded-md border p-3'>
+              <div className='flex items-center justify-between gap-3'>
+                <div className='space-y-1'>
+                  <Label htmlFor='edit-sub-auto-update' className='text-sm font-medium cursor-pointer'>
+                    定时更新此订阅
+                  </Label>
+                  <p className='text-xs text-muted-foreground'>
+                    开启后服务端按间隔自动拉取并同步节点
+                  </p>
+                </div>
+                <Switch
+                  id='edit-sub-auto-update'
+                  checked={editExternalSubForm.auto_update}
+                  onCheckedChange={(checked) => setEditExternalSubForm(prev => ({ ...prev, auto_update: checked }))}
+                />
+              </div>
+              {editExternalSubForm.auto_update && (
+                <div className='flex flex-wrap items-center gap-2 pt-1'>
+                  <Label htmlFor='edit-sub-update-interval' className='text-sm whitespace-nowrap'>
+                    更新间隔
+                  </Label>
+                  <Select
+                    value={String(editExternalSubForm.update_interval_minutes)}
+                    onValueChange={(v) => setEditExternalSubForm(prev => ({ ...prev, update_interval_minutes: Number(v) }))}
+                  >
+                    <SelectTrigger id='edit-sub-update-interval' className='w-[160px]'>
+                      <SelectValue placeholder='选择间隔' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='30'>30 分钟</SelectItem>
+                      <SelectItem value='60'>1 小时</SelectItem>
+                      <SelectItem value='180'>3 小时</SelectItem>
+                      <SelectItem value='360'>6 小时</SelectItem>
+                      <SelectItem value='720'>12 小时</SelectItem>
+                      <SelectItem value='1440'>24 小时</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant='outline' onClick={() => setEditExternalSubDialogOpen(false)}>
@@ -6398,7 +6474,9 @@ function SubscribeFilesPage() {
                     name: editingExternalSub.name,
                     url: editExternalSubForm.url,
                     user_agent: editingExternalSub.user_agent,
-                    traffic_mode: editExternalSubForm.traffic_mode
+                    traffic_mode: editExternalSubForm.traffic_mode,
+                    auto_update: editExternalSubForm.auto_update,
+                    update_interval_minutes: editExternalSubForm.update_interval_minutes,
                   })
                   setEditExternalSubDialogOpen(false)
                   setEditingExternalSub(null)
