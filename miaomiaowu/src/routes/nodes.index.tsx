@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, getPageNumbers } from '@/lib/utils'
 
 const CLASH_DRAFT_KEY_PREFIX = 'mmw_clash_config_draft_'
 import { Button } from '@/components/ui/button'
@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type ProxyNode, type ClashProxy } from '@/lib/proxy-types'
 import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, Link2, Flag, GripVertical, Zap, Loader2, Expand, List, ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown, ArrowUpDown, Gauge } from 'lucide-react'
+import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link2, Flag, GripVertical, Zap, Loader2, Expand, List, ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown, ArrowUpDown, Gauge } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import IpIcon from '@/assets/icons/ip.svg'
 import CaidanIcon from '@/assets/icons/125.svg'
@@ -380,6 +380,131 @@ const STORAGE_KEY_PROTOCOL = 'mmw_nodes_selectedProtocol'
 const STORAGE_KEY_TAG = 'mmw_nodes_tagFilter'
 const STORAGE_KEY_SELECTED_IDS = 'mmw_nodes_selectedIds'
 const STORAGE_KEY_RENDER_MODE = 'mmw_nodes_renderMode'
+const STORAGE_KEY_PAGE_SIZE = 'mmw_nodes_pageSize'
+const NODE_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
+
+function getStoredNodePageSize(): number {
+  try {
+    const raw = Number(localStorage.getItem(STORAGE_KEY_PAGE_SIZE))
+    if (NODE_PAGE_SIZE_OPTIONS.includes(raw as (typeof NODE_PAGE_SIZE_OPTIONS)[number])) {
+      return raw
+    }
+  } catch {
+    // ignore
+  }
+  return 50
+}
+
+// 节点列表分页条（顶部/底部复用）
+function NodeListPagination({
+  position,
+  total,
+  page,
+  pageSize,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  position: 'top' | 'bottom'
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
+}) {
+  if (total <= 0) return null
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        position === 'top' ? 'mb-4 border-b pb-4' : 'mt-4 border-t pt-4'
+      )}
+    >
+      <div className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'>
+        <span>每页</span>
+        <Select
+          value={String(pageSize)}
+          onValueChange={(v) => onPageSizeChange(Number(v))}
+        >
+          <SelectTrigger className='h-8 w-[96px]'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {NODE_PAGE_SIZE_OPTIONS.map((size) => (
+              <SelectItem key={size} value={String(size)}>
+                {size}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span>
+          共 {total} 个 · 第 {page}/{totalPages} 页
+        </span>
+      </div>
+      <div className='flex flex-wrap items-center gap-1'>
+        <Button
+          variant='outline'
+          size='icon'
+          className='h-8 w-8'
+          disabled={page <= 1}
+          onClick={() => onPageChange(1)}
+          title='第一页'
+        >
+          <ChevronsLeft className='h-4 w-4' />
+        </Button>
+        <Button
+          variant='outline'
+          size='icon'
+          className='h-8 w-8'
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          title='上一页'
+        >
+          <ChevronLeft className='h-4 w-4' />
+        </Button>
+        {getPageNumbers(page, totalPages).map((item, idx) =>
+          item === '...' ? (
+            <span key={`ellipsis-${position}-${idx}`} className='px-1 text-muted-foreground'>
+              ...
+            </span>
+          ) : (
+            <Button
+              key={`${position}-${item}`}
+              variant={item === page ? 'default' : 'outline'}
+              size='sm'
+              className='h-8 min-w-8 px-2'
+              onClick={() => onPageChange(item as number)}
+            >
+              {item}
+            </Button>
+          )
+        )}
+        <Button
+          variant='outline'
+          size='icon'
+          className='h-8 w-8'
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          title='下一页'
+        >
+          <ChevronRight className='h-4 w-4' />
+        </Button>
+        <Button
+          variant='outline'
+          size='icon'
+          className='h-8 w-8'
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(totalPages)}
+          title='最后一页'
+        >
+          <ChevronsRight className='h-4 w-4' />
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 // 从 localStorage 获取保存的筛选状态
 function getStoredFilterState() {
@@ -474,6 +599,10 @@ function NodesPage() {
   // 是否给导入节点强制写 skip-cert-verify（默认关，不污染节点原配置；不持久化）
   const [forceNodeSkipCert, setForceNodeSkipCert] = useState<boolean>(false)
 
+  // 订阅导入：定时自动更新
+  const [subscriptionAutoUpdate, setSubscriptionAutoUpdate] = useState(false)
+  const [subscriptionUpdateInterval, setSubscriptionUpdateInterval] = useState<number>(60)
+
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
 
@@ -483,6 +612,8 @@ function NodesPage() {
   // 虚拟滚动模式状态 - 从 localStorage 恢复，无缓存时先默认 virtual（后续根据节点数调整）
   const [renderMode, setRenderMode] = useState<RenderMode>(() => getStoredRenderMode() ?? 'virtual')
   const [renderModeInitialized, setRenderModeInitialized] = useState(() => getStoredRenderMode() !== null)
+  const [nodePage, setNodePage] = useState(1)
+  const [nodePageSize, setNodePageSize] = useState<number>(() => getStoredNodePageSize())
   const [sortMode, setSortMode] = useState(false)
   const nodeOrderSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const virtualListRef = useRef<HTMLDivElement>(null)
@@ -652,6 +783,13 @@ function NodesPage() {
       localStorage.setItem(STORAGE_KEY_RENDER_MODE, renderMode)
     } catch {}
   }, [renderMode])
+
+  // 保存每页条数到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_PAGE_SIZE, String(nodePageSize))
+    } catch {}
+  }, [nodePageSize])
 
   useEffect(() => {
     try {
@@ -2005,7 +2143,14 @@ function NodesPage() {
 
   // 从订阅获取节点
   const fetchSubscriptionMutation = useMutation({
-    mutationFn: async ({ url, userAgent, fetchSkipCertVerify, forceNodeSkipCert }: { url: string; userAgent: string; fetchSkipCertVerify: boolean; forceNodeSkipCert: boolean }) => {
+    mutationFn: async ({ url, userAgent, fetchSkipCertVerify, forceNodeSkipCert }: {
+      url: string
+      userAgent: string
+      fetchSkipCertVerify: boolean
+      forceNodeSkipCert: boolean
+      autoUpdate: boolean
+      updateIntervalMinutes: number
+    }) => {
       const response = await api.post('/api/admin/nodes/fetch-subscription', {
         url,
         user_agent: userAgent,
@@ -2077,6 +2222,8 @@ function NodesPage() {
           name: finalTag,
           url: variables.url,
           user_agent: variables.userAgent, // 保存 User-Agent
+          auto_update: variables.autoUpdate,
+          update_interval_minutes: variables.updateIntervalMinutes,
         })
         // 刷新外部订阅列表和流量数据
         queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
@@ -2387,6 +2534,8 @@ function NodesPage() {
       userAgent: finalUserAgent,
       fetchSkipCertVerify,
       forceNodeSkipCert,
+      autoUpdate: subscriptionAutoUpdate,
+      updateIntervalMinutes: subscriptionUpdateInterval,
     })
   }
 
@@ -2602,10 +2751,42 @@ function NodesPage() {
 
   const deferredFilteredNodes = useDeferredValue(filteredNodes)
 
+  // 筛选变化时回到第 1 页
+  useEffect(() => {
+    setNodePage(1)
+  }, [selectedProtocol, tagFilter, displayNodes.length])
+
+  const totalFilteredNodes = deferredFilteredNodes.length
+  const totalNodePages = Math.max(1, Math.ceil(totalFilteredNodes / nodePageSize) || 1)
+
+  useEffect(() => {
+    if (nodePage > totalNodePages) {
+      setNodePage(totalNodePages)
+    }
+  }, [nodePage, totalNodePages])
+
+  const paginatedNodes = useMemo(() => {
+    const start = (nodePage - 1) * nodePageSize
+    return deferredFilteredNodes.slice(start, start + nodePageSize)
+  }, [deferredFilteredNodes, nodePage, nodePageSize])
+
+  const pageRangeLabel = useMemo(() => {
+    if (totalFilteredNodes === 0) return '0'
+    const start = (nodePage - 1) * nodePageSize + 1
+    const end = Math.min(nodePage * nodePageSize, totalFilteredNodes)
+    return `${start}-${end}`
+  }, [nodePage, nodePageSize, totalFilteredNodes])
+
+  // 翻页时滚回列表顶部
+  useEffect(() => {
+    virtualListRef.current?.scrollTo?.({ top: 0 })
+    tableVirtualListRef.current?.scrollTo?.({ top: 0 })
+  }, [nodePage, nodePageSize])
+
   // 虚拟列表 - 移动端卡片视图
   const mobileVirtualEnabled = renderMode === 'virtual' && !isTablet
   const rowVirtualizer = useVirtualizer({
-    count: mobileVirtualEnabled ? deferredFilteredNodes.length : 0,
+    count: mobileVirtualEnabled ? paginatedNodes.length : 0,
     getScrollElement: () => virtualListRef.current,
     estimateSize: () => 180,
     overscan: 10,
@@ -2615,7 +2796,7 @@ function NodesPage() {
   // 虚拟列表 - 桌面端/平板端表格视图
   const tableVirtualEnabled = renderMode === 'virtual' && isTablet
   const tableVirtualizer = useVirtualizer({
-    count: tableVirtualEnabled ? deferredFilteredNodes.length : 0,
+    count: tableVirtualEnabled ? paginatedNodes.length : 0,
     getScrollElement: () => tableVirtualListRef.current,
     estimateSize: () => 56,
     overscan: 20,
@@ -2980,6 +3161,46 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           为订阅导入的节点设置标签，留空将使用服务器地址作为标签
                         </p>
                       </div>
+                      <div className='space-y-2 rounded-md border p-3'>
+                        <div className='flex items-center justify-between gap-3'>
+                          <div className='space-y-1'>
+                            <Label htmlFor='subscription-auto-update' className='text-sm font-medium cursor-pointer'>
+                              定时更新此订阅
+                            </Label>
+                            <p className='text-xs text-muted-foreground'>
+                              开启后，服务端会按设定间隔自动拉取订阅并同步节点
+                            </p>
+                          </div>
+                          <Switch
+                            id='subscription-auto-update'
+                            checked={subscriptionAutoUpdate}
+                            onCheckedChange={setSubscriptionAutoUpdate}
+                          />
+                        </div>
+                        {subscriptionAutoUpdate && (
+                          <div className='flex flex-wrap items-center gap-2 pt-1'>
+                            <Label htmlFor='subscription-update-interval' className='text-sm whitespace-nowrap'>
+                              更新间隔
+                            </Label>
+                            <Select
+                              value={String(subscriptionUpdateInterval)}
+                              onValueChange={(v) => setSubscriptionUpdateInterval(Number(v))}
+                            >
+                              <SelectTrigger id='subscription-update-interval' className='w-[160px]'>
+                                <SelectValue placeholder='选择间隔' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='30'>30 分钟</SelectItem>
+                                <SelectItem value='60'>1 小时</SelectItem>
+                                <SelectItem value='180'>3 小时</SelectItem>
+                                <SelectItem value='360'>6 小时</SelectItem>
+                                <SelectItem value='720'>12 小时</SelectItem>
+                                <SelectItem value='1440'>24 小时</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
                       <div className='flex justify-end gap-2'>
                         <Button
                           onClick={handleFetchSubscription}
@@ -3007,7 +3228,14 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               <CardHeader>
                 <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
                   <div>
-                    <CardTitle>节点列表 ({deferredFilteredNodes.length})</CardTitle>
+                    <CardTitle>
+                      节点列表 ({deferredFilteredNodes.length})
+                      {totalFilteredNodes > 0 && (
+                        <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                          显示 {pageRangeLabel}
+                        </span>
+                      )}
+                    </CardTitle>
                     <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
                     <p className='mt-2 text-xs text-primary flex flex-wrap items-center gap-1'>
                       <Pencil className='h-4 w-4 inline' /> 编辑节点名称，
@@ -3354,6 +3582,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     </div>
                   )}
 
+                  <NodeListPagination
+                    position='top'
+                    total={totalFilteredNodes}
+                    page={nodePage}
+                    pageSize={nodePageSize}
+                    totalPages={totalNodePages}
+                    onPageChange={setNodePage}
+                    onPageSizeChange={(size) => {
+                      setNodePageSize(size)
+                      setNodePage(1)
+                    }}
+                  />
+
                 {/* 移动端卡片视图 (<768px) */}
                 {!isTablet && renderMode === 'expanded' && (
                 <DndContext
@@ -3364,7 +3605,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   onDragCancel={handleDragCancel}
                 >
                   <SortableContext
-                    items={deferredFilteredNodes.map(n => n.id)}
+                    items={paginatedNodes.map(n => n.id)}
                     strategy={verticalListSortingStrategy}
                   >
                     <div className='space-y-3'>
@@ -3375,7 +3616,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           </CardContent>
                         </Card>
                       ) : (
-                        deferredFilteredNodes.map(node => (
+                        paginatedNodes.map(node => (
                           <SortableCard
                             key={node.id}
                             id={node.id}
@@ -3766,7 +4007,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         }}
                       >
                         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                          const node = deferredFilteredNodes[virtualRow.index]
+                          const node = paginatedNodes[virtualRow.index]
                           if (!node) return null
                           return (
                             <div
@@ -4082,7 +4323,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   {isTablet && !isDesktop && renderMode === 'expanded' && (
                   <div className='rounded-md border'>
                     <SortableContext
-                    items={deferredFilteredNodes.map(n => n.id)}
+                    items={paginatedNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
                     >
                     <Table className='w-full'>
@@ -4104,7 +4345,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           </TableCell>
                         </TableRow>
                       ) : (
-                        deferredFilteredNodes.map(node => (
+                        paginatedNodes.map(node => (
                           <SortableTableRow
                             key={node.id}
                             id={node.id}
@@ -4573,7 +4814,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             }}
                           >
                             {tableVirtualizer.getVirtualItems().map((virtualRow) => {
-                              const node = deferredFilteredNodes[virtualRow.index]
+                              const node = paginatedNodes[virtualRow.index]
                               if (!node) return null
                               return (
                                 <div
@@ -4804,7 +5045,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   {isDesktop && renderMode === 'expanded' && (
                   <div className='rounded-md border'>
                     <SortableContext
-                      items={deferredFilteredNodes.map(n => n.id)}
+                      items={paginatedNodes.map(n => n.id)}
                       strategy={verticalListSortingStrategy}
                     >
                       <Table className='w-full'>
@@ -4827,7 +5068,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                               </TableCell>
                             </TableRow>
                           ) : (
-                            deferredFilteredNodes.map(node => (
+                            paginatedNodes.map(node => (
                           <SortableTableRow
                             key={node.id}
                             id={node.id}
@@ -5396,7 +5637,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             }}
                           >
                             {tableVirtualizer.getVirtualItems().map((virtualRow) => {
-                              const node = deferredFilteredNodes[virtualRow.index]
+                              const node = paginatedNodes[virtualRow.index]
                               if (!node) return null
                               return (
                                 <div
@@ -5703,6 +5944,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     document.body
                   )}
                 </DndContext>
+
+                  <NodeListPagination
+                    position='bottom'
+                    total={totalFilteredNodes}
+                    page={nodePage}
+                    pageSize={nodePageSize}
+                    totalPages={totalNodePages}
+                    onPageChange={setNodePage}
+                    onPageSizeChange={(size) => {
+                      setNodePageSize(size)
+                      setNodePage(1)
+                    }}
+                  />
                 </div>
               </CardContent>
             </Card>
