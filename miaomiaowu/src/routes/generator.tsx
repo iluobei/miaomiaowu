@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Settings, FileText, Upload } from 'lucide-react'
+import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Settings, FileText, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
+import { getPageNumbers } from '@/lib/utils'
 import { EditNodesDialog } from '@/components/edit-nodes-dialog'
 import { MobileEditNodesDialog } from '@/components/mobile-edit-nodes-dialog'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -242,6 +243,8 @@ function SubscriptionGeneratorPage() {
   const [loading, setLoading] = useState(false)
   const [clashConfig, setClashConfig] = useState('')
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(new Set())
+  const [nodeListPage, setNodeListPage] = useState(1)
+  const [nodeListPageSize, setNodeListPageSize] = useState(50)
   const [selectedProtocols, setSelectedProtocols] = useState<Set<string>>(new Set())
 
   // Fetch proxy group categories for ClashConfigBuilder
@@ -835,6 +838,28 @@ function SubscriptionGeneratorPage() {
       return true
     })
   }, [sortedEnabledNodes, selectedProtocols, selectedTags])
+
+  // 节点列表分页
+  useEffect(() => {
+    setNodeListPage(1)
+  }, [selectedProtocols, selectedTags, sortedEnabledNodes.length])
+
+  const nodeListTotalPages = Math.max(1, Math.ceil(filteredNodes.length / nodeListPageSize) || 1)
+  useEffect(() => {
+    if (nodeListPage > nodeListTotalPages) setNodeListPage(nodeListTotalPages)
+  }, [nodeListPage, nodeListTotalPages])
+
+  const paginatedNodes = useMemo(() => {
+    const start = (nodeListPage - 1) * nodeListPageSize
+    return filteredNodes.slice(start, start + nodeListPageSize)
+  }, [filteredNodes, nodeListPage, nodeListPageSize])
+
+  const nodeListRangeLabel = useMemo(() => {
+    if (filteredNodes.length === 0) return '0'
+    const start = (nodeListPage - 1) * nodeListPageSize + 1
+    const end = Math.min(nodeListPage * nodeListPageSize, filteredNodes.length)
+    return `${start}-${end}`
+  }, [filteredNodes.length, nodeListPage, nodeListPageSize])
 
   const handleToggleNode = (nodeId: number) => {
     const newSet = new Set(selectedNodeIds)
@@ -2381,8 +2406,98 @@ function SubscriptionGeneratorPage() {
                     </div>
                   )}
 
+                  <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm text-muted-foreground'>
+                    <span>
+                      共 {filteredNodes.length} 个节点
+                      {filteredNodes.length > 0 && <> · 显示 {nodeListRangeLabel}</>}
+                      {filteredNodes.length > 0 && <> · 第 {nodeListPage}/{nodeListTotalPages} 页</>}
+                    </span>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <span>每页</span>
+                      <Select
+                        value={String(nodeListPageSize)}
+                        onValueChange={(v) => {
+                          setNodeListPageSize(Number(v))
+                          setNodeListPage(1)
+                        }}
+                      >
+                        <SelectTrigger className='h-8 w-[96px]'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[20, 50, 100, 200].map((size) => (
+                            <SelectItem key={size} value={String(size)}>
+                              {size}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {filteredNodes.length > 0 && (
+                        <div className='flex flex-wrap items-center gap-1'>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-8 w-8'
+                            disabled={nodeListPage <= 1}
+                            onClick={() => setNodeListPage(1)}
+                            title='第一页'
+                          >
+                            <ChevronsLeft className='h-4 w-4' />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-8 w-8'
+                            disabled={nodeListPage <= 1}
+                            onClick={() => setNodeListPage((p) => Math.max(1, p - 1))}
+                            title='上一页'
+                          >
+                            <ChevronLeft className='h-4 w-4' />
+                          </Button>
+                          {getPageNumbers(nodeListPage, nodeListTotalPages).map((page, idx) =>
+                            page === '...' ? (
+                              <span key={`top-ellipsis-${idx}`} className='px-1 text-muted-foreground'>
+                                ...
+                              </span>
+                            ) : (
+                              <Button
+                                key={`top-${page}`}
+                                variant={page === nodeListPage ? 'default' : 'outline'}
+                                size='sm'
+                                className='h-8 min-w-8 px-2'
+                                onClick={() => setNodeListPage(page as number)}
+                              >
+                                {page}
+                              </Button>
+                            )
+                          )}
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-8 w-8'
+                            disabled={nodeListPage >= nodeListTotalPages}
+                            onClick={() => setNodeListPage((p) => Math.min(nodeListTotalPages, p + 1))}
+                            title='下一页'
+                          >
+                            <ChevronRight className='h-4 w-4' />
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='icon'
+                            className='h-8 w-8'
+                            disabled={nodeListPage >= nodeListTotalPages}
+                            onClick={() => setNodeListPage(nodeListTotalPages)}
+                            title='最后一页'
+                          >
+                            <ChevronsRight className='h-4 w-4' />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <DataTable
-                    data={filteredNodes}
+                    data={paginatedNodes}
                     getRowKey={(node) => node.id}
                     emptyText='没有找到匹配的节点'
                     containerClassName='max-h-[440px] overflow-y-auto'
@@ -2514,6 +2629,73 @@ function SubscriptionGeneratorPage() {
                       fields: []
                     }}
                   />
+
+                  {filteredNodes.length > 0 && (
+                    <div className='flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between'>
+                      <span className='text-sm text-muted-foreground'>
+                        第 {nodeListPage}/{nodeListTotalPages} 页 · 共 {filteredNodes.length} 个
+                      </span>
+                      <div className='flex flex-wrap items-center gap-1'>
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-8 w-8'
+                          disabled={nodeListPage <= 1}
+                          onClick={() => setNodeListPage(1)}
+                          title='第一页'
+                        >
+                          <ChevronsLeft className='h-4 w-4' />
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-8 w-8'
+                          disabled={nodeListPage <= 1}
+                          onClick={() => setNodeListPage((p) => Math.max(1, p - 1))}
+                          title='上一页'
+                        >
+                          <ChevronLeft className='h-4 w-4' />
+                        </Button>
+                        {getPageNumbers(nodeListPage, nodeListTotalPages).map((page, idx) =>
+                          page === '...' ? (
+                            <span key={`ellipsis-${idx}`} className='px-1 text-muted-foreground'>
+                              ...
+                            </span>
+                          ) : (
+                            <Button
+                              key={page}
+                              variant={page === nodeListPage ? 'default' : 'outline'}
+                              size='sm'
+                              className='h-8 min-w-8 px-2'
+                              onClick={() => setNodeListPage(page as number)}
+                            >
+                              {page}
+                            </Button>
+                          )
+                        )}
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-8 w-8'
+                          disabled={nodeListPage >= nodeListTotalPages}
+                          onClick={() => setNodeListPage((p) => Math.min(nodeListTotalPages, p + 1))}
+                          title='下一页'
+                        >
+                          <ChevronRight className='h-4 w-4' />
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-8 w-8'
+                          disabled={nodeListPage >= nodeListTotalPages}
+                          onClick={() => setNodeListPage(nodeListTotalPages)}
+                          title='最后一页'
+                        >
+                          <ChevronsRight className='h-4 w-4' />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -2829,7 +3011,7 @@ function SubscriptionGeneratorPage() {
                   <Textarea
                     value={clashConfig}
                     onChange={(e) => setClashConfig(e.target.value)}
-                    className='min-h-[400px] resize-none border-0 bg-transparent font-mono text-xs'
+                    className='h-[400px] max-h-[400px] min-h-[400px] resize-none overflow-y-auto border-0 bg-transparent font-mono text-xs'
                     placeholder='生成配置后显示在这里...'
                   />
                 </div>

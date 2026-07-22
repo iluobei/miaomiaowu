@@ -56,6 +56,8 @@ func (h *subscribeFilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.handleUpload(w, r)
 	case path == "create-from-config" && r.Method == http.MethodPost:
 		h.handleCreateFromConfig(w, r)
+	case path == "create-aggregate" && r.Method == http.MethodPost:
+		h.handleCreateAggregate(w, r)
 	case strings.HasSuffix(path, "/users") && r.Method == http.MethodGet:
 		// GET /api/admin/subscribe-files/{id}/users
 		idStr := strings.TrimSuffix(path, "/users")
@@ -68,9 +70,9 @@ func (h *subscribeFilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		// PUT /api/admin/subscribe-files/{filename}/content
 		filename := strings.TrimSuffix(path, "/content")
 		h.handleUpdateContent(w, r, filename)
-	case path != "" && path != "import" && path != "upload" && path != "create-from-config" && (r.Method == http.MethodPut || r.Method == http.MethodPatch):
+	case path != "" && path != "import" && path != "upload" && path != "create-from-config" && path != "create-aggregate" && (r.Method == http.MethodPut || r.Method == http.MethodPatch):
 		h.handleUpdate(w, r, path)
-	case path != "" && path != "import" && path != "upload" && path != "create-from-config" && r.Method == http.MethodDelete:
+	case path != "" && path != "import" && path != "upload" && path != "create-from-config" && path != "create-aggregate" && r.Method == http.MethodDelete:
 		h.handleDelete(w, r, path)
 	default:
 		allowed := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
@@ -1377,6 +1379,205 @@ func copyMap(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+
+// handleCreateAggregate 聚合多个标签(通常为外部订阅名称)为一个新订阅。
+// 使用 selected_tags 动态绑定节点：源订阅更新后，聚合订阅在获取时也会反映最新节点集合。
+// 可选绑定 V3 模板；未绑定时按标签实时生成精简 Clash 配置。
+func (h *subscribeFilesHandler) handleCreateAggregate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name             string   `json:"name"`
+		Description      string   `json:"description"`
+		Filename         string   `json:"filename"`
+		SelectedTags     []string `json:"selected_tags"`
+		TemplateFilename string   `json:"template_filename"`
+		TrafficLimit     *float64 `json:"traffic_limit"`
+		StatsServerIDs   string   `json:"stats_server_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "请求格式不正确")
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeBadRequest(w, "订阅名称是必填项")
+		return
+	}
+
+	// normalize tags
+	tagSet := make(map[string]struct{})
+	var tags []string
+	for _, t := range req.SelectedTags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if _, ok := tagSet[t]; ok {
+			continue
+		}
+		tagSet[t] = struct{}{}
+		tags = append(tags, t)
+	}
+	if len(tags) == 0 {
+		writeBadRequest(w, "请至少选择一个源订阅/标签")
+		return
+	}
+
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("未登录"))
+		return
+	}
+
+	filename := strings.TrimSpace(req.Filename)
+	if filename == "" {
+		filename = req.Name
+	}
+	ext := filepath.Ext(filename)
+	if ext != ".yaml" && ext != ".yml" {
+		filename = filename + ".yaml"
+	}
+
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = "聚合订阅: " + strings.Join(tags, ", ")
+	}
+
+	// Build initial content (also used as fallback file on disk)
+	content, err := buildAggregateConfigContent(r.Context(), h.repo, username, tags, strings.TrimSpace(req.TemplateFilename))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	subscribesDir := "subscribes"
+	if err := os.MkdirAll(subscribesDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("创建订阅目录失败"))
+		return
+	}
+	filePath := filepath.Join(subscribesDir, filename)
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("保存订阅文件失败"))
+		return
+	}
+
+	file := storage.SubscribeFile{
+		Name:             req.Name,
+		Description:      description,
+		URL:              "",
+		Type:             storage.SubscribeTypeCreate,
+		Filename:         filename,
+		TemplateFilename: strings.TrimSpace(req.TemplateFilename),
+		SelectedTags:     tags,
+		SelectedNodeIDs:  nil, // 必须为空：按标签动态跟踪源订阅节点变化
+		TrafficLimit:     req.TrafficLimit,
+		StatsServerIDs:   req.StatsServerIDs,
+	}
+
+	created, err := h.repo.CreateSubscribeFile(r.Context(), file)
+	if err != nil {
+		_ = os.Remove(filePath)
+		if errors.Is(err, storage.ErrSubscribeFileExists) {
+			writeError(w, http.StatusConflict, errors.New("订阅名称已存在"))
+			return
+		}
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// 若绑定了模板，异步再刷一次确保与 regenerateFromTemplate 一致
+	if created.TemplateFilename != "" {
+		go func() {
+			ctx := context.Background()
+			if err := h.regenerateFromTemplate(ctx, username, created); err != nil {
+				logger.Info("[聚合订阅] 模板生成失败", "subscribe", created.Name, "error", err)
+			}
+		}()
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"file": convertSubscribeFile(created),
+	})
+}
+
+// buildAggregateConfigContent 生成聚合订阅的初始 YAML 内容。
+// 有模板时走模板处理；无模板时生成精简 Clash 配置(proxies + 默认选择组)。
+func buildAggregateConfigContent(ctx context.Context, repo *storage.TrafficRepository, username string, tags []string, templateFilename string) ([]byte, error) {
+	nodes, err := repo.ListNodes(ctx, username)
+	if err != nil {
+		return nil, fmt.Errorf("获取节点列表失败: %w", err)
+	}
+
+	selectedTagsMap := make(map[string]bool, len(tags))
+	for _, t := range tags {
+		selectedTagsMap[t] = true
+	}
+
+	var proxies []map[string]any
+	var proxyNames []string
+	for _, node := range nodes {
+		if !node.Enabled {
+			continue
+		}
+		if !node.HasAnyTag(selectedTagsMap) {
+			continue
+		}
+		var proxyConfig map[string]any
+		if err := json.Unmarshal([]byte(node.ClashConfig), &proxyConfig); err != nil {
+			continue
+		}
+		proxyConfig["name"] = node.NodeName
+		proxies = append(proxies, proxyConfig)
+		proxyNames = append(proxyNames, node.NodeName)
+	}
+
+	if templateFilename != "" {
+		templatePath := filepath.Join("rule_templates", templateFilename)
+		templateContent, err := os.ReadFile(templatePath)
+		if err != nil {
+			return nil, fmt.Errorf("读取模板文件失败: %w", err)
+		}
+		// providers map 留空即可；模板处理器主要消费 proxies
+		processor := substore.NewTemplateV3Processor(nil, map[string][]string{})
+		result, err := processor.ProcessTemplate(string(templateContent), proxies)
+		if err != nil {
+			return nil, fmt.Errorf("处理模板失败: %w", err)
+		}
+		result, err = injectProxiesIntoTemplate(result, proxies)
+		if err != nil {
+			return nil, fmt.Errorf("注入代理节点失败: %w", err)
+		}
+		return []byte(result), nil
+	}
+
+	// 无模板：精简配置，客户端可直接使用
+	groupProxies := append([]string{}, proxyNames...)
+	groupProxies = append(groupProxies, "DIRECT")
+	cfg := map[string]any{
+		"mixed-port":         7890,
+		"allow-lan":          true,
+		"mode":               "rule",
+		"log-level":          "info",
+		"external-controller": "127.0.0.1:9090",
+		"proxies":            proxies,
+		"proxy-groups": []map[string]any{
+			{
+				"name":    "PROXY",
+				"type":    "select",
+				"proxies": groupProxies,
+			},
+		},
+		"rules": []string{
+			"MATCH,PROXY",
+		},
+	}
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("序列化配置失败: %w", err)
+	}
+	return out, nil
 }
 
 // regenerateFromTemplate 从V3模板重新生成订阅文件
