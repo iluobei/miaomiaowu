@@ -3,7 +3,7 @@ module miaomiaowu
 go 1.26
 
 require (
-	github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.2
+	github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.5
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3

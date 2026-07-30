@@ -1,9 +1,7 @@
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.0 h1:kE2T/NdYMh0YJR6etinGYlS2MIrHdboXnoLtkFxm9mU=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.0/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.1 h1:lAu+2s5j69OvJIXXN4YtLx0nsMVSHeYHU4vm7ECpUuA=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.1/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.2 h1:D9oo8QaAUZy8rrIaey2ytsq/oRKpp5dOoRq3S65jchg=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.2/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.3 h1:G0czf3TQzwOOlcj4EpQMSxxL95Pmb7k82pQ1RYh6Q+Y=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.3/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.5 h1:I/Uhml1Oss1slW66KP2RP2zsm6wvTZQrVxi3znn1IeU=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.5/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
 github.com/Masterminds/semver/v3 v3.2.1 h1:RN9w6+7QoMeJVGyfmbcgs28Br8cvmnucEXnY0rYXWg0=
 github.com/Masterminds/semver/v3 v3.2.1/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc h1:biVzkmvwrH8WK8raXaxBx6fRVTlJILwEwQGL1I/ByEI=
