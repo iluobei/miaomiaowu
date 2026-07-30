@@ -250,6 +250,18 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.8.3 (2026-07-30)
+- perf: virtualize clash config preview on generator page
+- feat: generator pagination, live aggregate subscriptions
+- ci: add GHCR docker build workflow
+- feat: add subscription auto-update and nodes list pagination
+- 🌈 增加幻想主题
+- 🌈 升级proxyparser支持pcs参数
+- perf: virtualize clash config preview on generator page
+- feat: generator pagination, live aggregate subscriptions
+- ci: add GHCR docker build workflow
+- feat: add subscription auto-update and nodes list pagination
+- 🛠️ fix:多中转组导致显示溢出
 ### v0.8.2 (2026-06-26)
 - 🛠️ fix:节点被默认禁用
 ### v0.8.1 (2026-06-26)
