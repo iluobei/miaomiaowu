@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { toast } from 'sonner'
+import { Download } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { Topbar } from '@/components/layout/topbar'
+import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
+import { api } from '@/lib/api'
+import { getCookie, setCookie } from '@/lib/cookies'
+import { handleServerError } from '@/lib/handle-server-error'
+import { profileQueryFn } from '@/lib/profile'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -21,19 +27,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from '@/components/ui/input-otp'
-import { Download } from 'lucide-react'
-import { getCookie, setCookie } from '@/lib/cookies'
-import { api } from '@/lib/api'
-import { handleServerError } from '@/lib/handle-server-error'
-import { profileQueryFn } from '@/lib/profile'
-import { useAuthStore } from '@/stores/auth-store'
+import { Label } from '@/components/ui/label'
+import { Topbar } from '@/components/layout/topbar'
 
 type ProfileFormValues = {
   username: string
@@ -171,7 +171,9 @@ function SettingsPage() {
 
   const updateShortCodeMutation = useMutation({
     mutationFn: async (code: string) => {
-      const response = await api.post('/api/user/custom-short-code', { custom_short_code: code.trim() })
+      const response = await api.post('/api/user/custom-short-code', {
+        custom_short_code: code.trim(),
+      })
       return response.data
     },
     onSuccess: () => {
@@ -240,15 +242,19 @@ function SettingsPage() {
   })
 
   const displayName = profile?.nickname || profile?.username || '用户'
-  const fallbackAvatar = profile?.is_admin ? `${import.meta.env.BASE_URL}images/admin-avatar.webp` : `${import.meta.env.BASE_URL}images/user-avatar.png`
-  const avatarSrc = profile?.avatar_url?.trim() ? profile.avatar_url.trim() : fallbackAvatar
+  const fallbackAvatar = profile?.is_admin
+    ? `${import.meta.env.BASE_URL}images/admin-avatar.webp`
+    : `${import.meta.env.BASE_URL}images/user-avatar.png`
+  const avatarSrc = profile?.avatar_url?.trim()
+    ? profile.avatar_url.trim()
+    : fallbackAvatar
   const avatarFallback = displayName.slice(0, 2) || '用户'
   const tokenValue = tokenData?.token ?? ''
 
   return (
-    <div className='min-h-svh bg-background'>
+    <div className='bg-background min-h-svh'>
       <Topbar />
-      <main className='mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 pt-24'>
+      <main className='mx-auto w-full max-w-4xl px-4 py-8 pt-24 sm:px-6'>
         <section className='space-y-2'>
           <h1 className='text-3xl font-semibold tracking-tight'>个人设置</h1>
         </section>
@@ -259,7 +265,9 @@ function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>个人资料</CardTitle>
-                <CardDescription>修改用户名、昵称、邮箱和头像链接。</CardDescription>
+                <CardDescription>
+                  修改用户名、昵称、邮箱和头像链接。
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <form className='space-y-5' onSubmit={submitProfile}>
@@ -268,8 +276,10 @@ function SettingsPage() {
                       <AvatarImage src={avatarSrc} alt={displayName} />
                       <AvatarFallback>{avatarFallback}</AvatarFallback>
                     </Avatar>
-                    <div className='text-sm text-muted-foreground'>
-                      {profile?.is_admin ? '管理员头像默认根据角色区分，设置自定义链接将覆盖默认头像。' : '支持使用任意公开可访问的图片链接。'}
+                    <div className='text-muted-foreground text-sm'>
+                      {profile?.is_admin
+                        ? '管理员头像默认根据角色区分，设置自定义链接将覆盖默认头像。'
+                        : '支持使用任意公开可访问的图片链接。'}
                     </div>
                   </div>
 
@@ -282,7 +292,9 @@ function SettingsPage() {
                       {...profileForm.register('username', { required: true })}
                     />
                     {profile?.is_admin ? (
-                      <p className='text-xs text-muted-foreground'>管理员用户名暂不支持修改。</p>
+                      <p className='text-muted-foreground text-xs'>
+                        管理员用户名暂不支持修改。
+                      </p>
                     ) : null}
                   </div>
 
@@ -317,7 +329,11 @@ function SettingsPage() {
                     />
                   </div>
 
-                  <Button type='submit' className='w-full' disabled={updateProfileMutation.isPending}>
+                  <Button
+                    type='submit'
+                    className='w-full'
+                    disabled={updateProfileMutation.isPending}
+                  >
                     {updateProfileMutation.isPending ? '保存中…' : '保存变更'}
                   </Button>
                 </form>
@@ -327,26 +343,35 @@ function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>界面风格</CardTitle>
-                <CardDescription>选择界面显示风格，切换后页面将刷新</CardDescription>
+                <CardDescription>
+                  选择界面显示风格，切换后页面将刷新
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className='flex gap-2'>
                   {[
                     { value: 'miaomiaowu', label: '妙妙屋' },
                     { value: 'flat', label: '扁平' },
+                    { value: 'anime', label: '二次元' },
                   ].map((opt) => (
                     <button
                       key={opt.value}
                       type='button'
                       onClick={() => {
-                        const current = getCookie('mmw-theme-style') || 'miaomiaowu'
+                        const current =
+                          getCookie('mmw-theme-style') || 'miaomiaowu'
                         if (current !== opt.value) {
-                          setCookie('mmw-theme-style', opt.value, 60 * 60 * 24 * 365)
+                          setCookie(
+                            'mmw-theme-style',
+                            opt.value,
+                            60 * 60 * 24 * 365
+                          )
                           window.location.reload()
                         }
                       }}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                        (getCookie('mmw-theme-style') || 'miaomiaowu') === opt.value
+                      className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        (getCookie('mmw-theme-style') || 'miaomiaowu') ===
+                        opt.value
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-background hover:bg-muted border-border'
                       }`}
@@ -361,7 +386,9 @@ function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>自定义订阅连接</CardTitle>
-                <CardDescription>设置后短链接中将使用自定义连接替代系统随机生成的部分。只允许字母和数字，留空则使用系统默认。</CardDescription>
+                <CardDescription>
+                  设置后短链接中将使用自定义连接替代系统随机生成的部分。只允许字母和数字，留空则使用系统默认。
+                </CardDescription>
               </CardHeader>
               <CardContent className='space-y-3'>
                 <div className='space-y-2'>
@@ -389,7 +416,9 @@ function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>修改密码</CardTitle>
-                <CardDescription>修改后需要使用新密码重新登录系统。</CardDescription>
+                <CardDescription>
+                  修改后需要使用新密码重新登录系统。
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <form className='space-y-4' onSubmit={submitPassword}>
@@ -400,7 +429,9 @@ function SettingsPage() {
                       type='password'
                       autoComplete='current-password'
                       placeholder='请输入当前密码'
-                      {...passwordForm.register('current_password', { required: true })}
+                      {...passwordForm.register('current_password', {
+                        required: true,
+                      })}
                     />
                   </div>
                   <div className='space-y-2'>
@@ -410,7 +441,9 @@ function SettingsPage() {
                       type='password'
                       autoComplete='new-password'
                       placeholder='至少 8 位，建议包含符号'
-                      {...passwordForm.register('new_password', { required: true })}
+                      {...passwordForm.register('new_password', {
+                        required: true,
+                      })}
                     />
                   </div>
                   <div className='space-y-2'>
@@ -420,7 +453,9 @@ function SettingsPage() {
                       type='password'
                       autoComplete='new-password'
                       placeholder='再次输入新密码'
-                      {...passwordForm.register('confirm_password', { required: true })}
+                      {...passwordForm.register('confirm_password', {
+                        required: true,
+                      })}
                     />
                   </div>
                   <Button
@@ -437,10 +472,14 @@ function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>订阅 Token</CardTitle>
-                <CardDescription><p className='mt-2 text-sm font-semibold text-destructive'>token用于客户端订阅，发生泄露后重置token只会影响更新订阅，为防止盗用，还需要修改服务器各个节点的鉴权凭证。</p></CardDescription>
+                <CardDescription>
+                  <p className='text-destructive mt-2 text-sm font-semibold'>
+                    token用于客户端订阅，发生泄露后重置token只会影响更新订阅，为防止盗用，还需要修改服务器各个节点的鉴权凭证。
+                  </p>
+                </CardDescription>
               </CardHeader>
               <CardContent className='space-y-4'>
-                <div className='font-mono text-xs sm:text-sm break-all rounded-md border bg-muted/40 p-3 shadow-inner'>
+                <div className='bg-muted/40 rounded-md border p-3 font-mono text-xs break-all shadow-inner sm:text-sm'>
                   {loadingToken ? '加载中…' : tokenValue || '尚未生成'}
                 </div>
                 <div className='flex flex-wrap gap-2'>
@@ -450,7 +489,10 @@ function SettingsPage() {
                     disabled={!tokenValue || resetTokenMutation.isPending}
                     onClick={async () => {
                       if (!tokenValue) return
-                      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                      if (
+                        typeof navigator !== 'undefined' &&
+                        navigator.clipboard?.writeText
+                      ) {
                         try {
                           await navigator.clipboard.writeText(tokenValue)
                           toast.success('Token 已复制')
@@ -474,9 +516,9 @@ function SettingsPage() {
                   </Button>
                 </div>
 
-                <div className='space-y-2 pt-4 border-t'>
+                <div className='space-y-2 border-t pt-4'>
                   <Label>订阅短链接</Label>
-                  <p className='text-xs text-muted-foreground'>
+                  <p className='text-muted-foreground text-xs'>
                     重置所有订阅的短链接。短链接在订阅链接页面显示。
                   </p>
                   <Button
@@ -486,7 +528,9 @@ function SettingsPage() {
                     onClick={() => resetShortLinkMutation.mutate()}
                     className='w-full'
                   >
-                    {resetShortLinkMutation.isPending ? '重置中…' : '重置所有订阅短链接'}
+                    {resetShortLinkMutation.isPending
+                      ? '重置中…'
+                      : '重置所有订阅短链接'}
                   </Button>
                 </div>
               </CardContent>
@@ -502,10 +546,16 @@ function SettingsPage() {
 
 function TwoFactorCard() {
   const queryClient = useQueryClient()
-  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: profileQueryFn, staleTime: 5 * 60 * 1000 })
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: profileQueryFn,
+    staleTime: 5 * 60 * 1000,
+  })
   const [setupOpen, setSetupOpen] = useState(false)
   const [disableOpen, setDisableOpen] = useState(false)
-  const [setupStep, setSetupStep] = useState<'password' | 'qr' | 'verify' | 'recovery'>('password')
+  const [setupStep, setSetupStep] = useState<
+    'password' | 'qr' | 'verify' | 'recovery'
+  >('password')
   const [setupPassword, setSetupPassword] = useState('')
   const [totpUrl, setTotpUrl] = useState('')
   const [totpSecret, setTotpSecret] = useState('')
@@ -594,19 +644,42 @@ function TwoFactorCard() {
         </CardHeader>
         <CardContent>
           {tfStatus?.enabled ? (
-            <Button variant='destructive' className='w-full' onClick={() => setDisableOpen(true)}>
+            <Button
+              variant='destructive'
+              className='w-full'
+              onClick={() => setDisableOpen(true)}
+            >
               禁用两步验证
             </Button>
           ) : (
-            <Button className='w-full' onClick={() => { resetSetup(); setSetupOpen(true) }}>
+            <Button
+              className='w-full'
+              onClick={() => {
+                resetSetup()
+                setSetupOpen(true)
+              }}
+            >
               启用两步验证
             </Button>
           )}
         </CardContent>
       </Card>
 
-      <Dialog open={setupOpen} onOpenChange={(open) => { if (!open && setupStep !== 'recovery') { setSetupOpen(false); resetSetup() } }}>
-        <DialogContent className='sm:max-w-md' onInteractOutside={(e) => { if (setupStep === 'recovery') e.preventDefault() }}>
+      <Dialog
+        open={setupOpen}
+        onOpenChange={(open) => {
+          if (!open && setupStep !== 'recovery') {
+            setSetupOpen(false)
+            resetSetup()
+          }
+        }}
+      >
+        <DialogContent
+          className='sm:max-w-md'
+          onInteractOutside={(e) => {
+            if (setupStep === 'recovery') e.preventDefault()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {setupStep === 'password' && '验证密码'}
@@ -618,7 +691,8 @@ function TwoFactorCard() {
               {setupStep === 'password' && '请输入当前密码以开始设置两步验证。'}
               {setupStep === 'qr' && '使用验证器应用扫描下方二维码。'}
               {setupStep === 'verify' && '输入验证器应用显示的 6 位验证码。'}
-              {setupStep === 'recovery' && '请妥善保存以下恢复码，用于在无法访问验证器时登录。'}
+              {setupStep === 'recovery' &&
+                '请妥善保存以下恢复码，用于在无法访问验证器时登录。'}
             </DialogDescription>
           </DialogHeader>
 
@@ -629,10 +703,17 @@ function TwoFactorCard() {
                 placeholder='输入当前密码'
                 value={setupPassword}
                 onChange={(e) => setSetupPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && setupPassword) setupMutation.mutate(setupPassword) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && setupPassword)
+                    setupMutation.mutate(setupPassword)
+                }}
                 autoFocus
               />
-              <Button className='w-full' disabled={!setupPassword || setupMutation.isPending} onClick={() => setupMutation.mutate(setupPassword)}>
+              <Button
+                className='w-full'
+                disabled={!setupPassword || setupMutation.isPending}
+                onClick={() => setupMutation.mutate(setupPassword)}
+              >
                 {setupMutation.isPending ? '验证中...' : '下一步'}
               </Button>
             </div>
@@ -644,8 +725,10 @@ function TwoFactorCard() {
                 <QRCodeSVG value={totpUrl} size={200} />
               </div>
               <div className='space-y-1'>
-                <Label className='text-xs text-muted-foreground'>手动输入密钥</Label>
-                <div className='font-mono text-xs break-all rounded-md border bg-muted/40 p-2 select-all'>
+                <Label className='text-muted-foreground text-xs'>
+                  手动输入密钥
+                </Label>
+                <div className='bg-muted/40 rounded-md border p-2 font-mono text-xs break-all select-all'>
                   {totpSecret}
                 </div>
               </div>
@@ -658,7 +741,13 @@ function TwoFactorCard() {
           {setupStep === 'verify' && (
             <div className='space-y-4'>
               <div className='flex justify-center'>
-                <InputOTP maxLength={6} value={verifyCode} onChange={setVerifyCode} onComplete={(code) => verifySetupMutation.mutate(code)} autoFocus>
+                <InputOTP
+                  maxLength={6}
+                  value={verifyCode}
+                  onChange={setVerifyCode}
+                  onComplete={(code) => verifySetupMutation.mutate(code)}
+                  autoFocus
+                >
                   <InputOTPGroup>
                     <InputOTPSlot index={0} />
                     <InputOTPSlot index={1} />
@@ -671,7 +760,13 @@ function TwoFactorCard() {
                   </InputOTPGroup>
                 </InputOTP>
               </div>
-              <Button className='w-full' disabled={verifyCode.length !== 6 || verifySetupMutation.isPending} onClick={() => verifySetupMutation.mutate(verifyCode)}>
+              <Button
+                className='w-full'
+                disabled={
+                  verifyCode.length !== 6 || verifySetupMutation.isPending
+                }
+                onClick={() => verifySetupMutation.mutate(verifyCode)}
+              >
                 {verifySetupMutation.isPending ? '验证中...' : '验证并启用'}
               </Button>
             </div>
@@ -679,9 +774,11 @@ function TwoFactorCard() {
 
           {setupStep === 'recovery' && (
             <div className='space-y-4'>
-              <div className='grid grid-cols-2 gap-2 rounded-lg border bg-muted/40 p-3'>
+              <div className='bg-muted/40 grid grid-cols-2 gap-2 rounded-lg border p-3'>
                 {recoveryCodes.map((code) => (
-                  <div key={code} className='font-mono text-sm text-center'>{code}</div>
+                  <div key={code} className='text-center font-mono text-sm'>
+                    {code}
+                  </div>
                 ))}
               </div>
               <div className='grid grid-cols-2 gap-2'>
@@ -689,7 +786,9 @@ function TwoFactorCard() {
                   variant='outline'
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(recoveryCodes.join('\n'))
+                      await navigator.clipboard.writeText(
+                        recoveryCodes.join('\n')
+                      )
                       toast.success('恢复码已复制')
                     } catch {
                       toast.error('复制失败，请手动复制')
@@ -711,11 +810,17 @@ function TwoFactorCard() {
                     URL.revokeObjectURL(url)
                   }}
                 >
-                  <Download className='size-4 mr-1' />
+                  <Download className='mr-1 size-4' />
                   下载恢复码
                 </Button>
               </div>
-              <Button className='w-full' onClick={() => { setSetupOpen(false); resetSetup() }}>
+              <Button
+                className='w-full'
+                onClick={() => {
+                  setSetupOpen(false)
+                  resetSetup()
+                }}
+              >
                 我已保存恢复码
               </Button>
             </div>
@@ -723,15 +828,31 @@ function TwoFactorCard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={disableOpen} onOpenChange={(open) => { if (!open) { setDisableOpen(false); setDisableCode('') } }}>
+      <Dialog
+        open={disableOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDisableOpen(false)
+            setDisableCode('')
+          }
+        }}
+      >
         <DialogContent className='sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>禁用两步验证</DialogTitle>
-            <DialogDescription>请输入验证器应用中的 6 位验证码以禁用两步验证。</DialogDescription>
+            <DialogDescription>
+              请输入验证器应用中的 6 位验证码以禁用两步验证。
+            </DialogDescription>
           </DialogHeader>
           <div className='space-y-4'>
             <div className='flex justify-center'>
-              <InputOTP maxLength={6} value={disableCode} onChange={setDisableCode} onComplete={(code) => disableMutation.mutate(code)} autoFocus>
+              <InputOTP
+                maxLength={6}
+                value={disableCode}
+                onChange={setDisableCode}
+                onComplete={(code) => disableMutation.mutate(code)}
+                autoFocus
+              >
                 <InputOTPGroup>
                   <InputOTPSlot index={0} />
                   <InputOTPSlot index={1} />
@@ -744,7 +865,12 @@ function TwoFactorCard() {
                 </InputOTPGroup>
               </InputOTP>
             </div>
-            <Button variant='destructive' className='w-full' disabled={disableCode.length !== 6 || disableMutation.isPending} onClick={() => disableMutation.mutate(disableCode)}>
+            <Button
+              variant='destructive'
+              className='w-full'
+              disabled={disableCode.length !== 6 || disableMutation.isPending}
+              onClick={() => disableMutation.mutate(disableCode)}
+            >
               {disableMutation.isPending ? '禁用中...' : '确认禁用'}
             </Button>
           </div>

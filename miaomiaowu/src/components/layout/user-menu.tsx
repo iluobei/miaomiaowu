@@ -1,13 +1,27 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { LogOut, Settings2, ExternalLink, BookOpen, HardDrive, RefreshCw, Bug, Palette, Sparkles } from 'lucide-react'
+import {
+  LogOut,
+  Settings2,
+  ExternalLink,
+  BookOpen,
+  HardDrive,
+  RefreshCw,
+  Bug,
+  Palette,
+  Sparkles,
+} from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
+import { api } from '@/lib/api'
+import { getCookie, setCookie } from '@/lib/cookies'
+import { handleServerError } from '@/lib/handle-server-error'
+import { profileQueryFn } from '@/lib/profile'
 import useDialogState from '@/hooks/use-dialog-state'
-import { SignOutDialog } from '@/components/sign-out-dialog'
-import { BackupDialog } from '@/components/backup-dialog'
-import { UpdateDialog } from '@/components/update-dialog'
-import { MmwxDialog } from '@/components/mmwx-dialog'
+import { useVersionCheck } from '@/hooks/use-version-check'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,15 +29,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Switch } from '@/components/ui/switch'
-import { profileQueryFn } from '@/lib/profile'
-import { getCookie, setCookie } from '@/lib/cookies'
-import { useAuthStore } from '@/stores/auth-store'
-import { useVersionCheck } from '@/hooks/use-version-check'
-import { api } from '@/lib/api'
-import { handleServerError } from '@/lib/handle-server-error'
+import { BackupDialog } from '@/components/backup-dialog'
+import { MmwxDialog } from '@/components/mmwx-dialog'
+import { SignOutDialog } from '@/components/sign-out-dialog'
+import { UpdateDialog } from '@/components/update-dialog'
 
 export function UserMenu() {
   const [open, setOpen] = useDialogState<boolean>()
@@ -102,8 +112,12 @@ export function UserMenu() {
   }
 
   const displayName = profile?.nickname || profile?.username || '用户'
-  const fallbackAvatar = profile?.is_admin ? `${import.meta.env.BASE_URL}images/admin-avatar.webp` : `${import.meta.env.BASE_URL}images/user-avatar.png`
-  const avatarSrc = profile?.avatar_url?.trim() ? profile.avatar_url.trim() : fallbackAvatar
+  const fallbackAvatar = profile?.is_admin
+    ? `${import.meta.env.BASE_URL}images/admin-avatar.webp`
+    : `${import.meta.env.BASE_URL}images/user-avatar.png`
+  const avatarSrc = profile?.avatar_url?.trim()
+    ? profile.avatar_url.trim()
+    : fallbackAvatar
   const fallbackText = displayName.slice(0, 2)
   const emailText = profile?.email?.trim()
   const levelText = profile?.role ? profile.role.toUpperCase() : 'LV.0'
@@ -116,16 +130,18 @@ export function UserMenu() {
             variant='outline'
             size='sm'
             aria-label={`用户菜单: ${displayName}`}
-            className='h-9 min-w-0 justify-center gap-2 px-2 py-2 overflow-hidden sm:min-w-[120px] sm:gap-2 sm:px-3'
+            className='user-menu-trigger pixel-button h-9 min-w-0 justify-center gap-2 overflow-hidden px-2 py-2 sm:min-w-[120px] sm:gap-2 sm:px-3'
           >
             <span className='sr-only'>{`用户菜单: ${displayName}`}</span>
-            <Avatar className='size-7 border-[1.5px] border-[color:rgba(241,140,110,0.45)] shadow-[2px_2px_0_rgba(0,0,0,0.2)]'>
+            <Avatar className='um-avatar size-7 border-[1.5px] border-[color:rgba(241,140,110,0.45)] shadow-[2px_2px_0_rgba(0,0,0,0.2)]'>
               <AvatarImage src={avatarSrc} alt={displayName} />
               <AvatarFallback>{fallbackText || '用户'}</AvatarFallback>
             </Avatar>
             <div className='hidden sm:flex sm:flex-col sm:items-center sm:leading-tight'>
-              <span className='text-sm font-semibold truncate max-w-[70px]'>{displayName}</span>
-              <span className='text-xs uppercase tracking-[0.2em] text-muted-foreground'>
+              <span className='um-name max-w-[70px] truncate text-sm font-semibold'>
+                {displayName}
+              </span>
+              <span className='um-level text-muted-foreground text-xs tracking-[0.2em] uppercase'>
                 {levelText}
               </span>
             </div>
@@ -138,12 +154,18 @@ export function UserMenu() {
               <AvatarFallback>{fallbackText || '用户'}</AvatarFallback>
             </Avatar>
             <div className='space-y-1'>
-              <p className='text-sm font-semibold leading-tight'>{displayName}</p>
-              <p className='text-xs text-muted-foreground'>{profile?.username || '未登录'}</p>
+              <p className='text-sm leading-tight font-semibold'>
+                {displayName}
+              </p>
+              <p className='text-muted-foreground text-xs'>
+                {profile?.username || '未登录'}
+              </p>
               {emailText ? (
-                <p className='text-xs text-muted-foreground break-all'>{emailText}</p>
+                <p className='text-muted-foreground text-xs break-all'>
+                  {emailText}
+                </p>
               ) : (
-                <p className='text-xs text-muted-foreground'>未填写邮箱</p>
+                <p className='text-muted-foreground text-xs'>未填写邮箱</p>
               )}
             </div>
           </div>
@@ -167,8 +189,7 @@ export function UserMenu() {
               checked={debugStatus?.enabled || false}
               onCheckedChange={handleDebugToggle}
               disabled={
-                enableDebugMutation.isPending ||
-                disableDebugMutation.isPending
+                enableDebugMutation.isPending || disableDebugMutation.isPending
               }
               onClick={(e) => e.stopPropagation()}
             />
@@ -184,6 +205,7 @@ export function UserMenu() {
               {[
                 { value: 'miaomiaowu', label: '妙妙屋' },
                 { value: 'flat', label: '扁平' },
+                { value: 'anime', label: '二次元' },
               ].map((opt) => (
                 <button
                   key={opt.value}
@@ -192,11 +214,15 @@ export function UserMenu() {
                     e.stopPropagation()
                     const current = getCookie('mmw-theme-style') || 'miaomiaowu'
                     if (current !== opt.value) {
-                      setCookie('mmw-theme-style', opt.value, 60 * 60 * 24 * 365)
+                      setCookie(
+                        'mmw-theme-style',
+                        opt.value,
+                        60 * 60 * 24 * 365
+                      )
                       window.location.reload()
                     }
                   }}
-                  className={`flex-1 px-2 py-0.5 text-xs border transition-colors ${
+                  className={`flex-1 border px-2 py-0.5 text-xs transition-colors ${
                     (getCookie('mmw-theme-style') || 'miaomiaowu') === opt.value
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-background hover:bg-muted border-border'
@@ -209,24 +235,35 @@ export function UserMenu() {
           </DropdownMenuItem>
 
           <DropdownMenuItem asChild className='cursor-pointer justify-center'>
-            <a href='https://docs.miaomiaowu.net' target='_blank' rel='noopener noreferrer' className='flex items-center gap-2'>
+            <a
+              href='https://docs.miaomiaowu.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='flex items-center gap-2'
+            >
               <BookOpen className='size-4' /> 使用帮助
             </a>
           </DropdownMenuItem>
           {profile?.is_admin && (
-            <DropdownMenuItem onClick={() => setBackupDialogOpen(true)} className='cursor-pointer justify-center'>
+            <DropdownMenuItem
+              onClick={() => setBackupDialogOpen(true)}
+              className='cursor-pointer justify-center'
+            >
               <HardDrive className='size-4' /> 备份数据
             </DropdownMenuItem>
           )}
           {profile?.is_admin && (
-            <DropdownMenuItem onClick={() => setUpdateDialogOpen(true)} className='cursor-pointer justify-center'>
+            <DropdownMenuItem
+              onClick={() => setUpdateDialogOpen(true)}
+              className='cursor-pointer justify-center'
+            >
               <RefreshCw className='size-4' />
               <span className='relative'>
                 检查更新
                 {hasUpdate && (
-                  <span className='absolute mt-2 -right-1.5 -top-1.5 flex size-1.5'>
-                    <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75'></span>
-                    <span className='relative inline-flex size-1.5 rounded-full bg-primary'></span>
+                  <span className='absolute -top-1.5 -right-1.5 mt-2 flex size-1.5'>
+                    <span className='bg-primary absolute inline-flex h-full w-full animate-ping rounded-full opacity-75'></span>
+                    <span className='bg-primary relative inline-flex size-1.5 rounded-full'></span>
                   </span>
                 )}
               </span>
@@ -244,19 +281,34 @@ export function UserMenu() {
               版本 v{currentVersion}
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setMmwxDialogOpen(true)} className='cursor-pointer justify-center'>
+          <DropdownMenuItem
+            onClick={() => setMmwxDialogOpen(true)}
+            className='cursor-pointer justify-center'
+          >
             <Sparkles className='size-4' /> 妙妙屋X
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setOpen(true)} className='cursor-pointer justify-center'>
+          <DropdownMenuItem
+            onClick={() => setOpen(true)}
+            className='cursor-pointer justify-center'
+          >
             <LogOut className='size-4' /> 退出登录
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <SignOutDialog open={Boolean(open)} onOpenChange={(value) => setOpen(value)} />
-      <BackupDialog open={backupDialogOpen} onOpenChange={setBackupDialogOpen} />
-      <UpdateDialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen} />
+      <SignOutDialog
+        open={Boolean(open)}
+        onOpenChange={(value) => setOpen(value)}
+      />
+      <BackupDialog
+        open={backupDialogOpen}
+        onOpenChange={setBackupDialogOpen}
+      />
+      <UpdateDialog
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+      />
       <MmwxDialog open={mmwxDialogOpen} onOpenChange={setMmwxDialogOpen} />
     </>
   )

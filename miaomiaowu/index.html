@@ -8,43 +8,48 @@
     <!-- Primary Meta Tags -->
     <title>妙妙屋</title>
     <meta name="title" content="妙妙屋" />
-    <meta
-      name="description"
-      content="妙妙屋 By miaomiaowu.net"
-    />
+    <meta name="description" content="妙妙屋 By miaomiaowu.net" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://miaomiaowu.net" />
     <meta property="og:title" content="妙妙屋" />
-    <meta
-      property="og:description"
-      content="妙妙屋 By miaomiaowu.net"
-    />
-    <meta
-      property="og:image"
-      content="./images/preview.png"
-    />
+    <meta property="og:description" content="妙妙屋 By miaomiaowu.net" />
+    <meta property="og:image" content="./images/preview.png" />
 
     <!-- Twitter -->
-    <meta property="twitter:card" content="https://miaomiaowu.net/images/preview.png" />
+    <meta
+      property="twitter:card"
+      content="https://miaomiaowu.net/images/preview.png"
+    />
     <meta property="twitter:url" content="https://miaomiaowu.net" />
     <meta property="twitter:title" content="妙妙屋" />
-    <meta
-      property="twitter:description"
-      content="妙妙屋 By miaomiaowu.net"
-    />
-    <meta
-      property="twitter:image"
-      content="./safari-pinned-tab.svg"
-    />
+    <meta property="twitter:description" content="妙妙屋 By miaomiaowu.net" />
+    <meta property="twitter:image" content="./safari-pinned-tab.svg" />
 
     <meta name="theme-color" content="#fff" />
-    <script async defer src="https://in.miaomiaowu.net/script.js" data-website-id="6972d2b9-23de-4053-8e5b-d75970cae2bf"></script>
+    <script
+      async
+      defer
+      src="https://in.miaomiaowu.net/script.js"
+      data-website-id="6972d2b9-23de-4053-8e5b-d75970cae2bf"
+    ></script>
   </head>
 
   <body>
-    <script>(function(){var c=document.cookie.match(/(?:^|; )mmw-theme-style=([^;]*)/);if(c&&c[1]==='flat')document.documentElement.classList.add('theme-flat')})()</script>
+    <script>
+      ;(function () {
+        var c = document.cookie.match(/(?:^|; )mmw-theme-style=([^;]*)/)
+        var v = c ? c[1] : ''
+        if (v === 'flat') {
+          document.documentElement.classList.add('theme-flat')
+        } else if (v === 'anime') {
+          document.documentElement.classList.add('theme-anime')
+          var f = document.querySelector("link[rel~='icon']")
+          if (f) f.href = '/images/anime-favicon.png'
+        }
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

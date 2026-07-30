@@ -1,0 +1,501 @@
+/* 二次元主题 - 粉紫配色 + 背景图 + 圆角柔化 + 卡片毛玻璃(覆盖像素风) */
+
+:root.theme-anime {
+  /* 圆角 */
+  --radius: 0.75rem;
+  --radius-sm: calc(0.75rem - 4px);
+  --radius-md: calc(0.75rem - 2px);
+  --radius-lg: 0.75rem;
+  --radius-xl: calc(0.75rem + 4px);
+
+  /* 品牌色改刻晴紫(紫为主) */
+  --brand-50: #f5f3ff;
+  --brand-100: #ede9fe;
+  --brand-200: #ddd6fe;
+  --brand-300: #c4b5fd;
+  --brand-400: #a78bfa;
+  --brand-500: #8b5cf6;
+  --brand-600: #7c3aed;
+  --brand-700: #6d28d9;
+  --brand-800: #5b21b6;
+  --brand-900: #4c1d95;
+  --brand: var(--brand-500);
+  --brand-light: var(--brand-300);
+  --brand-dark: var(--brand-700);
+
+  /* 半透明浅色表面,透出背景图;弹层保持较实以保证可读。alpha 越低背景越明显 */
+  /* 页面底色用清晰的薰衣草紫(比卡片深),让近白卡片凸显 */
+  --background: hsl(263 48% 93% / 0.62);
+  --foreground: #241249;
+  /* 卡片近白(带一丝紫),与紫页面拉开对比 */
+  --card: #fcfbff;
+  --card-foreground: #2a1a4a;
+  --popover: hsl(265 50% 99.2%);
+  --popover-foreground: #241249;
+  --primary: #8b5cf6;
+  --primary-foreground: #f8f6ff;
+  --secondary: #ede9fe;
+  --secondary-foreground: #5b21b6;
+  --muted: hsl(265 50% 96% / 0.85);
+  --muted-foreground: #7c6ba0;
+  --accent: #ddd6fe;
+  --accent-foreground: #5b21b6;
+  --destructive: #ef4444;
+  --border: rgba(150, 130, 220, 0.34);
+  --input: rgba(150, 130, 220, 0.45);
+  --ring: rgba(139, 92, 246, 0.55);
+  /* 刻晴配色:紫 / 靛蓝 / 金 / 品红粉 / 青绿 */
+  --chart-1: #8b5cf6;
+  --chart-2: #5b4bd6;
+  --chart-3: #f0c674;
+  --chart-4: #ec6fb0;
+  --chart-5: #45c8be;
+
+  --sidebar: hsl(265 60% 98.5% / 0.6);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+:root.theme-anime.dark {
+  /* 刻晴深靛紫,统一色调、去掉违和的青色 accent;底色略实一点保证可读 */
+  --background: hsl(260 28% 11% / 0.62);
+  --foreground: #e9e3fb;
+  --card: hsl(260 26% 15% / 0.85);
+  --card-foreground: #e9e3fb;
+  --popover: hsl(260 26% 14%);
+  --popover-foreground: #e9e3fb;
+  --primary: #a78bfa;
+  --primary-foreground: #1c1033;
+  --secondary: hsl(260 22% 23% / 0.9);
+  --secondary-foreground: #e9e3fb;
+  --muted: hsl(260 18% 20% / 0.85);
+  --muted-foreground: #b3a6d6;
+  --accent: hsl(262 32% 32% / 0.92);
+  --accent-foreground: #ede9fe;
+  --border: rgba(170, 150, 235, 0.22);
+  --input: rgba(170, 150, 235, 0.28);
+  --ring: rgba(167, 139, 250, 0.5);
+}
+
+/* 登录页背景:anime 主题下改为紫白棋盘格(刻晴淡紫 #e5defb + 白),覆盖 index.css 的橙色像素网点。
+   用 repeating-conic-gradient 生成棋盘:一个 tile 含两块淡紫两块白,background-size 决定格子大小(tile 的一半)。 */
+:root.theme-anime .login-pixel-bg {
+  background-color: #ffffff;
+  background-image: repeating-conic-gradient(#e5defb 0% 25%, #ffffff 0% 50%);
+  background-size: 72px 72px;
+  background-position: 0 0;
+  background-attachment: fixed;
+}
+
+/* Tailwind rounded-* 类构建时内联为 border-radius:0,需直接覆盖(同 flat-theme) */
+:root.theme-anime .rounded-xs {
+  border-radius: calc(0.75rem - 6px);
+}
+:root.theme-anime .rounded-sm {
+  border-radius: calc(0.75rem - 4px);
+}
+:root.theme-anime .rounded-md {
+  border-radius: calc(0.75rem - 2px);
+}
+:root.theme-anime .rounded-lg {
+  border-radius: 0.75rem;
+}
+:root.theme-anime .rounded-xl {
+  border-radius: calc(0.75rem + 4px);
+}
+:root.theme-anime .rounded-t {
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+:root.theme-anime .rounded-b {
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+:root.theme-anime .rounded-l {
+  border-top-left-radius: 0.75rem;
+  border-bottom-left-radius: 0.75rem;
+}
+:root.theme-anime .rounded-r {
+  border-top-right-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+/* 登录后页面背景 = 紫白棋盘格(与登录页 .login-pixel-bg 一致)+ 四角星闪烁叠加。
+   repeating-conic-gradient 生成棋盘,background-size 决定格子大小(tile 的一半)。 */
+:root.theme-anime body {
+  background-color: #ffffff;
+  background-image: repeating-conic-gradient(#e5defb 0% 25%, #ffffff 0% 50%);
+  background-size: 72px 72px;
+  background-attachment: fixed;
+}
+/* 暗色棋盘格:深靛紫底 + 略亮一格,低对比不刺眼 */
+:root.theme-anime.dark body {
+  background-color: #120e22;
+  background-image: repeating-conic-gradient(#1c1636 0% 25%, #120e22 0% 50%);
+  background-size: 72px 72px;
+  background-attachment: fixed;
+}
+
+/* Card:去掉粗边框,奶油底色(浅色)+ 紫色蕾丝内边框(CSS/SVG 生成,border-image 九宫格,任意尺寸不变形) */
+:root.theme-anime .pixel-card {
+  border: none;
+  /* 直角:与方形 border-image 边框对齐(圆角会裁掉方框角、露出页面底色) */
+  border-radius: 0;
+  box-shadow: 0 4px 18px -6px rgba(139, 92, 246, 0.28);
+  /* 竖向内边距,让内容避开边框(横向各卡有 px-6=24px > 边框占位) */
+  padding-block: 22px;
+}
+:root.theme-anime .pixel-card::before {
+  display: none;
+}
+:root.theme-anime .pixel-card:hover {
+  transform: none;
+  box-shadow: 0 6px 24px -6px rgba(139, 92, 246, 0.38);
+}
+/* 紫色蕾丝内边框:透明中心的 border-image 只画边,不遮文字、不挡点击。四角固定、四边扇贝波边平铺,不随卡片尺寸变形。
+   inset5 + border14 = 距卡边约 19px;内容横向 px-6(24px)、竖向 padding-block 20px 均已避开。 */
+:root.theme-anime .pixel-card::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  border: 19px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+/* no-lace:去掉蕾丝内边框(用于嵌套在卡片里的子卡片,避免双层蕾丝)。恢复圆角 + 极淡细边框区分各项。 */
+:root.theme-anime .pixel-card.no-lace::after {
+  display: none;
+}
+:root.theme-anime .pixel-card.no-lace {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding-block: 0;
+  box-shadow: none;
+}
+
+/* 右上角头像触发按钮:内容(头像 28px + 两行文字)几乎占满 36px 按钮,与 10px 蕾丝重叠。
+   anime 下把蕾丝调细到 7px,并缩小头像/文字,让内容落在蕾丝内框里(不改按钮高度,保持 topbar 对齐)。 */
+:root.theme-anime .user-menu-trigger::after {
+  border-width: 7px;
+}
+:root.theme-anime .user-menu-trigger .um-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+:root.theme-anime .user-menu-trigger .um-name {
+  font-size: 0.68rem;
+  line-height: 1.05;
+  max-width: 54px;
+}
+:root.theme-anime .user-menu-trigger .um-level {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+}
+
+/* Dialog(弹窗):卡片背景 + 蕾丝花纹边框 + 方角,与卡片风格统一。
+   用元素级 border-image(而非 ::after)——dialog 常有内部滚动,::after 绝对定位会随内容滚走;
+   真边框固定在框上不滚。border-box 下 16px 边框内缩,dialog 自身 p-6 padding 仍在边框内,内容不被遮。 */
+/* 单色 SVG 图标(创建链式出站 ⇄、解析IP ⓘ 等 <img> 图标):默认主题给它们烤了橙色 filter,
+   anime 主题下改成主题主色(刻晴紫 #8b5cf6)。选择器特异性(0,2,0)高于 Tailwind 的 arbitrary
+   filter 工具类(0,1,0),无需 !important 即可覆盖。 */
+:root.theme-anime .accent-svg-icon {
+  filter: invert(50%) sepia(83%) saturate(2759%) hue-rotate(227deg)
+    brightness(88%) contrast(122%);
+}
+
+/* 节点行操作按钮(改名铅笔、查看路由等 lucide 图标按钮):默认烤了橙色 text-[#d97757],
+   anime 主题下改成主题主色。:root.theme-anime .accent-action-btn 特异性(0,2,0)高于 arbitrary
+   工具类(0,1,0)。SVG 用 currentColor,给按钮设 color 即随之变色。 */
+:root.theme-anime .accent-action-btn,
+:root.theme-anime .accent-action-btn:hover {
+  color: var(--primary);
+}
+
+:root.theme-anime [data-slot='dialog-content'],
+:root.theme-anime [data-slot='alert-dialog-content'] {
+  background-color: var(--card);
+  border-radius: 0;
+  border: 16px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+
+/* 日志显示区:滚动容器用元素级蕾丝(同 dialog),真边框固定在框上不随日志内容滚动。
+   10px 边框,pre 内容在框内;背景由 bg-card 提供,与其他卡片统一。 */
+:root.theme-anime .log-lace {
+  border-radius: 0;
+  border: 10px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+
+/* 下拉菜单(右上角头像等):同 dialog,卡片背景 + 蕾丝真边框 + 方角。
+   真边框下菜单项在 padding 内,天然不被蕾丝遮挡;边框按下拉尺寸取 10px。 */
+:root.theme-anime [data-slot='dropdown-menu-content'] {
+  background-color: var(--card);
+  border-radius: 0;
+  border: 10px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+
+/* 选项卡(TabsList,如系统设置顶部):卡片背景 + 蕾丝内边框 + 方角,融入 anime 卡片风格。
+   List 较矮,用 ::after 蕾丝叠加(不占内容)+ 加 padding 给蕾丝留位(真边框会挤掉 tab 文字)。 */
+:root.theme-anime [data-slot='tabs-list'] {
+  position: relative;
+  background-color: var(--card);
+  border-radius: 0;
+  height: auto;
+  padding: 14px;
+}
+:root.theme-anime [data-slot='tabs-list']::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  border: 9px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+/* 选中的 tab:主色实心方角,和 anime 高亮一致(卡片白底上更醒目) */
+:root.theme-anime [data-slot='tabs-trigger'] {
+  border-radius: 0;
+}
+:root.theme-anime [data-slot='tabs-trigger'][data-state='active'] {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: none;
+}
+
+/* 列表卡片 TableCard:表格铺满卡片边缘会被蕾丝遮挡。上下已有 .pixel-card 的 padding-block:22px,
+   这里补左右(+底部一点)内边距,让表格避开左右蕾丝(inset4+border19≈23px)。 */
+:root.theme-anime .table-card [data-slot='card-content'] {
+  padding-left: 1.4rem;
+  padding-right: 1.4rem;
+  padding-bottom: 0.5rem;
+}
+
+/* topbar(唯一 <header>)与左侧菜单(唯一 <aside>)里的按钮:去掉自身矩形边框,用卡片同款蕾丝当外边框。
+   只作用于其中的 .pixel-button(nav 菜单项、侧栏折叠按钮、topbar 图标按钮等),容器本身不加。
+   border-color:transparent 去掉那圈矩形描边;蕾丝 ::after 用 inset:0 贴到最外沿,即成为外边框。
+   蕾丝用与卡片相同的 anime-lace.svg,边框按按钮尺寸缩小(卡片 19px → 按钮 10px,否则 36px 高按钮放不下)。
+   ::after 需 display:block 覆盖上面 .pixel-button::after{display:none}(本选择器多一个 header/aside,特异性更高)。
+   .nav-overflow-menu 是 topbar 放不下时的 ⋯ 下拉:它被 Radix portal 渲染到 body,
+   不在 header 内、选择器匹配不到,菜单项会退化成没蕾丝的圆角块 —— 所以一并列进来。 */
+:root.theme-anime header .pixel-button,
+:root.theme-anime aside .pixel-button,
+:root.theme-anime .nav-overflow-menu .pixel-button {
+  border-radius: 0;
+  border-color: transparent;
+  position: relative;
+  /* 自成层叠上下文,让蕾丝 ::after 的 z-index 相对按钮计算(否则相对祖先,-1 会掉到按钮背景之下) */
+  isolation: isolate;
+  /* 卡片色填充,避免去掉边框后和 topbar/侧栏底色混在一起 */
+  background-color: var(--card);
+}
+/* hover / 当前页(TanStack Link 会加 data-status="active")高亮 —— 我们的选择器特异性高于工具类,需自己补 */
+:root.theme-anime header .pixel-button:hover,
+:root.theme-anime aside .pixel-button:hover,
+:root.theme-anime .nav-overflow-menu .pixel-button:hover {
+  background-color: var(--accent);
+}
+/* 当前页:实心主色 + 前景色文字,和 topbar 淡紫底拉开对比(淡紫 tint 会和 topbar 融合) */
+:root.theme-anime header .pixel-button[data-status='active'],
+:root.theme-anime aside .pixel-button[data-status='active'],
+:root.theme-anime .nav-overflow-menu .pixel-button[data-status='active'] {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+:root.theme-anime header .pixel-button[data-status='active']:hover,
+:root.theme-anime aside .pixel-button[data-status='active']:hover,
+:root.theme-anime .nav-overflow-menu .pixel-button[data-status='active']:hover {
+  background-color: var(--primary);
+}
+:root.theme-anime header .pixel-button::after,
+:root.theme-anime aside .pixel-button::after,
+:root.theme-anime .nav-overflow-menu .pixel-button::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: 0;
+  /* 去掉 index.css .pixel-button::after 继承的实心卡片背景(background-color:inherit),否则会盖住文字/自身 */
+  background: none;
+  /* 按钮已 isolate,此处 -1 = 卡片背景之上、文字之下,蕾丝与文字都可见 */
+  z-index: -1;
+  pointer-events: none;
+  border: 10px solid transparent;
+  border-image: url('/images/anime-lace.svg') 30 round;
+}
+
+/* Border 容器 */
+:root.theme-anime .pixel-border {
+  border-width: 1px;
+  border-color: var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 10px -4px rgba(167, 139, 250, 0.25);
+}
+:root.theme-anime .pixel-border:hover {
+  transform: none;
+}
+
+/* Button */
+:root.theme-anime .pixel-button {
+  border-width: 1px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+:root.theme-anime .pixel-button::before,
+:root.theme-anime .pixel-button::after {
+  display: none;
+}
+:root.theme-anime .pixel-button:hover {
+  transform: none;
+  box-shadow: 0 2px 8px -2px rgba(236, 72, 153, 0.35);
+}
+:root.theme-anime .pixel-button:active {
+  transform: none;
+  box-shadow: none;
+}
+
+/* topbar 溢出菜单(⋯)容器。两处必须显式处理,否则菜单项的蕾丝白按钮会"消失":
+   1) 上面 [data-slot='dropdown-menu-content'] 给它 10px 蕾丝真边框,而菜单项自身已是蕾丝按钮
+      —— 两层花边套在一起太乱;.pixel-border 虽把 border-width 压到 1px,却没清 border-image,
+      残留的图像边框会被挤成 1px 糊边,必须 border-image:none 收干净。
+   2) 容器默认底色也是 var(--card),与菜单项按钮同色 → 按钮背景看不出来。
+      改成淡紫,复刻 topbar 的"淡紫底 + 白蕾丝按钮"层次。 */
+:root.theme-anime .nav-overflow-menu {
+  border-image: none;
+  border-width: 1px;
+  border-radius: var(--radius);
+  background-color: var(--secondary);
+}
+
+/* Pill / Badge / Text */
+:root.theme-anime .pixel-pill {
+  border-width: 1px;
+  border-radius: 9999px;
+  box-shadow: none;
+}
+:root.theme-anime .pixel-pill:hover {
+  transform: none;
+  box-shadow: none;
+}
+:root.theme-anime .pixel-badge {
+  border-width: 1px;
+  border-radius: 9999px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+:root.theme-anime .pixel-text {
+  text-transform: none;
+  letter-spacing: normal;
+  text-shadow: none;
+}
+
+/* Toast */
+:root.theme-anime [data-sonner-toast] {
+  border-radius: var(--radius) !important;
+  border-width: 1px !important;
+  box-shadow: 0 6px 20px -6px rgba(236, 72, 153, 0.3) !important;
+  backdrop-filter: blur(8px);
+}
+:root.theme-anime [data-sonner-toast] button,
+:root.theme-anime [data-sonner-toast] [data-close-button] {
+  border-radius: var(--radius-md) !important;
+  border-width: 1px !important;
+}
+
+/* 登录后动态四角星闪烁(仅 anime 主题)。组件 anime-starfield.tsx。
+   固定全屏、pointer-events:none 不拦截鼠标。
+   z-index:30 = 浮在主内容(__root 内容层 z-10)之上,但在侧边栏(z-40)/顶栏·弹窗(z-50)之下,
+   这样星星在内容区随机闪烁清晰可见,又不会盖住导航和对话框。 */
+.anime-starfield {
+  display: none;
+}
+:root.theme-anime .anime-starfield {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+}
+.anime-star {
+  position: absolute;
+  background: currentColor;
+  /* 四角星(sparkle),圆角:用 SVG mask 代替 clip-path,fill+stroke 同色 + round 连接使尖角/凹角都变圆润 */
+  -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 10 L58 42 L90 50 L58 58 L50 90 L42 58 L10 50 L42 42 Z' fill='white' stroke='white' stroke-width='7' stroke-linejoin='round' stroke-linecap='round'/></svg>")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 10 L58 42 L90 50 L58 58 L50 90 L42 58 L10 50 L42 42 Z' fill='white' stroke='white' stroke-width='7' stroke-linejoin='round' stroke-linecap='round'/></svg>")
+    center / contain no-repeat;
+  opacity: 0;
+  animation-name: anime-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: 1; /* 只闪一次 */
+  animation-fill-mode: forwards; /* 结束停在消失态 */
+  will-change: opacity, transform;
+}
+/* 闪一次:从无 → 亮起放大+旋转+发光爆一下 → 淡出消失。translate(-50%,-50%) 居中定位。
+   iteration-count:1,结束时组件靠 onAnimationEnd 移除该颗;定时器持续在新随机位置补新星。
+   注意:不要用 @media (prefers-reduced-motion) 改成 infinite —— 那会让 onAnimationEnd 永不触发,
+   星星卡在原地无限循环(即"总在同一处反复闪"),故此处不做该覆盖。 */
+@keyframes anime-twinkle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translate(-50%, -50%) scale(1.25) rotate(180deg);
+    filter: drop-shadow(0 0 12px currentColor);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(360deg);
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+}
+
+/* Logo 里的「X」(AnimatedX):anime 主题下换刻晴紫金渐变。
+   覆盖组件内联 <style> 的橙红渐变——本选择器特异性 (0,3,0) > 内联样式表的 .animated-x-text (0,1,0),故无需 !important。 */
+:root.theme-anime .animated-x-text,
+:root.theme-anime .animated-x-glow {
+  background: linear-gradient(
+    135deg,
+    #8b5cf6 0%,
+    #6a5ae0 18%,
+    #a78bfa 38%,
+    #f0c674 55%,
+    #ec6fb0 72%,
+    #8b5cf6 90%,
+    #6a5ae0 100%
+  );
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+:root.theme-anime .animated-x-particles::before {
+  color: #f0c674;
+}
+:root.theme-anime .animated-x-particles::after {
+  color: #a78bfa;
+}
+
+/* 导航彩色图标切换:默认隐藏 anime 图,像素/扁平主题下显示 lucide;anime 主题下反过来。
+   见 NavIcon 组件(nav-icon.tsx):同时渲染 lucide <svg> 和彩色 <img>,靠这组规则显隐。 */
+.nav-icon-anime {
+  display: none;
+}
+:root.theme-anime .nav-icon-lucide {
+  display: none;
+}
+/* 彩色关卡图标带透明留白,放大到 28px 让主体更醒目(覆盖 NavIcon 传入的 size-[18px]);
+   anime-theme.css 在 index.css 末尾 @import,规则排在 Tailwind 工具类之后,同特异性下胜出。 */
+:root.theme-anime .nav-icon-anime {
+  display: inline-block;
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+}

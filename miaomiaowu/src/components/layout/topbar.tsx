@@ -1,19 +1,32 @@
-import { Link } from '@tanstack/react-router'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Link as LinkIcon, Radar, Users, Files, Zap, Network, Menu, FileCode, Settings, FileStack } from 'lucide-react'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { UserMenu } from './user-menu'
+import { Link } from '@tanstack/react-router'
+import {
+  Activity,
+  Link as LinkIcon,
+  Radar,
+  Users,
+  Files,
+  Zap,
+  Network,
+  Menu,
+  FileCode,
+  Settings,
+  FileStack,
+} from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
-import { profileQueryFn } from '@/lib/profile'
 import { api } from '@/lib/api'
+import { profileQueryFn } from '@/lib/profile'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { NavIcon } from '@/components/layout/nav-icon'
+import { ThemeSwitch } from '@/components/theme-switch'
+import { UserMenu } from './user-menu'
 
 const baseNavLinks = [
   {
@@ -100,14 +113,16 @@ export function Topbar() {
   const templateVersion = userConfig?.template_version || 'v2'
 
   // 计算所有导航链接，根据模板版本过滤
-  const filteredAdminLinks = adminNavLinks.filter(link => {
+  const filteredAdminLinks = adminNavLinks.filter((link) => {
     // 模板管理只在 v3 模式下显示
     if (link.to === '/templates-v3') {
       return templateVersion === 'v3'
     }
     return true
   })
-  const allNavLinks = isAdmin ? [...baseNavLinks, ...filteredAdminLinks] : baseNavLinks
+  const allNavLinks = isAdmin
+    ? [...baseNavLinks, ...filteredAdminLinks]
+    : baseNavLinks
   const totalLinks = allNavLinks.length
 
   // 计算需要隐藏文字的按钮数量（从后往前）
@@ -127,7 +142,8 @@ export function Topbar() {
 
     // 计算全部显示文字需要的宽度
     const fullWidth = totalLinks * (fullButtonWidth + gap) - gap
-    const availableWithLogoText = windowWidth - baseReservedSpace - logoTextWidth
+    const availableWithLogoText =
+      windowWidth - baseReservedSpace - logoTextWidth
 
     if (fullWidth <= availableWithLogoText) {
       // 空间够，全部显示
@@ -173,23 +189,30 @@ export function Topbar() {
   }, [calculateIconOnlyCount])
 
   return (
-    <header className='fixed top-0 left-0 right-0 z-50 border-b border-[color:rgba(241,140,110,0.22)] bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
-      <div className='flex h-16 items-center justify-between px-4 sm:px-6 overflow-hidden'>
-        <div className='flex items-center gap-4 sm:gap-6 min-w-0'>
+    <header className='bg-background/80 supports-[backdrop-filter]:bg-background/60 fixed top-0 right-0 left-0 z-50 border-b border-[color:rgba(241,140,110,0.22)] backdrop-blur'>
+      <div className='flex h-16 items-center justify-between overflow-hidden px-4 sm:px-6'>
+        <div className='flex min-w-0 items-center gap-4 sm:gap-6'>
           <Link
             to='/'
-            className='flex items-center gap-3 font-semibold text-lg tracking-tight transition hover:text-primary outline-none focus:outline-none shrink-0'
+            className='hover:text-primary flex shrink-0 items-center gap-3 text-lg font-semibold tracking-tight transition outline-none focus:outline-none'
           >
             <img
               src={`${import.meta.env.BASE_URL}images/logo.webp`}
               alt='妙妙屋 Logo'
-              className='h-10 w-10 border-2 border-[color:rgba(241,140,110,0.4)] shadow-[4px_4px_0_rgba(0,0,0,0.2)] shrink-0'
+              className='h-10 w-10 shrink-0 border-2 border-[color:rgba(241,140,110,0.4)] shadow-[4px_4px_0_rgba(0,0,0,0.2)]'
             />
-            {!hideLogoText && <span className='hidden md:inline pixel-text text-primary text-base whitespace-nowrap'>妙妙屋</span>}
+            {!hideLogoText && (
+              <span className='pixel-text text-primary hidden text-base whitespace-nowrap md:inline'>
+                妙妙屋
+              </span>
+            )}
           </Link>
 
           {/* Desktop Navigation - Base links + Admin links */}
-          <nav ref={navRef} className='hidden md:flex items-center gap-2 md:gap-3'>
+          <nav
+            ref={navRef}
+            className='hidden items-center gap-2 md:flex md:gap-3'
+          >
             {allNavLinks.map(({ title, to, icon: Icon }, index) => {
               // 从后往前计算，index >= totalLinks - iconOnlyCount 的按钮只显示图标
               const showIconOnly = index >= totalLinks - iconOnlyCount
@@ -200,14 +223,21 @@ export function Topbar() {
                   to={to}
                   aria-label={title}
                   title={title}
-                  className={`pixel-button inline-flex items-center gap-2 py-2 h-9 text-sm font-semibold uppercase tracking-widest bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all whitespace-nowrap ${
-                    showIconOnly ? 'justify-center px-2 w-9' : 'justify-start px-3'
+                  className={`pixel-button bg-background/75 text-foreground hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:hover:bg-accent/45 dark:hover:text-accent-foreground inline-flex h-9 items-center gap-2 border-[color:rgba(137,110,96,0.45)] py-2 text-sm font-semibold tracking-widest whitespace-nowrap uppercase transition-all dark:border-[color:rgba(255,255,255,0.18)] ${
+                    showIconOnly
+                      ? 'w-9 justify-center px-2'
+                      : 'justify-start px-3'
                   }`}
                   activeProps={{
-                    className: 'bg-primary/20 text-primary border-[color:rgba(217,119,87,0.55)] dark:bg-primary/20 dark:border-[color:rgba(217,119,87,0.55)]'
+                    className:
+                      'bg-primary/20 text-primary border-[color:rgba(217,119,87,0.55)] dark:bg-primary/20 dark:border-[color:rgba(217,119,87,0.55)]',
                   }}
                 >
-                  <Icon className='size-[18px] shrink-0' />
+                  <NavIcon
+                    icon={Icon}
+                    to={to}
+                    className='size-[18px] shrink-0'
+                  />
                   {!showIconOnly && <span>{title}</span>}
                 </Link>
               )
@@ -215,44 +245,52 @@ export function Topbar() {
           </nav>
 
           {/* Mobile Base Navigation - Only show on mobile */}
-          <nav className='md:hidden flex items-center gap-2'>
+          <nav className='flex items-center gap-2 md:hidden'>
             {baseNavLinks.map(({ title, to, icon: Icon }) => (
               <Link
                 key={to}
                 to={to}
                 aria-label={title}
-                className='pixel-button inline-flex items-center justify-center gap-2 px-2 py-2 h-9 text-sm font-semibold uppercase tracking-widest bg-background/75 text-foreground border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45 dark:hover:text-accent-foreground transition-all'
+                className='pixel-button bg-background/75 text-foreground hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:hover:bg-accent/45 dark:hover:text-accent-foreground inline-flex h-9 items-center justify-center gap-2 border-[color:rgba(137,110,96,0.45)] px-2 py-2 text-sm font-semibold tracking-widest uppercase transition-all dark:border-[color:rgba(255,255,255,0.18)]'
                 activeProps={{
-                  className: 'bg-primary/20 text-primary border-[color:rgba(217,119,87,0.55)] dark:bg-primary/20 dark:border-[color:rgba(217,119,87,0.55)]'
+                  className:
+                    'bg-primary/20 text-primary border-[color:rgba(217,119,87,0.55)] dark:bg-primary/20 dark:border-[color:rgba(217,119,87,0.55)]',
                 }}
               >
-                <Icon className='size-[18px] shrink-0' />
+                <NavIcon icon={Icon} to={to} className='size-[18px] shrink-0' />
               </Link>
             ))}
           </nav>
 
           {/* Mobile Navigation Dropdown - Only show on mobile for admin */}
           {isAdmin && (
-            <DropdownMenu open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <DropdownMenu
+              open={mobileMenuOpen}
+              onOpenChange={setMobileMenuOpen}
+            >
               <DropdownMenuTrigger asChild>
                 <Button
                   variant='outline'
                   size='icon'
-                  className='md:hidden pixel-button h-9 w-9 bg-background/75 border-[color:rgba(137,110,96,0.45)] hover:bg-accent/35 dark:bg-input/30 dark:border-[color:rgba(255,255,255,0.18)] dark:hover:bg-accent/45'
+                  className='pixel-button bg-background/75 hover:bg-accent/35 dark:bg-input/30 dark:hover:bg-accent/45 h-9 w-9 border-[color:rgba(137,110,96,0.45)] md:hidden dark:border-[color:rgba(255,255,255,0.18)]'
                 >
                   <Menu className='h-5 w-5' />
                   <span className='sr-only'>打开菜单</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align='start' className='w-48 pixel-border'>
+              <DropdownMenuContent align='start' className='pixel-border w-48'>
                 {adminNavLinks.map(({ title, to, icon: Icon }) => (
                   <DropdownMenuItem key={to} asChild>
                     <Link
                       to={to}
-                      className='flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-accent/35 focus:bg-accent/35'
+                      className='hover:bg-accent/35 focus:bg-accent/35 flex cursor-pointer items-center gap-3 px-3 py-2'
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      <Icon className='size-[18px] shrink-0' />
+                      <NavIcon
+                        icon={Icon}
+                        to={to}
+                        className='size-[18px] shrink-0'
+                      />
                       <span>{title}</span>
                     </Link>
                   </DropdownMenuItem>
@@ -262,7 +300,7 @@ export function Topbar() {
           )}
         </div>
 
-        <div className='flex items-center gap-2 sm:gap-3 pl-2 sm:pl-0'>
+        <div className='flex items-center gap-2 pl-2 sm:gap-3 sm:pl-0'>
           {/* <a
             href='https://t.me/miaomiaowux'
             target='_blank'
