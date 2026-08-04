@@ -2,14 +2,15 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
-	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
 
 	"gopkg.in/yaml.v3"
 )
@@ -266,6 +267,9 @@ func (h *TemplateV3Handler) handlePreviewWithTags(w http.ResponseWriter, r *http
 
 // processV3Template processes a v3 template with the given proxies
 func (h *TemplateV3Handler) processV3Template(templateContent string, proxies []map[string]any) (string, error) {
+	if looksLikeSurgeTemplate(templateContent) {
+		return injectProxiesIntoSurgeTemplate(templateContent, proxies)
+	}
 	// Create processor with empty providers (v3 doesn't use external providers)
 	processor := substore.NewTemplateV3Processor(nil, nil)
 
@@ -282,6 +286,76 @@ func (h *TemplateV3Handler) processV3Template(templateContent string, proxies []
 	}
 
 	return result, nil
+}
+
+func looksLikeSurgeTemplate(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "[general]", "[proxy]", "[proxy group]", "[rule]":
+			return true
+		}
+	}
+	return false
+}
+
+func isSurgeTemplateFile(filename string) bool {
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(filename)), ".conf")
+}
+
+func isSurgeClientType(clientType string) bool {
+	switch strings.ToLower(strings.TrimSpace(clientType)) {
+	case "surge", "surgemac", "clash-to-surge":
+		return true
+	default:
+		return false
+	}
+}
+
+func injectProxiesIntoSurgeTemplate(templateContent string, proxies []map[string]any) (string, error) {
+	items := make([]substore.Proxy, 0, len(proxies))
+	for _, proxy := range proxies {
+		items = append(items, substore.Proxy(proxy))
+	}
+	produced, err := substore.NewSurgeProducer().Produce(items, "", &substore.ProduceOptions{})
+	if err != nil {
+		return "", err
+	}
+	proxyLines, ok := produced.(string)
+	if !ok {
+		return "", fmt.Errorf("unexpected Surge producer result type: %T", produced)
+	}
+	proxyLines = strings.TrimRight(proxyLines, "\n")
+	lines := strings.Split(templateContent, "\n")
+	out := make([]string, 0, len(lines)+len(items))
+	inProxy, injected := false, false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			inProxy = strings.EqualFold(trimmed, "[Proxy]")
+			out = append(out, line)
+			if inProxy {
+				if proxyLines != "" {
+					out = append(out, proxyLines)
+				}
+				injected = true
+			}
+			continue
+		}
+		if inProxy {
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				out = append(out, line)
+			}
+			continue
+		}
+		out = append(out, line)
+	}
+	if !injected {
+		out = append(out, "", "[Proxy]")
+		if proxyLines != "" {
+			out = append(out, proxyLines)
+		}
+	}
+	return strings.Join(out, "\n"), nil
 }
 
 // injectProxiesIntoTemplate injects proxy nodes into the template's proxies section
@@ -617,12 +691,39 @@ func (h *TemplateV3Handler) handleAnalyzeSubscription(w http.ResponseWriter, r *
 
 	// Generate V3 template
 	templateContent := substore.GenerateV3TemplateFromAnalysis(result)
+	templateContent, err = appendRuleProvidersToTemplate(templateContent, result.RuleProviders)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "生成模板失败: "+err.Error())
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"analysis":         result,
 		"template_content": templateContent,
 	})
+}
+
+// appendRuleProvidersToTemplate preserves providers discovered by the analyzer
+// when the template generator does not emit them itself.
+func appendRuleProvidersToTemplate(templateContent string, providers map[string]any) (string, error) {
+	if len(providers) == 0 {
+		return templateContent, nil
+	}
+
+	var generated map[string]any
+	if err := yaml.Unmarshal([]byte(templateContent), &generated); err != nil {
+		return "", err
+	}
+	if _, exists := generated["rule-providers"]; exists {
+		return templateContent, nil
+	}
+
+	providerYAML, err := yaml.Marshal(map[string]any{"rule-providers": providers})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(templateContent, "\n") + "\n\n" + string(providerYAML), nil
 }
 
 // handleGetRegionFilters returns the available region filters
@@ -646,8 +747,9 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 	}
 
 	type templateInfo struct {
-		Name      string            `json:"name"`                // 显示名称（去掉 _v3.yaml 后缀）
-		Filename  string            `json:"filename"`            // 完整文件名
+		Name      string            `json:"name"`     // 显示名称（去掉 _v3.yaml 后缀）
+		Filename  string            `json:"filename"` // 完整文件名
+		Type      string            `json:"type"`
 		Variables map[string]string `json:"variables,omitempty"` // 模板自定义变量
 	}
 
@@ -657,23 +759,32 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 			continue
 		}
 		name := entry.Name()
-		// 返回所有 yaml 文件（rule_templates 目录下的都是 V3 模板）
-		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+		isSurge := strings.HasSuffix(strings.ToLower(name), ".conf")
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || isSurge {
 			displayName := strings.TrimSuffix(name, ".yaml")
 			displayName = strings.TrimSuffix(displayName, ".yml")
+			displayName = strings.TrimSuffix(displayName, ".conf")
 			displayName = strings.TrimSuffix(displayName, "_v3")
 			displayName = strings.TrimSuffix(displayName, "__v3")
 			displayName = strings.ReplaceAll(displayName, "_", " ")
 
 			// 提取模板自定义变量
 			var variables map[string]string
-			if content, err := os.ReadFile(filepath.Join(templatesDir, name)); err == nil {
-				variables = substore.ExtractTemplateVariables(string(content))
+			if !isSurge {
+				content, err := os.ReadFile(filepath.Join(templatesDir, name))
+				if err == nil {
+					variables = substore.ExtractTemplateVariables(string(content))
+				}
+			}
+			templateType := "clash"
+			if isSurge {
+				templateType = "surge"
 			}
 
 			templates = append(templates, templateInfo{
 				Name:      displayName,
 				Filename:  name,
+				Type:      templateType,
 				Variables: variables,
 			})
 		}

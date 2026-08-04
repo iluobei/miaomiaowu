@@ -38,6 +38,8 @@ import { Twemoji } from '@/components/twemoji'
 import { useProxyGroupCategories } from '@/hooks/use-proxy-groups'
 import { translateOutbound } from '@/lib/sublink/translations'
 import { validateClashConfig, formatValidationIssues } from '@/lib/clash-validator'
+import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
+import { useExternalSyncSelection } from '@/hooks/use-external-sync-selection'
 
 export const Route = createFileRoute('/subscribe-files/')({
   beforeLoad: () => {
@@ -268,6 +270,7 @@ function SubscribeFilesPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const isMobile = useMediaQuery('(max-width: 640px)')
+	const externalSyncSelection = useExternalSyncSelection()
 
   // 获取代理组配置
   const { data: proxyGroupCategories = [] } = useProxyGroupCategories()
@@ -620,7 +623,7 @@ function SubscribeFilesPage() {
       const response = await api.post('/api/admin/subscribe-files/import', data)
       return response.data
     },
-    onSuccess: () => {
+		onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
       queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
       toast.success('订阅导入成功')
@@ -836,7 +839,7 @@ function SubscribeFilesPage() {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
-      toast.success('外部订阅同步成功')
+		  if (!externalSyncSelection.present(data)) toast.success('外部订阅同步成功')
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '同步失败')
@@ -851,12 +854,12 @@ function SubscribeFilesPage() {
       const response = await api.post(`/api/admin/sync-external-subscription?id=${id}`)
       return response.data
     },
-    onSuccess: (data: any) => {
+		onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       queryClient.invalidateQueries({ queryKey: ['all-nodes-with-tags'] })
       queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
-      toast.success(data.message || '订阅同步成功')
+		  if (!externalSyncSelection.present(data)) toast.success(data.message || '订阅同步成功')
       setSyncingSingleId(null)
     },
     onError: (error: any) => {
@@ -6672,8 +6675,15 @@ const handleUpload = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </main>
+		</Dialog>
+		<ExternalSyncNodeDialog
+		  selection={externalSyncSelection.selection}
+		  saving={externalSyncSelection.confirming}
+		  onSelectionChange={externalSyncSelection.setSelectedIds}
+		  onCancel={externalSyncSelection.cancel}
+		  onConfirm={externalSyncSelection.confirm}
+		/>
+	  </main>
   )
 }
 

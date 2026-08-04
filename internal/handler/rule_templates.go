@@ -20,6 +20,28 @@ func NewRuleTemplatesHandler(repo *storage.TrafficRepository) *RuleTemplatesHand
 	return &RuleTemplatesHandler{repo: repo}
 }
 
+func (h *RuleTemplatesHandler) isAdmin(r *http.Request) bool {
+	username := auth.UsernameFromContext(r.Context())
+	user, err := h.repo.GetUser(r.Context(), username)
+	return err == nil && user.Role == storage.RoleAdmin
+}
+
+func (h *RuleTemplatesHandler) canView(r *http.Request, filename string) bool {
+	if h.isAdmin(r) {
+		return true
+	}
+	owner, _ := h.repo.GetRuleTemplateOwner(r.Context(), filename)
+	return owner == "" || owner == auth.UsernameFromContext(r.Context()) || h.repo.IsRuleTemplatePublic(r.Context(), filename)
+}
+
+func (h *RuleTemplatesHandler) canModify(r *http.Request, filename string) bool {
+	if h.isAdmin(r) {
+		return true
+	}
+	owner, _ := h.repo.GetRuleTemplateOwner(r.Context(), filename)
+	return owner != "" && owner == auth.UsernameFromContext(r.Context())
+}
+
 func (h *RuleTemplatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Remove /api/rule-templates prefix
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/rule-templates")
@@ -46,18 +68,32 @@ func (h *RuleTemplatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		h.handleRenameTemplate(w, r)
+	case path == "/visibility":
+		h.handleVisibility(w, r)
 	default:
 		// Extract template name from path (remove leading slash)
 		templateName := strings.TrimPrefix(path, "/")
 
 		switch r.Method {
 		case http.MethodGet:
+			if !h.canView(r, templateName) {
+				http.Error(w, "无权查看该模板", http.StatusForbidden)
+				return
+			}
 			// Get specific template content
 			h.handleGetTemplate(w, r, templateName)
 		case http.MethodPut:
+			if !h.canModify(r, templateName) {
+				http.Error(w, "无权修改该模板", http.StatusForbidden)
+				return
+			}
 			// Update template content
 			h.handleUpdateTemplate(w, r, templateName)
 		case http.MethodDelete:
+			if !h.canModify(r, templateName) {
+				http.Error(w, "无权删除该模板", http.StatusForbidden)
+				return
+			}
 			// Delete template
 			h.handleDeleteTemplate(w, r, templateName)
 		default:
@@ -76,18 +112,24 @@ func (h *RuleTemplatesHandler) handleListTemplates(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Filter YAML files
+	// Clash templates use YAML; Surge templates use .conf.
 	var templates []string
 	for _, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+		name := strings.ToLower(entry.Name())
+		if !entry.IsDir() && h.canView(r, entry.Name()) && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".conf")) {
 			templates = append(templates, entry.Name())
 		}
 	}
 
 	// Return JSON response
+	visibility := make(map[string]bool, len(templates))
+	owners, _ := h.repo.ListRuleTemplateOwners(r.Context())
+	for _, filename := range templates {
+		visibility[filename] = owners[filename] == "" || h.repo.IsRuleTemplatePublic(r.Context(), filename)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"templates": templates,
+		"templates": templates, "visibility": visibility, "owners": owners,
 	})
 }
 
@@ -194,6 +236,7 @@ func (h *RuleTemplatesHandler) handleDeleteTemplate(w http.ResponseWriter, r *ht
 		http.Error(w, "Failed to delete template", http.StatusInternalServerError)
 		return
 	}
+	_ = h.repo.DeleteRuleTemplateOwner(r.Context(), templateName)
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")
@@ -215,6 +258,10 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 
 	oldName := strings.TrimSpace(payload.OldName)
 	newName := strings.TrimSpace(payload.NewName)
+	if !h.canModify(r, oldName) {
+		http.Error(w, "无权重命名该模板", http.StatusForbidden)
+		return
+	}
 
 	// Validate names
 	if oldName == "" || newName == "" {
@@ -233,9 +280,14 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Ensure new name has .yaml or .yml extension
-	if !strings.HasSuffix(newName, ".yaml") && !strings.HasSuffix(newName, ".yml") {
-		newName = newName + ".yaml"
+	// Preserve the template kind when the user omits an extension.
+	lowerNewName := strings.ToLower(newName)
+	if !strings.HasSuffix(lowerNewName, ".yaml") && !strings.HasSuffix(lowerNewName, ".yml") && !strings.HasSuffix(lowerNewName, ".conf") {
+		if strings.HasSuffix(strings.ToLower(oldName), ".conf") {
+			newName += ".conf"
+		} else {
+			newName += ".yaml"
+		}
 	}
 
 	templatesDir := "rule_templates"
@@ -267,6 +319,7 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 		http.Error(w, "Failed to rename template", http.StatusInternalServerError)
 		return
 	}
+	_ = h.repo.RenameRuleTemplateOwner(r.Context(), oldName, newName)
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")
@@ -293,11 +346,12 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 
 	// Validate file extension
 	filename := header.Filename
-	if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+	lowerFilename := strings.ToLower(filename)
+	if !strings.HasSuffix(lowerFilename, ".yaml") && !strings.HasSuffix(lowerFilename, ".yml") && !strings.HasSuffix(lowerFilename, ".conf") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "只支持 .yaml 或 .yml 文件",
+			"error": "只支持 .yaml、.yml 或 Surge .conf 文件",
 		})
 		return
 	}
@@ -343,6 +397,7 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 		http.Error(w, "Failed to save template file", http.StatusInternalServerError)
 		return
 	}
+	_ = h.repo.SetRuleTemplateOwner(r.Context(), filename, auth.UsernameFromContext(r.Context()))
 
 	// Return success response with filename
 	w.Header().Set("Content-Type", "application/json")
@@ -350,4 +405,28 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 		"filename": filename,
 		"message":  "模板上传成功",
 	})
+}
+
+func (h *RuleTemplatesHandler) handleVisibility(w http.ResponseWriter, r *http.Request) {
+	if !h.isAdmin(r) {
+		http.Error(w, "仅管理员可设置模板可见性", http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var payload struct {
+		Filename string `json:"filename"`
+		Public   bool   `json:"public"`
+	}
+	if json.NewDecoder(r.Body).Decode(&payload) != nil || filepath.Base(payload.Filename) != payload.Filename {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := h.repo.SetRuleTemplatePublic(r.Context(), payload.Filename, payload.Public); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{"filename": payload.Filename, "public": payload.Public})
 }

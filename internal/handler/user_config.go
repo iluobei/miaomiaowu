@@ -51,6 +51,7 @@ type userConfigRequest struct {
 	SubRateLimitMax         int  `json:"sub_rate_limit_max"`
 	SubRateLimitWindow      int  `json:"sub_rate_limit_window"`
 	SkipLocalIP             bool `json:"skip_local_ip"`
+	BlockUnknownSubUA       bool `json:"block_unknown_subscription_ua"`
 }
 
 type userConfigResponse struct {
@@ -90,6 +91,7 @@ type userConfigResponse struct {
 	SubRateLimitMax         int  `json:"sub_rate_limit_max"`
 	SubRateLimitWindow      int  `json:"sub_rate_limit_window"`
 	SkipLocalIP             bool `json:"skip_local_ip"`
+	BlockUnknownSubUA       bool `json:"block_unknown_subscription_ua"`
 }
 
 func NewUserConfigHandler(repo *storage.TrafficRepository) http.Handler {
@@ -162,7 +164,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				SubRateLimitEnabled:      systemConfig.SubRateLimitEnabled,
 				SubRateLimitMax:          systemConfig.SubRateLimitMax,
 				SubRateLimitWindow:       systemConfig.SubRateLimitWindow,
-				SkipLocalIP:             systemConfig.SkipLocalIP,
+				SkipLocalIP:              systemConfig.SkipLocalIP,
+				BlockUnknownSubUA:        systemConfig.BlockUnknownSubUA,
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -208,7 +211,8 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		SubRateLimitEnabled:      systemConfig.SubRateLimitEnabled,
 		SubRateLimitMax:          systemConfig.SubRateLimitMax,
 		SubRateLimitWindow:       systemConfig.SubRateLimitWindow,
-		SkipLocalIP:             systemConfig.SkipLocalIP,
+		SkipLocalIP:              systemConfig.SkipLocalIP,
+		BlockUnknownSubUA:        systemConfig.BlockUnknownSubUA,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -336,6 +340,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	systemConfig.SubRateLimitMax = payload.SubRateLimitMax
 	systemConfig.SubRateLimitWindow = payload.SubRateLimitWindow
 	systemConfig.SkipLocalIP = payload.SkipLocalIP
+	systemConfig.BlockUnknownSubUA = payload.BlockUnknownSubUA
 	if err := repo.UpdateSystemConfig(r.Context(), systemConfig); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("update system config: %w", err))
 		return
@@ -360,6 +365,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	if srl := GetSubscriptionRateLimiter(); srl != nil {
 		srl.SetSkipLocalIP(systemConfig.SkipLocalIP)
 	}
+	SetBlockUnknownSubscriptionUA(systemConfig.BlockUnknownSubUA)
 
 	if oldSysCfg.SilentMode != payload.SilentMode {
 		if n := GetNotifier(); n != nil {
@@ -410,7 +416,8 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		SubRateLimitEnabled:      systemConfig.SubRateLimitEnabled,
 		SubRateLimitMax:          systemConfig.SubRateLimitMax,
 		SubRateLimitWindow:       systemConfig.SubRateLimitWindow,
-		SkipLocalIP:             systemConfig.SkipLocalIP,
+		SkipLocalIP:              systemConfig.SkipLocalIP,
+		BlockUnknownSubUA:        systemConfig.BlockUnknownSubUA,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

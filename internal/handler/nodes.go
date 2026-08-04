@@ -185,6 +185,8 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleBatchDelete(w, r)
 	case path == "batch-rename" && r.Method == http.MethodPost:
 		h.handleBatchRename(w, r)
+	case path == "batch-disable-skip-cert" && r.Method == http.MethodPost:
+		h.handleBatchDisableSkipCert(w, r)
 	default:
 		allowed := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 		methodNotAllowed(w, allowed...)
@@ -978,6 +980,82 @@ func (h *nodesHandler) handleBatchRename(w http.ResponseWriter, r *http.Request)
 		"total":   len(req.Updates),
 		"nodes":   updatedNodes,
 	})
+}
+
+func (h *nodesHandler) handleBatchDisableSkipCert(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("用户未认证"))
+		return
+	}
+	var req struct {
+		NodeIDs []int64 `json:"node_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.NodeIDs) == 0 {
+		writeBadRequest(w, "节点列表不能为空")
+		return
+	}
+	var successCount, failCount, skippedCount int
+	var updatedNodes []nodeDTO
+	var yamlUpdates []NodeUpdate
+	for _, nodeID := range req.NodeIDs {
+		node, err := h.repo.GetNode(r.Context(), nodeID, username)
+		if err != nil {
+			failCount++
+			continue
+		}
+		clashChanged := disableSkipCertVerifyInJSON(&node.ClashConfig)
+		parsedChanged := disableSkipCertVerifyInJSON(&node.ParsedConfig)
+		if !clashChanged && !parsedChanged {
+			skippedCount++
+			continue
+		}
+		updated, err := h.repo.UpdateNode(r.Context(), node)
+		if err != nil {
+			failCount++
+			continue
+		}
+		yamlUpdates = append(yamlUpdates, NodeUpdate{OldName: updated.NodeName, NewName: updated.NodeName, ClashConfigJSON: updated.ClashConfig})
+		successCount++
+		updatedNodes = append(updatedNodes, convertNode(updated))
+	}
+	if len(yamlUpdates) > 0 {
+		if err := h.yamlSyncManager.BatchSyncNodes(yamlUpdates); err != nil {
+			logger.Info("[批量关闭skip-cert-verify] YAML 同步失败", "error", err)
+		}
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status": "disabled", "success": successCount, "failed": failCount,
+		"skipped": skippedCount, "total": len(req.NodeIDs), "nodes": updatedNodes,
+	})
+}
+
+func disableSkipCertVerifyInJSON(raw *string) bool {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return false
+	}
+	var config map[string]any
+	if json.Unmarshal([]byte(*raw), &config) != nil || !isTruthySkipCert(config["skip-cert-verify"]) {
+		return false
+	}
+	config["skip-cert-verify"] = false
+	updated, err := json.Marshal(config)
+	if err != nil {
+		return false
+	}
+	*raw = string(updated)
+	return true
+}
+
+func isTruthySkipCert(value any) bool {
+	switch value := value.(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(strings.TrimSpace(value), "true")
+	default:
+		return false
+	}
 }
 
 type nodeRequest struct {

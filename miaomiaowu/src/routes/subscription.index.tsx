@@ -97,6 +97,7 @@ const ICON_MAP: Record<string, any> = {
 
 // Client types configuration with icons and names
 const CLIENT_TYPES = [
+  { type: 'auto', name: 'Auto（自动识别）', icon: clashIcon },
   { type: 'clash', name: 'Clash', icon: clashIcon },
   { type: 'stash', name: 'Stash', icon: stashIcon },
   { type: 'clash-to-shadowrocket', name: 'Shadowrocket', icon: shadowrocketIcon },

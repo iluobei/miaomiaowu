@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"miaomiaowu/internal/auth"
+	"miaomiaowu/internal/captcha"
 	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/storage"
 )
 
 type loginRequest struct {
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	RememberMe bool   `json:"remember_me"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	RememberMe     bool   `json:"remember_me"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 type loginResponse struct {
@@ -61,7 +63,7 @@ func GetClientIP(r *http.Request) string {
 	return ip
 }
 
-func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *storage.TrafficRepository, rateLimiter *LoginRateLimiter, twoFactorStore *auth.TwoFactorPendingStore) http.Handler {
+func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *storage.TrafficRepository, rateLimiter *LoginRateLimiter, twoFactorStore *auth.TwoFactorPendingStore, turnstile ...*captcha.Turnstile) http.Handler {
 	if manager == nil || tokens == nil {
 		panic("login handler requires manager and token store")
 	}
@@ -85,6 +87,10 @@ func NewLoginHandler(manager *auth.Manager, tokens *auth.TokenStore, repo *stora
 
 		username := strings.TrimSpace(payload.Username)
 		clientIP := GetClientIP(r)
+		if len(turnstile) > 0 && turnstile[0] != nil && !turnstile[0].Verify(r.Context(), payload.TurnstileToken, clientIP) {
+			writeError(w, http.StatusBadRequest, errors.New("captcha verification failed"))
+			return
+		}
 
 		// 检查速率限制
 		if rateLimiter != nil {

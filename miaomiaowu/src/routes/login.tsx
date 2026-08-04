@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
@@ -114,6 +114,11 @@ function LoginView() {
   const queryClient = useQueryClient()
   const { auth } = useAuthStore()
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState('')
+  const { data: captchaConfig } = useQuery({
+    queryKey: ['captcha-config'],
+    queryFn: async () => (await api.get('/api/captcha/config')).data as { enabled: boolean; site_key: string },
+  })
   const form = useForm<LoginFormValues>({
     defaultValues: {
       username: '',
@@ -124,7 +129,7 @@ function LoginView() {
 
   const login = useMutation({
     mutationFn: async (values: LoginFormValues) => {
-      const response = await api.post('/api/login', values)
+      const response = await api.post('/api/login', { ...values, turnstile_token: turnstileToken })
       return response.data as (LoginResponse & { requires_2fa?: boolean; two_factor_token?: string })
     },
     onSuccess: (payload) => {
@@ -142,6 +147,10 @@ function LoginView() {
   })
 
   const onSubmit = form.handleSubmit((values) => {
+	if (captchaConfig?.enabled && !turnstileToken) {
+	  toast.error('请先完成人机验证')
+	  return
+	}
     login.mutate(values)
   })
 
@@ -198,6 +207,9 @@ function LoginView() {
                 记住我
               </Label>
             </div>
+            {captchaConfig?.enabled && captchaConfig.site_key && (
+              <TurnstileWidget siteKey={captchaConfig.site_key} onToken={setTurnstileToken} />
+            )}
             <Button type='submit' className='w-full' disabled={login.isPending}>
               {login.isPending ? '登录中...' : '登录'}
             </Button>
@@ -206,6 +218,39 @@ function LoginView() {
       </Card>
     </div>
   )
+}
+
+function TurnstileWidget({ siteKey, onToken }: { siteKey: string; onToken: (token: string) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const render = () => {
+      const turnstile = (window as any).turnstile
+      if (turnstile && containerRef.current) {
+        containerRef.current.innerHTML = ''
+        turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          callback: onToken,
+          'expired-callback': () => onToken(''),
+          'error-callback': () => onToken(''),
+        })
+      }
+    }
+    const existing = document.querySelector('script[data-turnstile]') as HTMLScriptElement | null
+    if (existing) {
+      if ((window as any).turnstile) render()
+      else existing.addEventListener('load', render, { once: true })
+    } else {
+      const script = document.createElement('script')
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+      script.async = true
+      script.defer = true
+      script.dataset.turnstile = 'true'
+      script.addEventListener('load', render, { once: true })
+      document.head.appendChild(script)
+    }
+    return () => onToken('')
+  }, [siteKey, onToken])
+  return <div ref={containerRef} className='flex min-h-[65px] justify-center' />
 }
 
 function TwoFactorStep({

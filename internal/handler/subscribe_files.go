@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"miaomiaowu/internal/storage"
 	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
+	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/validator"
 
 	"gopkg.in/yaml.v3"
@@ -26,6 +26,37 @@ import (
 
 type subscribeFilesHandler struct {
 	repo *storage.TrafficRepository
+}
+
+func sanitizeSubscribeFilename(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", errors.New("文件名不能为空")
+	}
+	if filepath.Base(name) != name || strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return "", errors.New("文件名不能包含路径或 ..")
+	}
+	for _, char := range name {
+		if char < 0x20 || char == 0x7f {
+			return "", errors.New("文件名包含控制字符")
+		}
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext != ".yaml" && ext != ".yml" {
+		name += ".yaml"
+	}
+	return name, nil
+}
+
+func (h *subscribeFilesHandler) ensureFilenameAvailable(ctx context.Context, filename string) error {
+	existing, err := h.repo.GetSubscribeFileByFilename(ctx, filename)
+	if errors.Is(err, storage.ErrSubscribeFileNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("文件名 %s 已被订阅「%s」使用，请更换文件名", filename, existing.Name)
 }
 
 // NewSubscribeFilesHandler returns an admin-only handler for managing subscribe files.
@@ -134,6 +165,16 @@ func (h *subscribeFilesHandler) handleCreate(w http.ResponseWriter, r *http.Requ
 		writeBadRequest(w, "文件名是必填项")
 		return
 	}
+	filename, err := sanitizeSubscribeFilename(req.Filename)
+	if err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+	if err := h.ensureFilenameAvailable(r.Context(), filename); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	req.Filename = filename
 
 	file := storage.SubscribeFile{
 		Name:        req.Name,
@@ -189,11 +230,13 @@ func (h *subscribeFilesHandler) handleImport(w http.ResponseWriter, r *http.Requ
 		writeBadRequest(w, "订阅名称是必填项")
 		return
 	}
+	if err := validateFetchURL(req.URL); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 
 	// 创建HTTP客户端并获取订阅内容
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	client := newSSRFSafeHTTPClient(30 * time.Second)
 
 	httpReq, err := http.NewRequest("GET", req.URL, nil)
 	if err != nil {
@@ -217,9 +260,13 @@ func (h *subscribeFilesHandler) handleImport(w http.ResponseWriter, r *http.Requ
 	}
 
 	// 读取响应内容
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchBodyBytes+1))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errors.New("读取订阅内容失败"))
+		return
+	}
+	if len(body) > maxFetchBodyBytes {
+		writeError(w, http.StatusBadRequest, errors.New("订阅内容超过 10MB 限制"))
 		return
 	}
 
@@ -242,10 +289,14 @@ func (h *subscribeFilesHandler) handleImport(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// 确保文件名有.yaml或.yml扩展名
-	ext := filepath.Ext(filename)
-	if ext != ".yaml" && ext != ".yml" {
-		filename = filename + ".yaml"
+	filename, err = sanitizeSubscribeFilename(filename)
+	if err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+	if err := h.ensureFilenameAvailable(r.Context(), filename); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
 	}
 
 	// 保存文件到subscribes目录
@@ -384,10 +435,18 @@ func (h *subscribeFilesHandler) handleUpload(w http.ResponseWriter, r *http.Requ
 
 	// 非原始输出模式确保文件名有.yaml或.yml扩展名
 	if !rawOutput {
-		ext := filepath.Ext(filename)
-		if ext != ".yaml" && ext != ".yml" {
-			filename = filename + ".yaml"
+		filename, err = sanitizeSubscribeFilename(filename)
+		if err != nil {
+			writeBadRequest(w, err.Error())
+			return
 		}
+	} else if filepath.Base(filename) != filename || strings.Contains(filename, "..") || strings.ContainsAny(filename, `/\`) {
+		writeBadRequest(w, "文件名不能包含路径或 ..")
+		return
+	}
+	if err := h.ensureFilenameAvailable(r.Context(), filename); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
 	}
 
 	filePath := filepath.Join(subscribesDir, filename)
@@ -843,10 +902,14 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		filename = req.Name
 	}
 
-	// 确保文件名有.yaml或.yml扩展名
-	ext := filepath.Ext(filename)
-	if ext != ".yaml" && ext != ".yml" {
-		filename = filename + ".yaml"
+	filename, err := sanitizeSubscribeFilename(filename)
+	if err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+	if err := h.ensureFilenameAvailable(r.Context(), filename); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
 	}
 
 	// 验证YAML格式，使用Node API保持顺序和格式
@@ -1381,7 +1444,6 @@ func copyMap(m map[string]any) map[string]any {
 	return result
 }
 
-
 // handleCreateAggregate 聚合多个标签(通常为外部订阅名称)为一个新订阅。
 // 使用 selected_tags 动态绑定节点：源订阅更新后，聚合订阅在获取时也会反映最新节点集合。
 // 可选绑定 V3 模板；未绑定时按标签实时生成精简 Clash 配置。
@@ -1435,9 +1497,14 @@ func (h *subscribeFilesHandler) handleCreateAggregate(w http.ResponseWriter, r *
 	if filename == "" {
 		filename = req.Name
 	}
-	ext := filepath.Ext(filename)
-	if ext != ".yaml" && ext != ".yml" {
-		filename = filename + ".yaml"
+	filename, err := sanitizeSubscribeFilename(filename)
+	if err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+	if err := h.ensureFilenameAvailable(r.Context(), filename); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
 	}
 
 	description := strings.TrimSpace(req.Description)
@@ -1556,12 +1623,12 @@ func buildAggregateConfigContent(ctx context.Context, repo *storage.TrafficRepos
 	groupProxies := append([]string{}, proxyNames...)
 	groupProxies = append(groupProxies, "DIRECT")
 	cfg := map[string]any{
-		"mixed-port":         7890,
-		"allow-lan":          true,
-		"mode":               "rule",
-		"log-level":          "info",
+		"mixed-port":          7890,
+		"allow-lan":           true,
+		"mode":                "rule",
+		"log-level":           "info",
 		"external-controller": "127.0.0.1:9090",
-		"proxies":            proxies,
+		"proxies":             proxies,
 		"proxy-groups": []map[string]any{
 			{
 				"name":    "PROXY",

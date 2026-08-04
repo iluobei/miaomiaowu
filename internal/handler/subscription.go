@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/notify"
 	"miaomiaowu/internal/scriptengine"
 	"miaomiaowu/internal/storage"
-	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
 
 	"gopkg.in/yaml.v3"
 )
@@ -214,6 +214,9 @@ func (s *subscriptionEndpoint) authorizeRequest(w http.ResponseWriter, r *http.R
 }
 
 func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if rejectBlockedSubscriptionUA(w, r) {
+		return
+	}
 	// 性能监测：记录总开始时间
 	requestStart := time.Now()
 	var stepStart time.Time
@@ -363,15 +366,29 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// 模板生成逻辑：如果订阅绑定了 V3 模板，使用模板生成配置
 	var data []byte
 	fromTemplate := false
-	if hasSubscribeFile && subscribeFile.TemplateFilename != "" {
+	fromSurgeTemplate := false
+	effectiveTemplate := subscribeFile.TemplateFilename
+	if hasSubscribeFile && effectiveTemplate == "" && username != "" {
+		if settings, err := h.repo.GetUserSettings(r.Context(), username); err == nil {
+			if isSurgeClientType(resolveClientType(r)) {
+				effectiveTemplate = settings.DefaultSurgeTemplateFilename
+			} else {
+				effectiveTemplate = settings.DefaultTemplateFilename
+			}
+		}
+	}
+	if hasSubscribeFile && effectiveTemplate != "" {
 		stepStart = time.Now()
-		templateData, err := h.generateFromTemplate(r.Context(), username, subscribeFile)
+		fileForTemplate := subscribeFile
+		fileForTemplate.TemplateFilename = effectiveTemplate
+		templateData, err := h.generateFromTemplate(r.Context(), username, fileForTemplate)
 		if err != nil {
 			logger.Info("[Subscription] 模板生成失败，回退到原始文件", "error", err, "template", subscribeFile.TemplateFilename)
 			// 回退到直接读取文件
 		} else {
 			data = templateData
 			fromTemplate = true
+			fromSurgeTemplate = isSurgeTemplateFile(effectiveTemplate)
 			logger.Info("[⏱️ 耗时监测] 模板生成完成", "step", "template_generate", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
 		}
 	}
@@ -732,7 +749,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	// 格式转换
 	stepStart = time.Now()
 	// 根据参数t的类型调用substore的转换代码
-	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
+	clientType := resolveClientType(r)
 	// 默认浏览器打开时直接输出文本, 不再下载文件
 	contentType := "text/yaml; charset=utf-8; charset=UTF-8"
 	ext := filepath.Ext(filename)
@@ -743,7 +760,12 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	data = deduplicateProxies(data, username)
 
 	// clash/classmeta/clash-to-shadowrocket 直接输出 Clash YAML, 不需要转换
-	if clientType != "" && clientType != "clash" && clientType != "clashmeta" && clientType != "clash-to-shadowrocket" {
+	if fromSurgeTemplate {
+		contentType = "text/plain; charset=utf-8"
+		ext = ".conf"
+	} else if clientType == "" || clientType == "clash" || clientType == "clashmeta" {
+		data = filterSnellV6FromClashYAML(data)
+	} else if clientType != "clash-to-shadowrocket" {
 		convertedData, err := h.convertSubscription(r.Context(), data, clientType)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("failed to convert subscription for client %s: %w", clientType, err))
@@ -1348,7 +1370,7 @@ func (h *SubscriptionHandler) serveTokenInvalidResponse(w http.ResponseWriter, r
 	data := h.loadTokenInvalidContent()
 
 	// 根据参数t的类型调用substore的转换代码
-	clientType := strings.TrimSpace(r.URL.Query().Get("t"))
+	clientType := resolveClientType(r)
 	contentType := "text/yaml; charset=utf-8"
 	ext := ".yaml"
 
@@ -2495,6 +2517,16 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		}
 	}
 	logger.Info("[模板生成] 从代理集合表获取代理集合", "count", len(providerConfigs), "with_nodes", len(providers))
+	if isSurgeTemplateFile(subscribeFile.TemplateFilename) {
+		rootProxies := make([]map[string]any, 0, len(proxies)+len(extraProxies))
+		rootProxies = append(rootProxies, proxies...)
+		rootProxies = append(rootProxies, extraProxies...)
+		result, err := injectProxiesIntoSurgeTemplate(string(templateContent), rootProxies)
+		if err != nil {
+			return nil, fmt.Errorf("生成 Surge 配置失败: %w", err)
+		}
+		return []byte(result), nil
+	}
 
 	// 4. 使用 TemplateV3Processor 处理模板
 	processor := substore.NewTemplateV3Processor(nil, providers)
@@ -2525,7 +2557,6 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 
 	return []byte(result), nil
 }
-
 
 // generateFromSelectedTags 按订阅配置的 selected_tags 从节点表实时生成精简 Clash 配置。
 // 用于聚合订阅：源外部订阅节点增删/更新后，获取订阅时自动反映最新节点集合。

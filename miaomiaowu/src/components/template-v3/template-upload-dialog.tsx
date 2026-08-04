@@ -124,8 +124,9 @@ export function TemplateUploadDialog({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
-        toast.error('请选择 YAML 文件')
+		const lower = file.name.toLowerCase()
+		if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.conf')) {
+		toast.error('请选择 YAML 或 Surge .conf 文件')
         return
       }
       setSelectedFile(file)
@@ -148,9 +149,9 @@ export function TemplateUploadDialog({
         toast.error('请输入模板名称')
         return
       }
-      let name = newTemplateName.trim()
-      if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
-        name += '.yaml'
+		let name = newTemplateName.trim()
+		if (!name.endsWith('.yaml') && !name.endsWith('.yml') && !name.endsWith('.conf')) {
+			name += /^\s*\[(General|Proxy|Proxy Group|Rule)\]/im.test(pasteContent) ? '.conf' : '.yaml'
       }
       onCreate(name, pasteContent)
     } else if (tab === 'blank') {
@@ -506,10 +507,10 @@ export function TemplateUploadDialog({
 
           <TabsContent value="upload" className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label>选择 YAML 文件</Label>
+			  <Label>选择 Clash YAML 或 Surge 配置</Label>
               <Input
                 type="file"
-                accept=".yaml,.yml"
+				accept=".yaml,.yml,.conf"
                 onChange={handleFileChange}
               />
               {selectedFile && (
@@ -526,11 +527,11 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="my_template.yaml"
+				placeholder="my_template.yaml 或 surge.conf"
               />
             </div>
             <div className="space-y-2">
-              <Label>YAML 内容</Label>
+			  <Label>YAML / Surge 配置内容</Label>
               <Textarea
                 value={pasteContent}
                 onChange={(e) => setPasteContent(e.target.value)}

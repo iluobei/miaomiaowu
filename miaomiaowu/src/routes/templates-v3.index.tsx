@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Eye, Upload, Save, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Upload, Save, X, Star, Globe2 } from 'lucide-react'
 
 import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
@@ -75,6 +75,7 @@ function TemplatesV3Page() {
 
   // Editing state
   const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null)
+	const isSurgeTemplate = editingTemplateName?.toLowerCase().endsWith('.conf') ?? false
   const [templateContent, setTemplateContent] = useState('')
   const [proxyGroups, setProxyGroups] = useState<ProxyGroupFormState[]>([])
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
@@ -102,13 +103,30 @@ function TemplatesV3Page() {
   const [listPreviewTemplateContent, setListPreviewTemplateContent] = useState('')
 
   // Fetch templates list
-  const { data: templates = [], isLoading } = useQuery<string[]>({
+  const { data: templateListData, isLoading } = useQuery<{ templates: string[]; visibility: Record<string, boolean> }>({
     queryKey: ['rule-templates'],
     queryFn: async () => {
       const response = await api.get('/api/admin/rule-templates')
-      return response.data.templates || []
-    },
+	  return response.data
+	},
   })
+	const templates = templateListData?.templates ?? []
+	const visibility = templateListData?.visibility ?? {}
+	const { data: defaultTemplates } = useQuery({ queryKey: ['user-default-template'], queryFn: async () => (await api.get('/api/user/default-template')).data })
+	const { data: profile } = useQuery({ queryKey: ['user-profile'], queryFn: async () => (await api.get('/api/user/profile')).data })
+	const defaultMutation = useMutation({
+	  mutationFn: async (name: string) => api.put('/api/user/default-template', {
+		default_template_filename: name.endsWith('.conf') ? (defaultTemplates?.default_template_filename ?? '') : name,
+		default_surge_template_filename: name.endsWith('.conf') ? name : (defaultTemplates?.default_surge_template_filename ?? ''),
+	  }),
+	  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-default-template'] }); toast.success('默认模板已更新') },
+	  onError: (error: any) => toast.error(error.response?.data?.error || '设置默认模板失败'),
+	})
+	const visibilityMutation = useMutation({
+	  mutationFn: async (name: string) => api.put('/api/admin/rule-templates/visibility', { filename: name, public: !visibility[name] }),
+	  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['rule-templates'] }); toast.success('模板可见性已更新') },
+	  onError: (error: any) => toast.error(error.response?.data || '更新可见性失败'),
+	})
 
   // Fetch template content when editing
   const { data: templateData } = useQuery({
@@ -242,6 +260,15 @@ function TemplatesV3Page() {
     if (templateData && isEditorOpen) {
       isInitLoadRef.current = true
       setTemplateContent(templateData)
+	  if (isSurgeTemplate) {
+		setEditorTab('yaml')
+		setTemplateVariables({})
+		setProxyGroups([])
+		setEnableRegionProxyGroups(false)
+		setIsDirty(false)
+		isInitLoadRef.current = false
+		return
+	  }
       const vars = extractTemplateVariables(templateData)
       setTemplateVariables(vars)
       const groups = extractProxyGroups(templateData, vars)
@@ -276,7 +303,7 @@ function TemplatesV3Page() {
         }
       }, 50)
     }
-  }, [templateData, isEditorOpen])
+  }, [templateData, isEditorOpen, isSurgeTemplate])
 
   // Auto-refresh proxy-groups preview when proxyGroups changes
   useEffect(() => {
@@ -549,7 +576,7 @@ function TemplatesV3Page() {
   const columns: DataTableColumn<string>[] = [
     {
       header: '模板名称',
-      cell: (name) => <span className="font-medium">{name}</span>,
+		cell: (name) => <span className="flex items-center gap-2 font-medium">{name}{(name === defaultTemplates?.default_template_filename || name === defaultTemplates?.default_surge_template_filename) && <Badge>默认</Badge>}</span>,
     },
     {
       header: '操作',
@@ -558,9 +585,11 @@ function TemplatesV3Page() {
           <Button variant="ghost" size="icon" onClick={() => handleEdit(name)} title="编辑">
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleListPreview(name)} title="预览">
+		  <Button variant="ghost" size="icon" onClick={() => handleListPreview(name)} title="预览">
             <Eye className="h-4 w-4" />
-          </Button>
+		  </Button>
+		  <Button variant="ghost" size="icon" onClick={() => defaultMutation.mutate(name)} title="设为个人默认"><Star className="h-4 w-4" /></Button>
+		  {profile?.role === 'admin' && <Button variant="ghost" size="icon" onClick={() => visibilityMutation.mutate(name)} title={visibility[name] ? '设为私有' : '公开给普通用户'}><Globe2 className={cn('h-4 w-4', visibility[name] && 'text-primary')} /></Button>}
           <Button variant="ghost" size="icon" onClick={() => handleDelete(name)} title="删除">
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
@@ -576,9 +605,9 @@ function TemplatesV3Page() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <CardTitle>V3 模板管理</CardTitle>
+            <CardTitle>模板管理</CardTitle>
             <CardDescription>
-              管理 mihomo 风格的规则模板，支持 include-all、filter 等高级特性
+              管理 Clash/Mihomo 与 Surge 模板，并设置个人默认模板
             </CardDescription>
           </div>
           <Button onClick={() => setIsUploadDialogOpen(true)} className="w-full sm:w-auto">
@@ -587,6 +616,10 @@ function TemplatesV3Page() {
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 grid gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-2">
+            <div><span className="text-muted-foreground">个人默认 Clash：</span>{defaultTemplates?.default_template_filename || '未设置'}</div>
+            <div><span className="text-muted-foreground">个人默认 Surge：</span>{defaultTemplates?.default_surge_template_filename || '未设置'}</div>
+          </div>
           <DataTable
             columns={columns}
             data={templates}
@@ -595,13 +628,19 @@ function TemplatesV3Page() {
             mobileCard={{
               header: (name) => <span className="font-medium text-base">{name}</span>,
               actions: (name) => (
-                <div className="flex items-center gap-4 w-full justify-between px-2">
+                <div className="flex flex-wrap items-center gap-2 w-full justify-between px-2">
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(name)} className="flex-1">
                     <Pencil className="h-4 w-4 mr-1.5" /> 编辑
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleListPreview(name)} className="flex-1">
                     <Eye className="h-4 w-4 mr-1.5" /> 预览
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={() => defaultMutation.mutate(name)} className="flex-1">
+                    <Star className="h-4 w-4 mr-1.5" /> 默认
+                  </Button>
+                  {profile?.role === 'admin' && <Button variant="ghost" size="sm" onClick={() => visibilityMutation.mutate(name)} className="flex-1">
+                    <Globe2 className={cn('h-4 w-4 mr-1.5', visibility[name] && 'text-primary')} /> {visibility[name] ? '公开' : '私有'}
+                  </Button>}
                   <Button variant="ghost" size="sm" onClick={() => handleDelete(name)} className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10">
                     <Trash2 className="h-4 w-4 mr-1.5" /> 删除
                   </Button>
@@ -677,12 +716,12 @@ function TemplatesV3Page() {
               isMobile ? "w-full flex-1" : isTablet ? "w-[55%]" : "w-[40%]"
             )}>
               <Tabs value={editorTab} onValueChange={handleTabChange} className="flex flex-col h-full overflow-hidden">
-                <TabsList className="flex-shrink-0 w-full grid grid-cols-2">
-                  <TabsTrigger value="visual">可视化编辑</TabsTrigger>
-                  <TabsTrigger value="yaml">YAML 代码</TabsTrigger>
+				<TabsList className={cn("flex-shrink-0 w-full grid", isSurgeTemplate ? "grid-cols-1" : "grid-cols-2")}>
+				  {!isSurgeTemplate && <TabsTrigger value="visual">可视化编辑</TabsTrigger>}
+				  <TabsTrigger value="yaml">{isSurgeTemplate ? 'Surge 配置' : 'YAML 代码'}</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
+				{!isSurgeTemplate && <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
                   <ScrollArea className="flex-1 h-full">
                     <div className="space-y-3 pb-4 pr-3">
                       {/* Region Proxy Groups Toggle */}
@@ -721,14 +760,14 @@ function TemplatesV3Page() {
                       </Button>
                     </div>
                   </ScrollArea>
-                </TabsContent>
+				</TabsContent>}
 
                 <TabsContent value="yaml" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
                   <Textarea
                     value={templateContent}
                     onChange={(e) => handleYamlChange(e.target.value)}
                     className="flex-1 font-mono text-xs sm:text-sm resize-none p-4"
-                    placeholder="YAML 内容..."
+					placeholder={isSurgeTemplate ? 'Surge .conf 配置内容...' : 'YAML 内容...'}
                   />
                 </TabsContent>
               </Tabs>

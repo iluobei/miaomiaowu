@@ -13,9 +13,9 @@ import {
   FileCode,
   Settings,
   FileStack,
+	ScrollText,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
 import { profileQueryFn } from '@/lib/profile'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +39,11 @@ const baseNavLinks = [
     to: '/subscription',
     icon: LinkIcon,
   },
+  {
+    title: '模板管理',
+    to: '/templates-v3',
+    icon: FileStack,
+  },
 ]
 
 const adminNavLinks = [
@@ -56,11 +61,6 @@ const adminNavLinks = [
     title: '订阅管理',
     to: '/subscribe-files',
     icon: Files,
-  },
-  {
-    title: '模板管理',
-    to: '/templates-v3',
-    icon: FileStack,
   },
   {
     title: '覆写管理',
@@ -82,6 +82,11 @@ const adminNavLinks = [
     to: '/system-settings',
     icon: Settings,
   },
+	{
+	  title: '日志管理',
+	  to: '/logs',
+	  icon: ScrollText,
+	},
 ]
 
 export function Topbar() {
@@ -98,30 +103,9 @@ export function Topbar() {
     staleTime: 5 * 60 * 1000,
   })
 
-  // 获取用户配置，用于判断模板版本
-  const { data: userConfig } = useQuery({
-    queryKey: ['user-config'],
-    queryFn: async () => {
-      const response = await api.get('/api/user/config')
-      return response.data as { template_version: string }
-    },
-    enabled: Boolean(auth.accessToken),
-    staleTime: 5 * 60 * 1000,
-  })
-
   const isAdmin = Boolean(profile?.is_admin)
-  const templateVersion = userConfig?.template_version || 'v2'
-
-  // 计算所有导航链接，根据模板版本过滤
-  const filteredAdminLinks = adminNavLinks.filter((link) => {
-    // 模板管理只在 v3 模式下显示
-    if (link.to === '/templates-v3') {
-      return templateVersion === 'v3'
-    }
-    return true
-  })
   const allNavLinks = isAdmin
-    ? [...baseNavLinks, ...filteredAdminLinks]
+    ? [...baseNavLinks, ...adminNavLinks]
     : baseNavLinks
   const totalLinks = allNavLinks.length
 

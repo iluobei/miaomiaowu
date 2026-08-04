@@ -58,6 +58,8 @@ import {
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
+import { useExternalSyncSelection } from '@/hooks/use-external-sync-selection'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -543,6 +545,7 @@ function getStoredRenderMode(): RenderMode | null {
 }
 
 function NodesPage() {
+	const externalSyncSelection = useExternalSyncSelection()
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
 
@@ -1672,6 +1675,19 @@ function NodesPage() {
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '批量修改名称失败')
     },
+  })
+
+  const batchDisableSkipCertMutation = useMutation({
+	mutationFn: async (nodeIds: number[]) => {
+	  const response = await api.post('/api/admin/nodes/batch-disable-skip-cert', { node_ids: nodeIds })
+	  return response.data
+	},
+	onSuccess: (data) => {
+	  queryClient.invalidateQueries({ queryKey: ['nodes'] })
+	  toast.success(`已关闭 ${data.success} 个节点的证书跳过，跳过 ${data.skipped} 个不适用节点`)
+	  setSelectedNodeIds(new Set())
+	},
+	onError: (error: any) => toast.error(error.response?.data?.error || '批量关闭证书验证失败'),
   })
 
   // 批量添加地区 emoji
@@ -3264,12 +3280,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                       size='sm'
                       onClick={() => {
                         toast.promise(
-                          api.post('/api/admin/sync-external-subscriptions'),
+						  api.post('/api/admin/sync-external-subscriptions'),
                           {
                             loading: '正在同步外部订阅...',
-                            success: (response) => {
-                              queryClient.invalidateQueries({ queryKey: ['nodes'] })
-                              return response.data.message || '外部订阅同步成功'
+							success: (response) => {
+							  queryClient.invalidateQueries({ queryKey: ['nodes'] })
+							  return externalSyncSelection.present(response.data) ? '已有节点已更新，请选择新增节点' : (response.data.message || '外部订阅同步成功')
                             },
                             error: (error) => error.response?.data?.error || '同步失败'
                           }
@@ -3308,6 +3324,14 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         >
                           管理标签 ({selectedNodeIds.size})
                         </Button>
+						<Button
+						  variant='outline'
+						  size='sm'
+						  disabled={batchDisableSkipCertMutation.isPending}
+						  onClick={() => batchDisableSkipCertMutation.mutate(Array.from(selectedNodeIds))}
+						>
+						  关闭证书跳过 ({selectedNodeIds.size})
+						</Button>
                         <Button
                           variant='outline'
                           size='sm'
@@ -6950,12 +6974,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* 节点测速 */}
-      <SpeedTestDialog
+		<SpeedTestDialog
         open={speedDialogOpen && !speedDialogMin}
         onMinimize={() => setSpeedDialogMin(true)}
         onClose={() => { setSpeedDialogOpen(false); setSpeedDialogMin(false) }}
-        nodes={savedNodes}
-      />
+		  nodes={savedNodes}
+		/>
+		<ExternalSyncNodeDialog
+		  selection={externalSyncSelection.selection}
+		  saving={externalSyncSelection.confirming}
+		  onSelectionChange={externalSyncSelection.setSelectedIds}
+		  onCancel={externalSyncSelection.cancel}
+		  onConfirm={externalSyncSelection.confirm}
+		/>
       {speedDialogMin && (
         <button
           className='fixed bottom-6 right-6 z-50 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground shadow-lg hover:opacity-90 transition-opacity'

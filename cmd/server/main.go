@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,12 +14,14 @@ import (
 	"time"
 
 	"miaomiaowu/internal/auth"
+	"miaomiaowu/internal/captcha"
 	"miaomiaowu/internal/handler"
 	"miaomiaowu/internal/logger"
 	"miaomiaowu/internal/notify"
+	"miaomiaowu/internal/patches"
 	"miaomiaowu/internal/proxygroups"
 	"miaomiaowu/internal/storage"
-	"miaomiaowu/internal/patches"
+	"miaomiaowu/internal/taskrun"
 	"miaomiaowu/internal/version"
 	"miaomiaowu/internal/web"
 	ruletemplates "miaomiaowu/rule_templates"
@@ -122,6 +126,7 @@ func main() {
 
 	// 初始化通知模块
 	sysCfg, _ := repo.GetSystemConfig(context.Background())
+	handler.SetBlockUnknownSubscriptionUA(sysCfg.BlockUnknownSubUA)
 	handler.InitNotifier(notify.Config{
 		Enabled:              sysCfg.NotifyEnabled,
 		BotToken:             sysCfg.TelegramBotToken,
@@ -151,7 +156,16 @@ func main() {
 	mux.Handle("/api/setup/status", handler.NewSetupStatusHandler(repo))
 	mux.Handle("/api/setup/init", handler.NewInitialSetupHandler(repo))
 	mux.Handle("/api/setup/restore-backup", handler.NewSetupRestoreBackupHandler(repo))
-	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo, loginRateLimiter, twoFactorStore))
+	turnstileVerifier := captcha.New(repo)
+	mux.HandleFunc("/api/captcha/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"enabled": turnstileVerifier.Enabled(r.Context()), "site_key": turnstileVerifier.SiteKey(r.Context())})
+	})
+	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo, loginRateLimiter, twoFactorStore, turnstileVerifier))
 	mux.Handle("/api/login/2fa", handler.NewTwoFactorLoginHandler(tokenStore, repo, twoFactorStore))
 	mux.Handle("/api/login/recovery", handler.NewRecoveryLoginHandler(tokenStore, repo, twoFactorStore))
 
@@ -165,6 +179,11 @@ func main() {
 	mux.Handle("/api/admin/users/remark", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserRemarkHandler(repo)))
 	mux.Handle("/api/admin/users/custom-short-code", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserCustomShortCodeHandler(repo)))
 	mux.Handle("/api/admin/users/", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserSubscriptionsHandler(repo)))
+	securityLogHandler := handler.NewSecurityLogHandler(repo)
+	mux.Handle("/api/admin/security/", auth.RequireAdmin(tokenStore, userRepo, securityLogHandler))
+	mux.Handle("/api/admin/security/turnstile", auth.RequireAdmin(tokenStore, userRepo, handler.NewTurnstileSettingsHandler(repo)))
+	mux.Handle("/api/admin/tasks/", auth.RequireAdmin(tokenStore, userRepo, handler.NewTaskLogHandler(repo)))
+	mux.Handle("/api/admin/operations", auth.RequireAdmin(tokenStore, userRepo, handler.NewOperationLogHandler(repo)))
 	mux.Handle("/api/admin/subscriptions", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscriptionAdminHandler(subscribeDir, repo)))
 	mux.Handle("/api/admin/subscriptions/", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscriptionAdminHandler(subscribeDir, repo)))
 	mux.Handle("/api/admin/subscribe-files", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscribeFilesHandler(repo)))
@@ -172,13 +191,15 @@ func main() {
 	mux.Handle("/api/admin/probe-config", auth.RequireAdmin(tokenStore, userRepo, handler.NewProbeConfigHandler(repo)))
 	mux.Handle("/api/admin/probe-sync", auth.RequireAdmin(tokenStore, userRepo, handler.NewProbeSyncHandler(repo)))
 	mux.Handle("/api/admin/rules/", auth.RequireAdmin(tokenStore, userRepo, http.StripPrefix("/api/admin/rules/", handler.NewRuleEditorHandler(subscribeDir, repo))))
-	mux.Handle("/api/admin/rule-templates", auth.RequireAdmin(tokenStore, userRepo, handler.NewRuleTemplatesHandler(repo)))
-	mux.Handle("/api/admin/rule-templates/", auth.RequireAdmin(tokenStore, userRepo, handler.NewRuleTemplatesHandler(repo)))
+	mux.Handle("/api/admin/rule-templates", auth.RequireToken(tokenStore, handler.NewRuleTemplatesHandler(repo)))
+	mux.Handle("/api/admin/rule-templates/", auth.RequireToken(tokenStore, handler.NewRuleTemplatesHandler(repo)))
+	mux.Handle("/api/user/default-template", auth.RequireToken(tokenStore, handler.NewUserDefaultTemplateHandler(repo)))
 	mux.Handle("/api/admin/template-v3/", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateV3Handler(repo)))
 	mux.Handle("/api/admin/nodes", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodesHandler(repo, subscribeDir)))
 	mux.Handle("/api/admin/nodes/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodesHandler(repo, subscribeDir)))
 	mux.Handle("/api/admin/sync-external-subscriptions", auth.RequireAdmin(tokenStore, userRepo, handler.NewSyncExternalSubscriptionsHandler(repo, subscribeDir)))
 	mux.Handle("/api/admin/sync-external-subscription", auth.RequireAdmin(tokenStore, userRepo, handler.NewSyncSingleExternalSubscriptionHandler(repo, subscribeDir)))
+	mux.Handle("/api/admin/sync-external-subscriptions/confirm", auth.RequireAdmin(tokenStore, userRepo, handler.NewConfirmExternalSyncHandler(repo)))
 	mux.Handle("/api/admin/rules/latest", auth.RequireAdmin(tokenStore, userRepo, handler.NewRuleMetadataHandler(subscribeDir, repo)))
 	mux.Handle("/api/admin/custom-rules", auth.RequireAdmin(tokenStore, userRepo, handler.NewCustomRulesHandler(repo)))
 	mux.Handle("/api/admin/custom-rules/", auth.RequireAdmin(tokenStore, userRepo, handler.NewCustomRuleHandler(repo)))
@@ -257,6 +278,8 @@ func main() {
 	shortLinkHandler := handler.NewShortLinkHandler(repo, subscriptionHandler)
 	bruteForceProtector := handler.NewBruteForceProtectorWithConfig(sysCfg.BruteForceEnabled, sysCfg.BruteForceMaxFailures, sysCfg.BruteForceWindow, sysCfg.BruteForceBlockDuration)
 	bruteForceProtector.SetSkipLocalIP(sysCfg.SkipLocalIP)
+	bruteForceProtector.SetRepo(repo)
+	bruteForceProtector.RestoreFromDB(context.Background())
 	subRateLimiter := handler.NewSubscriptionRateLimiter(sysCfg.SubRateLimitMax, time.Duration(sysCfg.SubRateLimitWindow)*time.Minute)
 	subRateLimiter.SetSkipLocalIP(sysCfg.SkipLocalIP)
 	go subRateLimiter.StartCleanup(context.Background())
@@ -308,7 +331,8 @@ func main() {
 
 	// 静默模式中间件
 	silentModeManager := handler.NewSilentModeManager(repo, tokenStore)
-	handlerWithSilentMode := silentModeManager.Middleware(mux)
+	handlerWithAudit := handler.OperationAuditMiddleware(mux, repo, tokenStore)
+	handlerWithSilentMode := silentModeManager.Middleware(handlerWithAudit)
 	handlerWithCORS := withCORS(handlerWithSilentMode, allowedOrigins)
 
 	srv := &http.Server{
@@ -318,6 +342,10 @@ func main() {
 	}
 
 	collectorCtx, stopCollector := context.WithCancel(context.Background())
+	taskrun.Init(taskrun.New(repo, map[string]time.Duration{"wal_checkpoint": 5 * time.Minute}))
+	go startWALCheckpointTask(collectorCtx, repo)
+	go startDatabaseLogCleanup(collectorCtx, repo)
+	go bruteForceProtector.StartCleanup(collectorCtx)
 	go startTrafficCollector(collectorCtx, trafficHandler)
 
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
@@ -335,6 +363,57 @@ func main() {
 	}()
 
 	waitForShutdown(srv, stopCollector, stopProxySync, stopNotify, stopAutoUpdate)
+}
+
+func startWALCheckpointTask(ctx context.Context, repo *storage.TrafficRepository) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			taskrun.Record(ctx, "wal_checkpoint", func() (string, error) {
+				truncated, remaining, err := repo.CheckpointBestEffort()
+				if err != nil {
+					logger.Warn("WAL 定时检查点失败", "error", err)
+					return "", err
+				}
+				if !truncated {
+					logger.Warn("WAL 暂未截断，已执行被动检查点", "remaining_frames", remaining)
+					return fmt.Sprintf("passive checkpoint; %d frames remain", remaining), nil
+				}
+				return "WAL truncated", nil
+			})
+		}
+	}
+}
+
+func startDatabaseLogCleanup(ctx context.Context, repo *storage.TrafficRepository) {
+	cleanup := func() {
+		now := time.Now()
+		securityCount, securityErr := repo.DeleteOldSecurityEvents(ctx, now.AddDate(0, 0, -90))
+		operationCount, operationErr := repo.DeleteOldOperationLogs(ctx, now.AddDate(0, 0, -90))
+		taskCount, taskErr := repo.DeleteOldTaskRuns(ctx, now.AddDate(0, 0, -30))
+		if securityErr != nil || operationErr != nil || taskErr != nil {
+			logger.Warn("数据库日志清理部分失败", "security_error", securityErr, "operation_error", operationErr, "task_error", taskErr)
+			return
+		}
+		if securityCount+operationCount+taskCount > 0 {
+			logger.Info("数据库日志清理完成", "security", securityCount, "operations", operationCount, "tasks", taskCount)
+		}
+	}
+	cleanup()
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
+		}
+	}
 }
 
 func getAddr() string {

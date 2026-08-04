@@ -3,14 +3,16 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"miaomiaowu/internal/storage"
 	"github.com/MMWOrg/mmwX-plugins/proxyparser/substore"
+	"gopkg.in/yaml.v3"
+	"miaomiaowu/internal/storage"
 )
 
 type templateRequest struct {
@@ -186,11 +188,68 @@ func NewTemplateConvertHandler() http.Handler {
 				return
 			}
 			finalContent = substore.MergeToClashTemplate(templateContent, proxyGroupsStr, rulesStr, providersStr)
+			finalContent, err = ensureV2ProxyGroupMembers(finalContent, req.ProxyNames)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(convertRulesResponse{Content: finalContent})
 	})
+}
+
+// ensureV2ProxyGroupMembers prevents a malformed or expired ACL source from
+// silently producing a Clash config whose groups cannot select any node.
+func ensureV2ProxyGroupMembers(content string, proxyNames []string) (string, error) {
+	trimmed := strings.TrimSpace(strings.ToLower(content))
+	if strings.HasPrefix(trimmed, "<!doctype html") || strings.HasPrefix(trimmed, "<html") {
+		return "", errors.New("规则源返回了 HTML 页面而不是 ACL 配置，请检查模板 URL 是否需要登录或已经失效")
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal([]byte(content), &config); err != nil {
+		return "", fmt.Errorf("V2 模板生成了无效 YAML: %w", err)
+	}
+	groups, ok := config["proxy-groups"].([]any)
+	if !ok || len(groups) == 0 {
+		return "", errors.New("规则源中没有有效的 custom_proxy_group，请检查模板 URL 是否返回了 HTML、登录页或已失效")
+	}
+	if len(proxyNames) == 0 {
+		return "", errors.New("没有可注入代理组的节点")
+	}
+
+	changed := false
+	for _, raw := range groups {
+		group, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		proxies, hasProxies := group["proxies"].([]any)
+		filter, _ := group["filter"].(string)
+		hasDynamicSource := group["include-all"] == true || strings.TrimSpace(filter) != "" || nonEmptyList(group["use"])
+		if (!hasProxies || len(proxies) == 0) && !hasDynamicSource {
+			members := make([]any, 0, len(proxyNames))
+			for _, name := range proxyNames {
+				members = append(members, strings.Trim(name, `"`))
+			}
+			group["proxies"] = members
+			changed = true
+		}
+	}
+	if !changed {
+		return content, nil
+	}
+	result, err := yaml.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("序列化 V2 模板失败: %w", err)
+	}
+	return string(result), nil
+}
+
+func nonEmptyList(value any) bool {
+	items, ok := value.([]any)
+	return ok && len(items) > 0
 }
 
 func handleListTemplates(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository) {

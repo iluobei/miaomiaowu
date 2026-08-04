@@ -43,3 +43,29 @@ func TestPinnedPeerCertSha256V2RayRoundTrip(t *testing.T) {
 		t.Fatalf("generated pcs = %q, want %q; URI: %s", got, fingerprint, uri)
 	}
 }
+
+func TestAnyTLSStashAndQuantumultXOutput(t *testing.T) {
+	proxy := substore.Proxy{
+		"name": "anytls-test", "type": "anytls", "server": "example.com",
+		"port": 443, "password": "secret", "sni": "example.com",
+	}
+	for _, target := range []struct {
+		name string
+		want string
+	}{
+		{"stash", `"type":"anytls"`},
+		{"qx", "anytls=example.com:443"},
+	} {
+		producer, err := substore.GetDefaultFactory().GetProducer(target.name)
+		if err != nil {
+			t.Fatalf("get %s producer: %v", target.name, err)
+		}
+		result, err := producer.Produce([]substore.Proxy{proxy}, "", nil)
+		if err != nil {
+			t.Fatalf("produce %s: %v", target.name, err)
+		}
+		if !strings.Contains(result.(string), target.want) {
+			t.Fatalf("%s output omitted AnyTLS node: %s", target.name, result)
+		}
+	}
+}

@@ -71,6 +71,7 @@ interface UserConfig {
   sub_rate_limit_max: number
   sub_rate_limit_window: number
   skip_local_ip: boolean
+  block_unknown_subscription_ua: boolean
 }
 
 export const Route = createFileRoute('/system-settings')({
@@ -121,6 +122,7 @@ function SystemSettingsPage() {
   const [subRateLimitMax, setSubRateLimitMax] = useState(30)
   const [subRateLimitWindow, setSubRateLimitWindow] = useState(120)
   const [skipLocalIP, setSkipLocalIP] = useState(true)
+  const [blockUnknownSubUA, setBlockUnknownSubUA] = useState(false)
 
   // Notification config state
   const [notifyConfig, setNotifyConfig] = useState<NotifyConfig>({
@@ -235,6 +237,7 @@ function SystemSettingsPage() {
       setSubRateLimitMax(userConfig.sub_rate_limit_max || 30)
       setSubRateLimitWindow(userConfig.sub_rate_limit_window || 120)
       setSkipLocalIP(userConfig.skip_local_ip !== false)
+      setBlockUnknownSubUA(userConfig.block_unknown_subscription_ua === true)
     }
   }, [userConfig])
 
@@ -281,6 +284,7 @@ function SystemSettingsPage() {
       setSubRateLimitMax(variables.sub_rate_limit_max)
       setSubRateLimitWindow(variables.sub_rate_limit_window)
       setSkipLocalIP(variables.skip_local_ip)
+      setBlockUnknownSubUA(variables.block_unknown_subscription_ua)
       toast.success('设置已更新')
     },
     onError: (error) => {
@@ -325,6 +329,7 @@ function SystemSettingsPage() {
       sub_rate_limit_max: subRateLimitMax,
       sub_rate_limit_window: subRateLimitWindow,
       skip_local_ip: skipLocalIP,
+      block_unknown_subscription_ua: blockUnknownSubUA,
       ...updates,
     })
   }
@@ -1025,6 +1030,22 @@ function SystemSettingsPage() {
 
               <hr className='border-border/50' />
 
+              <div className='flex items-start justify-between gap-4'>
+                <div className='flex-1'>
+                  <h4 className='text-sm font-medium'>拦截未知订阅客户端</h4>
+                  <p className='text-xs text-muted-foreground mt-1'>
+                    仅允许 Clash、Stash、Loon、Quantumult X、Surge、sing-box、v2ray 等已识别客户端获取订阅，避免浏览器预览和爬虫误触。
+                  </p>
+                </div>
+                <Switch checked={blockUnknownSubUA} onCheckedChange={(v) => { setBlockUnknownSubUA(v); updateConfig({ block_unknown_subscription_ua: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+              </div>
+
+              <hr className='border-border/50' />
+
+              <TurnstileSettings />
+
+              <hr className='border-border/50' />
+
               {/* 登录保护 */}
               <div className='space-y-3'>
                 <h4 className='text-sm font-medium'>登录保护</h4>
@@ -1113,6 +1134,7 @@ function SystemSettingsPage() {
                   sub_rate_limit_max: subRateLimitMax,
                   sub_rate_limit_window: subRateLimitWindow,
                   skip_local_ip: skipLocalIP,
+                  block_unknown_subscription_ua: blockUnknownSubUA,
                 })}
                 disabled={loadingConfig || updateConfigMutation.isPending}
               >
@@ -1185,6 +1207,61 @@ function SystemSettingsPage() {
           </Card>
         </div>
       </main>
+    </div>
+  )
+}
+
+function TurnstileSettings() {
+  const [siteKey, setSiteKey] = useState('')
+  const [secretKey, setSecretKey] = useState('')
+  const settings = useQuery({
+    queryKey: ['turnstile-settings'],
+    queryFn: async () => (await api.get('/api/admin/security/turnstile')).data as {
+      site_key: string
+      secret_key: string
+      enabled: boolean
+    },
+  })
+  useEffect(() => {
+    if (!settings.data) return
+    setSiteKey(settings.data.site_key ?? '')
+    setSecretKey(settings.data.secret_key ?? '')
+  }, [settings.data])
+  const save = useMutation({
+    mutationFn: async () => api.put('/api/admin/security/turnstile', {
+      site_key: siteKey.trim(),
+      secret_key: secretKey.trim(),
+    }),
+    onSuccess: () => {
+      settings.refetch()
+      toast.success('Turnstile 设置已保存')
+    },
+    onError: handleServerError,
+  })
+  return (
+    <div className='space-y-3'>
+      <div className='flex items-center justify-between gap-3'>
+        <div>
+          <h4 className='text-sm font-medium'>Cloudflare Turnstile</h4>
+          <p className='mt-1 text-xs text-muted-foreground'>Site Key 和 Secret Key 都填写后，登录页自动启用人机验证；两项留空即关闭。</p>
+        </div>
+        <span className={`text-xs ${settings.data?.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
+          {settings.data?.enabled ? '已启用' : '未启用'}
+        </span>
+      </div>
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+        <div className='space-y-1'>
+          <Label htmlFor='turnstile-site-key' className='text-xs'>Site Key</Label>
+          <Input id='turnstile-site-key' value={siteKey} onChange={(event) => setSiteKey(event.target.value)} placeholder='0x4AAAA...' />
+        </div>
+        <div className='space-y-1'>
+          <Label htmlFor='turnstile-secret-key' className='text-xs'>Secret Key</Label>
+          <Input id='turnstile-secret-key' type='password' value={secretKey} onChange={(event) => setSecretKey(event.target.value)} placeholder='0x4AAAA...' />
+        </div>
+      </div>
+      <Button type='button' variant='outline' onClick={() => save.mutate()} disabled={settings.isLoading || save.isPending}>
+        {save.isPending ? '保存中...' : '保存 Turnstile 设置'}
+      </Button>
     </div>
   )
 }

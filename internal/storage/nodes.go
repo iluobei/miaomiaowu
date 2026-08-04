@@ -469,6 +469,33 @@ func (r *TrafficRepository) BatchCreateNodes(ctx context.Context, nodes []Node) 
 	}
 	defer stmt.Close()
 
+	takenByUser := make(map[string]map[string]bool)
+	for _, node := range nodes {
+		username := strings.TrimSpace(node.Username)
+		if username == "" || takenByUser[username] != nil {
+			continue
+		}
+		taken := make(map[string]bool)
+		rows, queryErr := tx.QueryContext(ctx, `SELECT node_name FROM nodes WHERE username = ?`, username)
+		if queryErr != nil {
+			return nil, fmt.Errorf("list existing node names: %w", queryErr)
+		}
+		for rows.Next() {
+			var name string
+			if scanErr := rows.Scan(&name); scanErr != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan existing node name: %w", scanErr)
+			}
+			taken[name] = true
+		}
+		if rowsErr := rows.Err(); rowsErr != nil {
+			rows.Close()
+			return nil, fmt.Errorf("list existing node names: %w", rowsErr)
+		}
+		rows.Close()
+		takenByUser[username] = taken
+	}
+
 	var createdIDs []int64
 	for idx, node := range nodes {
 		node.Username = strings.TrimSpace(node.Username)
@@ -487,6 +514,14 @@ func (r *TrafficRepository) BatchCreateNodes(ctx context.Context, nodes []Node) 
 		if node.NodeName == "" {
 			return nil, fmt.Errorf("node %d: node name is required", idx+1)
 		}
+		taken := takenByUser[node.Username]
+		originalName := node.NodeName
+		node.NodeName = uniqueImportedNodeName(node.NodeName, taken)
+		if node.NodeName != originalName {
+			node.ClashConfig = replaceJSONNodeName(node.ClashConfig, node.NodeName)
+			node.ParsedConfig = replaceJSONNodeName(node.ParsedConfig, node.NodeName)
+		}
+		taken[node.NodeName] = true
 		if node.Protocol == "" {
 			return nil, fmt.Errorf("node %d: protocol is required", idx+1)
 		}
@@ -513,6 +548,7 @@ func (r *TrafficRepository) BatchCreateNodes(ctx context.Context, nodes []Node) 
 		}
 
 		createdIDs = append(createdIDs, id)
+		nodes[idx] = node
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -530,6 +566,34 @@ func (r *TrafficRepository) BatchCreateNodes(ctx context.Context, nodes []Node) 
 	}
 
 	return created, nil
+}
+
+func uniqueImportedNodeName(base string, taken map[string]bool) string {
+	if !taken[base] {
+		return base
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := fmt.Sprintf("%s-%d", base, suffix)
+		if !taken[candidate] {
+			return candidate
+		}
+	}
+}
+
+func replaceJSONNodeName(config, name string) string {
+	if strings.TrimSpace(config) == "" {
+		return config
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
+		return config
+	}
+	parsed["name"] = name
+	updated, err := json.Marshal(parsed)
+	if err != nil {
+		return config
+	}
+	return string(updated)
 }
 
 // DeleteAllUserNodes removes all nodes for a specific user.
