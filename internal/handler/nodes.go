@@ -17,6 +17,7 @@ import (
 	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
 
+	"github.com/MMWOrg/mmwX-plugins/proxyparser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -127,6 +128,35 @@ func applyNodeNameFilterToClashProxies(proxies []map[string]any, filterRegex *re
 	}
 
 	return filteredProxies, filteredCount
+}
+
+func parseFetchedSubscriptionContent(body []byte) ([]map[string]any, string, error) {
+	proxies, kind, decoded, err := proxyparser.Preprocess(body)
+	if err != nil {
+		return nil, "", fmt.Errorf("预处理订阅内容失败: %w", err)
+	}
+
+	switch kind {
+	case proxyparser.ContentHTML:
+		return nil, "", errors.New("订阅内容是 HTML 页面，不是有效的代理订阅")
+	case proxyparser.ContentURIList:
+		if len(proxies) == 0 {
+			return nil, "", errors.New("订阅中没有找到代理节点")
+		}
+		return proxies, "URI 列表", nil
+	}
+
+	var clashConfig struct {
+		Proxies []map[string]any `yaml:"proxies"`
+	}
+	if err := yaml.Unmarshal(decoded, &clashConfig); err != nil {
+		return nil, "", fmt.Errorf("解析订阅内容失败: %w", err)
+	}
+	if len(clashConfig.Proxies) == 0 {
+		return nil, "", errors.New("订阅中没有找到代理节点")
+	}
+
+	return clashConfig.Proxies, "Clash YAML", nil
 }
 
 type nodesHandler struct {
@@ -1309,7 +1339,8 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		logger.Info("[订阅获取] 解析流量信息", "upload", trafficUpload, "download", trafficDownload, "total", trafficTotal)
 	}
 
-	// v2ray 格式: base64 编码的 URI 列表，返回原始 URI 由前端解析
+	// 部分订阅服务会根据 User-Agent 返回不同格式；这里仅保留补取流量信息的行为，
+	// 节点格式始终根据响应内容自动识别。
 	if strings.Contains(strings.ToLower(userAgent), "v2ray") {
 		// 如果没有获取到流量信息，尝试用 clash-meta UA 再请求一次获取流量信息
 		if trafficTotal == 0 {
@@ -1333,86 +1364,23 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 				}
 			}
 		}
-
-		decoded, err := base64DecodeV2ray(string(body))
-		if err != nil {
-			logger.Info("[订阅获取] v2ray格式base64解码失败", "url", req.URL, "error", err)
-			writeError(w, http.StatusBadRequest, errors.New("解析v2ray订阅内容失败: "+err.Error()))
-			return
-		}
-
-		// 后端统一解析为 clash 节点（经 proxyparser），与 clash 分支同构返回 proxies
-		proxies, err := ParseV2raySubscription(decoded)
-		if err != nil || len(proxies) == 0 {
-			writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
-			return
-		}
-		for _, proxy := range proxies {
-			convertNilToEmptyStringInMap(proxy)
-			decodeProxyURLFields(proxy)
-			if req.ForceNodeSkipCert {
-				proxy["skip-cert-verify"] = true
-			}
-		}
-
-		filteredProxies, filteredCount := applyNodeNameFilterToClashProxies(proxies, filterRegex, nodeNameFilter)
-		if filteredCount > 0 {
-			logger.Info("[订阅获取] v2ray节点过滤完成", "filtered_count", filteredCount, "remaining_count", len(filteredProxies))
-		}
-
-		logger.Info("[订阅获取] v2ray格式解析成功", "url", req.URL, "node_count", len(filteredProxies))
-		response := map[string]any{
-			"proxies":        filteredProxies,
-			"count":          len(filteredProxies),
-			"filtered_count": filteredCount,
-			"suggested_tag":  suggestedTag,
-		}
-		// 添加流量信息（如果有）
-		if trafficTotal > 0 {
-			response["traffic"] = map[string]any{
-				"upload":   trafficUpload,
-				"download": trafficDownload,
-				"total":    trafficTotal,
-			}
-			if trafficExpire != nil {
-				response["traffic"].(map[string]any)["expire"] = trafficExpire.Unix()
-			}
-		}
-		respondJSON(w, http.StatusOK, response)
-		return
 	}
 
-	// 解析YAML
-	var clashConfig struct {
-		Proxies []map[string]any `yaml:"proxies"`
-	}
-
-	if err := yaml.Unmarshal(body, &clashConfig); err != nil {
-		// 记录解析失败时的内容预览
+	proxies, contentFormat, err := parseFetchedSubscriptionContent(body)
+	if err != nil {
 		bodyPreview := string(body)
 		if len(bodyPreview) > 500 {
 			bodyPreview = bodyPreview[:500] + "...(截断)"
 		}
-		logger.Info("[订阅获取] YAML解析失败", "url", req.URL, "error", err, "content_preview", bodyPreview)
-		writeError(w, http.StatusBadRequest, errors.New("解析订阅内容失败: "+err.Error()))
+		logger.Info("[订阅获取] 订阅内容解析失败", "url", req.URL, "error", err, "content_preview", bodyPreview)
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	if len(clashConfig.Proxies) == 0 {
-		// 记录没有找到节点时的内容预览
-		bodyPreview := string(body)
-		if len(bodyPreview) > 500 {
-			bodyPreview = bodyPreview[:500] + "...(截断)"
-		}
-		logger.Info("[订阅获取] 订阅中没有找到代理节点", "url", req.URL, "content_preview", bodyPreview)
-		writeError(w, http.StatusBadRequest, errors.New("订阅中没有找到代理节点"))
-		return
-	}
-
-	logger.Info("[订阅获取] 成功解析订阅", "url", req.URL, "node_count", len(clashConfig.Proxies))
+	logger.Info("[订阅获取] 成功解析订阅", "url", req.URL, "format", contentFormat, "node_count", len(proxies))
 
 	// Convert nil values to empty strings and decode URL-encoded fields in all proxies
-	for _, proxy := range clashConfig.Proxies {
+	for _, proxy := range proxies {
 		convertNilToEmptyStringInMap(proxy)
 		decodeProxyURLFields(proxy)
 		if req.ForceNodeSkipCert {
@@ -1420,9 +1388,9 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	filteredProxies, filteredCount := applyNodeNameFilterToClashProxies(clashConfig.Proxies, filterRegex, nodeNameFilter)
+	filteredProxies, filteredCount := applyNodeNameFilterToClashProxies(proxies, filterRegex, nodeNameFilter)
 	if filteredCount > 0 {
-		logger.Info("[订阅获取] clash节点过滤完成", "filtered_count", filteredCount, "remaining_count", len(filteredProxies))
+		logger.Info("[订阅获取] 节点过滤完成", "format", contentFormat, "filtered_count", filteredCount, "remaining_count", len(filteredProxies))
 	}
 
 	response := map[string]any{
