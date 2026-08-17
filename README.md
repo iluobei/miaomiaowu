@@ -231,7 +231,7 @@ curl -sL https://raw.githubusercontent.com/iluobei/miaomiaowu/main/quick-install
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=iluobei/miaomiaowu&type=date&legend=top-left)](https://www.star-history.com/#iluobei/miaomiaowu&type=date&legend=top-left)
+[![Star History Chart](https://star-history.dera.page/svg?repos=iluobei/miaomiaowu&type=date&legend=top-left)](https://star-history.dera.page/#iluobei/miaomiaowu&type=date&legend=top-left)
 
 
 ## 许可证
