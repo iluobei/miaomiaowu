@@ -1,44 +1,15 @@
 // @ts-nocheck
-import React, { useState, useMemo, useCallback, useEffect, memo, useDeferredValue, useRef } from 'react'
-import { createPortal } from 'react-dom'
-import { createFileRoute, redirect, useSearch } from '@tanstack/react-router'
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  memo,
+  useDeferredValue,
+  useRef,
+} from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
-import { useAuthStore } from '@/stores/auth-store'
-import { api } from '@/lib/api'
-import { cn, getPageNumbers } from '@/lib/utils'
-
-const CLASH_DRAFT_KEY_PREFIX = 'mmw_clash_config_draft_'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { type ProxyNode, type ClashProxy } from '@/lib/proxy-types'
-import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
-import { Check, Pencil, X, Undo2, Activity, Eye, Copy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link2, Flag, GripVertical, Zap, Loader2, Expand, List, ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown, ArrowUpDown, Gauge } from 'lucide-react'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import IpIcon from '@/assets/icons/ip.svg'
-import CaidanIcon from '@/assets/icons/125.svg'
-import CaidanWIcon from '@/assets/icons/250.svg'
-import ExchangeIcon from '@/assets/icons/exchange.svg'
-import URI_Producer from '@/lib/substore/producers/uri'
-import { countryCodeToFlag, hasRegionEmoji, getGeoIPInfo, stripFlagEmoji } from '@/lib/country-flag'
-import { Twemoji } from '@/components/twemoji'
-import { FlagEmojiPicker } from '@/components/flag-emoji-picker'
-import { useMediaQuery } from '@/hooks/use-media-query'
-import { SpeedTestDialog } from '@/components/speedtest-dialog'
+import { createFileRoute, redirect, useSearch } from '@tanstack/react-router'
 import {
   DndContext,
   closestCenter,
@@ -58,8 +29,126 @@ import {
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
+import { load as parseYAML, dump as dumpYAML } from 'js-yaml'
+import {
+  Check,
+  Pencil,
+  X,
+  Undo2,
+  Activity,
+  Eye,
+  Copy,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Link2,
+  Flag,
+  GripVertical,
+  Zap,
+  Loader2,
+  Expand,
+  List,
+  ArrowUpToLine,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Gauge,
+} from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
+import CaidanIcon from '@/assets/icons/125.svg'
+import CaidanWIcon from '@/assets/icons/250.svg'
+import ExchangeIcon from '@/assets/icons/exchange.svg'
+import IpIcon from '@/assets/icons/ip.svg'
+import { useAuthStore } from '@/stores/auth-store'
+import { api } from '@/lib/api'
+import {
+  countryCodeToFlag,
+  hasRegionEmoji,
+  getGeoIPInfo,
+  stripFlagEmoji,
+} from '@/lib/country-flag'
+import { type ProxyNode, type ClashProxy } from '@/lib/proxy-types'
+import URI_Producer from '@/lib/substore/producers/uri'
+import { cn, getPageNumbers } from '@/lib/utils'
 import { useExternalSyncSelection } from '@/hooks/use-external-sync-selection'
+import { useMediaQuery } from '@/hooks/use-media-query'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
+import { FlagEmojiPicker } from '@/components/flag-emoji-picker'
+import { Topbar } from '@/components/layout/topbar'
+import { NodeProbeDialog } from '@/components/node-probe-dialog'
+import { SpeedTestDialog } from '@/components/speedtest-dialog'
+import { Twemoji } from '@/components/twemoji'
+
+const CLASH_DRAFT_KEY_PREFIX = 'mmw_clash_config_draft_'
 
 // @ts-ignore - retained simple route definition
 export const Route = createFileRoute('/nodes/')({
@@ -122,7 +211,19 @@ const PROTOCOL_COLORS: Record<string, string> = {
   snell: 'bg-lime-500/10 text-lime-700 dark:text-lime-400',
 }
 
-const PROTOCOLS = ['vmess', 'vless', 'trojan', 'ss', 'socks5', 'hysteria', 'hysteria2', 'tuic', 'anytls', 'wireguard', 'snell']
+const PROTOCOLS = [
+  'vmess',
+  'vless',
+  'trojan',
+  'ss',
+  'socks5',
+  'hysteria',
+  'hysteria2',
+  'tuic',
+  'anytls',
+  'wireguard',
+  'snell',
+]
 
 // 检查是否是IP地址（IPv4或IPv6）
 function isIpAddress(hostname: string): boolean {
@@ -164,7 +265,13 @@ function reorderProxyConfig(config: ClashProxy): ClashProxy {
 }
 
 // 拖拽把手组件
-function DragHandle({ id, size = 'default' }: { id: string; size?: 'default' | 'large' }) {
+function DragHandle({
+  id,
+  size = 'default',
+}: {
+  id: string
+  size?: 'default' | 'large'
+}) {
   const { attributes, listeners } = useSortable({ id })
 
   return (
@@ -173,16 +280,16 @@ function DragHandle({ id, size = 'default' }: { id: string; size?: 'default' | '
       {...listeners}
       data-drag-handle
       className={cn(
-        'cursor-grab active:cursor-grabbing touch-none rounded-md',
-        size === 'large'
-          ? 'p-2 hover:bg-accent/80'
-          : 'p-1'
+        'cursor-grab touch-none rounded-md active:cursor-grabbing',
+        size === 'large' ? 'hover:bg-accent/80 p-2' : 'p-1'
       )}
     >
-      <GripVertical className={cn(
-        'text-muted-foreground',
-        size === 'large' ? 'h-5 w-5' : 'h-4 w-4'
-      )} />
+      <GripVertical
+        className={cn(
+          'text-muted-foreground',
+          size === 'large' ? 'h-5 w-5' : 'h-4 w-4'
+        )}
+      />
     </div>
   )
 }
@@ -197,13 +304,15 @@ interface SortableTableRowProps {
   children: React.ReactNode
 }
 
-const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, isBatchDragging, isSelected, onClick, children }: SortableTableRowProps) {
-  const {
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+const SortableTableRow = React.memo(function SortableTableRow({
+  id,
+  isSaved,
+  isBatchDragging,
+  isSelected,
+  onClick,
+  children,
+}: SortableTableRowProps) {
+  const { setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled: !isSaved, // 只有已保存的节点可以拖拽
     animateLayoutChanges: () => false,
@@ -212,7 +321,9 @@ const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, isB
   const batchDragging = Boolean(isBatchDragging && !isDragging)
 
   const style: React.CSSProperties = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
   }
@@ -223,13 +334,16 @@ const SortableTableRow = React.memo(function SortableTableRow({ id, isSaved, isB
       style={style}
       onClick={onClick}
       className={cn(
-        'cursor-pointer group/row',
+        'group/row cursor-pointer',
         isDragging
           ? 'opacity-0'
           : batchDragging
-            ? 'opacity-30 bg-primary/10'
+            ? 'bg-primary/10 opacity-30'
             : '',
-        isSelected && !isDragging && !batchDragging && 'bg-primary/15 ring-2 ring-inset ring-primary/50 hover:bg-primary/20'
+        isSelected &&
+          !isDragging &&
+          !batchDragging &&
+          'bg-primary/15 ring-primary/50 hover:bg-primary/20 ring-2 ring-inset'
       )}
     >
       {children}
@@ -247,13 +361,15 @@ interface SortableCardProps {
   children: React.ReactNode
 }
 
-const SortableCard = React.memo(function SortableCard({ id, isSaved, isBatchDragging, isSelected, onClick, children }: SortableCardProps) {
-  const {
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+const SortableCard = React.memo(function SortableCard({
+  id,
+  isSaved,
+  isBatchDragging,
+  isSelected,
+  onClick,
+  children,
+}: SortableCardProps) {
+  const { setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled: !isSaved,
     animateLayoutChanges: () => false,
@@ -262,7 +378,9 @@ const SortableCard = React.memo(function SortableCard({ id, isSaved, isBatchDrag
   const batchDragging = Boolean(isBatchDragging && !isDragging)
 
   const style: React.CSSProperties = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
     transition: isDragging ? undefined : transition,
     opacity: isDragging ? 0.5 : 1,
   }
@@ -273,11 +391,11 @@ const SortableCard = React.memo(function SortableCard({ id, isSaved, isBatchDrag
       style={style}
       onClick={onClick}
       className={cn(
-        'overflow-hidden cursor-pointer',
+        'cursor-pointer overflow-hidden',
         isDragging
           ? 'opacity-0'
           : batchDragging
-            ? 'opacity-30 bg-primary/10'
+            ? 'bg-primary/10 opacity-30'
             : '',
         isSelected && !isDragging && !batchDragging && 'bg-accent'
       )}
@@ -295,7 +413,12 @@ interface SortableTagButtonProps {
   onClick: () => void
 }
 
-const SortableTagButton = React.memo(function SortableTagButton({ tag, count, isActive, onClick }: SortableTagButtonProps) {
+const SortableTagButton = React.memo(function SortableTagButton({
+  tag,
+  count,
+  isActive,
+  onClick,
+}: SortableTagButtonProps) {
   const {
     setNodeRef,
     attributes,
@@ -308,7 +431,9 @@ const SortableTagButton = React.memo(function SortableTagButton({ tag, count, is
   })
 
   const style: React.CSSProperties = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
     transition,
     opacity: isDragging ? 0.5 : 1,
     cursor: 'grab',
@@ -331,19 +456,28 @@ const SortableTagButton = React.memo(function SortableTagButton({ tag, count, is
 })
 
 // DragOverlay 内容组件
-function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; protocolColors: Record<string, string> }) {
+function DragOverlayContent({
+  nodes,
+  protocolColors,
+}: {
+  nodes: TempNode[]
+  protocolColors: Record<string, string>
+}) {
   if (nodes.length === 0) return null
 
   if (nodes.length === 1) {
     // 单节点：显示简单的节点卡片
     const node = nodes[0]
     return (
-      <div className='bg-background border rounded-md shadow-lg p-3 min-w-[200px] max-w-[300px]'>
+      <div className='bg-background max-w-[300px] min-w-[200px] rounded-md border p-3 shadow-lg'>
         <div className='flex items-center gap-2'>
-          <Badge variant='secondary' className={protocolColors[node.parsed?.type || ''] || ''}>
+          <Badge
+            variant='secondary'
+            className={protocolColors[node.parsed?.type || ''] || ''}
+          >
             {node.parsed?.type?.toUpperCase() || 'UNKNOWN'}
           </Badge>
-          <span className='font-medium truncate'>{node.name}</span>
+          <span className='truncate font-medium'>{node.name}</span>
         </div>
       </div>
     )
@@ -355,21 +489,24 @@ function DragOverlayContent({ nodes, protocolColors }: { nodes: TempNode[]; prot
     <div className='relative'>
       {/* 底部堆叠效果 */}
       {nodes.length > 2 && (
-        <div className='absolute top-2 left-2 bg-muted border rounded-md shadow p-3 min-w-[200px] max-w-[300px] h-[48px] opacity-60' />
+        <div className='bg-muted absolute top-2 left-2 h-[48px] max-w-[300px] min-w-[200px] rounded-md border p-3 opacity-60 shadow' />
       )}
-      <div className='absolute top-1 left-1 bg-muted border rounded-md shadow p-3 min-w-[200px] max-w-[300px] h-[48px] opacity-80' />
+      <div className='bg-muted absolute top-1 left-1 h-[48px] max-w-[300px] min-w-[200px] rounded-md border p-3 opacity-80 shadow' />
 
       {/* 主卡片 */}
-      <div className='relative bg-background border rounded-md shadow-lg p-3 min-w-[200px] max-w-[300px]'>
+      <div className='bg-background relative max-w-[300px] min-w-[200px] rounded-md border p-3 shadow-lg'>
         <div className='flex items-center gap-2'>
-          <Badge variant='secondary' className={protocolColors[firstNode.parsed?.type || ''] || ''}>
+          <Badge
+            variant='secondary'
+            className={protocolColors[firstNode.parsed?.type || ''] || ''}
+          >
             {firstNode.parsed?.type?.toUpperCase() || 'UNKNOWN'}
           </Badge>
-          <span className='font-medium truncate'>{firstNode.name}</span>
+          <span className='truncate font-medium'>{firstNode.name}</span>
         </div>
 
         {/* 数量标记 */}
-        <Badge className='absolute -top-2 -right-2 bg-primary text-primary-foreground'>
+        <Badge className='bg-primary text-primary-foreground absolute -top-2 -right-2'>
           {nodes.length} 个节点
         </Badge>
       </div>
@@ -388,7 +525,11 @@ const NODE_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
 function getStoredNodePageSize(): number {
   try {
     const raw = Number(localStorage.getItem(STORAGE_KEY_PAGE_SIZE))
-    if (NODE_PAGE_SIZE_OPTIONS.includes(raw as (typeof NODE_PAGE_SIZE_OPTIONS)[number])) {
+    if (
+      NODE_PAGE_SIZE_OPTIONS.includes(
+        raw as (typeof NODE_PAGE_SIZE_OPTIONS)[number]
+      )
+    ) {
       return raw
     }
   } catch {
@@ -424,7 +565,7 @@ function NodeListPagination({
         position === 'top' ? 'mb-4 border-b pb-4' : 'mt-4 border-t pt-4'
       )}
     >
-      <div className='flex flex-wrap items-center gap-2 text-sm text-muted-foreground'>
+      <div className='text-muted-foreground flex flex-wrap items-center gap-2 text-sm'>
         <span>每页</span>
         <Select
           value={String(pageSize)}
@@ -468,7 +609,10 @@ function NodeListPagination({
         </Button>
         {getPageNumbers(page, totalPages).map((item, idx) =>
           item === '...' ? (
-            <span key={`ellipsis-${position}-${idx}`} className='px-1 text-muted-foreground'>
+            <span
+              key={`ellipsis-${position}-${idx}`}
+              className='text-muted-foreground px-1'
+            >
               ...
             </span>
           ) : (
@@ -513,7 +657,7 @@ function getStoredFilterState() {
   try {
     return {
       protocol: localStorage.getItem(STORAGE_KEY_PROTOCOL) || 'all',
-      tag: localStorage.getItem(STORAGE_KEY_TAG) || 'all'
+      tag: localStorage.getItem(STORAGE_KEY_TAG) || 'all',
     }
   } catch {
     return { protocol: 'all', tag: 'all' }
@@ -545,7 +689,7 @@ function getStoredRenderMode(): RenderMode | null {
 }
 
 function NodesPage() {
-	const externalSyncSelection = useExternalSyncSelection()
+  const externalSyncSelection = useExternalSyncSelection()
   const { auth } = useAuthStore()
   const queryClient = useQueryClient()
 
@@ -569,42 +713,62 @@ function NodesPage() {
     }
     return -1
   }, [input])
-  const showSubEasterEgg = useMemo(() => /125|250/.test(subscriptionUrl), [subscriptionUrl])
+  const showSubEasterEgg = useMemo(
+    () => /125|250/.test(subscriptionUrl),
+    [subscriptionUrl]
+  )
   const [userAgent, setUserAgent] = useState<string>('clash.meta')
   const [customUserAgent, setCustomUserAgent] = useState<string>('')
   const [tempNodes, setTempNodes] = useState<TempNode[]>([])
   // 从 localStorage 恢复筛选状态
-  const [selectedProtocol, setSelectedProtocol] = useState<string>(() => getStoredFilterState().protocol)
+  const [selectedProtocol, setSelectedProtocol] = useState<string>(
+    () => getStoredFilterState().protocol
+  )
   const [currentTag, setCurrentTag] = useState<string>('manual') // 'manual' 或 'subscription'
-  const [tagFilter, setTagFilter] = useState<string>(() => getStoredFilterState().tag)
-  const [editingNode, setEditingNode] = useState<{ id: string; value: string } | null>(null)
+  const [tagFilter, setTagFilter] = useState<string>(
+    () => getStoredFilterState().tag
+  )
+  const [editingNode, setEditingNode] = useState<{
+    id: string
+    value: string
+  } | null>(null)
   const [resolvingIpFor, setResolvingIpFor] = useState<string | null>(null) // 正在解析IP的节点ID
-  const [ipMenuState, setIpMenuState] = useState<{ nodeId: string; ips: string[] } | null>(null) // IP选择菜单状态
+  const [ipMenuState, setIpMenuState] = useState<{
+    nodeId: string
+    ips: string[]
+  } | null>(null) // IP选择菜单状态
   const [probeBindingDialogOpen, setProbeBindingDialogOpen] = useState(false)
   const [probeSearchQuery, setProbeSearchQuery] = useState('')
-  const [selectedNodeForProbe, setSelectedNodeForProbe] = useState<ParsedNode | null>(null)
+  const [selectedNodeForProbe, setSelectedNodeForProbe] =
+    useState<ParsedNode | null>(null)
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false)
-  const [sourceNodeForExchange, setSourceNodeForExchange] = useState<ParsedNode | null>(null)
+  const [sourceNodeForExchange, setSourceNodeForExchange] =
+    useState<ParsedNode | null>(null)
   const [exchangeFilterText, setExchangeFilterText] = useState<string>('')
   const [relayGroupMode, setRelayGroupMode] = useState(false)
   const [relayGroupName, setRelayGroupName] = useState('')
-  const [relayGroupSelectedIds, setRelayGroupSelectedIds] = useState<Set<number>>(new Set())
+  const [relayGroupSelectedIds, setRelayGroupSelectedIds] = useState<
+    Set<number>
+  >(new Set())
 
   // 自定义标签状态
   const [manualTag, setManualTag] = useState<string>('手动输入')
   const [subscriptionTag, setSubscriptionTag] = useState<string>('')
   // 拉取订阅时是否跳过 HTTPS 证书校验（持久化）。兼容旧 key mmw-skip-cert-verify。
-  const [fetchSkipCertVerify, setFetchSkipCertVerify] = useState<boolean>(() => {
-    const cached = localStorage.getItem('mmw-fetch-skip-cert')
-    if (cached !== null) return cached === 'true'
-    return localStorage.getItem('mmw-skip-cert-verify') === 'true'
-  })
+  const [fetchSkipCertVerify, setFetchSkipCertVerify] = useState<boolean>(
+    () => {
+      const cached = localStorage.getItem('mmw-fetch-skip-cert')
+      if (cached !== null) return cached === 'true'
+      return localStorage.getItem('mmw-skip-cert-verify') === 'true'
+    }
+  )
   // 是否给导入节点强制写 skip-cert-verify（默认关，不污染节点原配置；不持久化）
   const [forceNodeSkipCert, setForceNodeSkipCert] = useState<boolean>(false)
 
   // 订阅导入：定时自动更新
   const [subscriptionAutoUpdate, setSubscriptionAutoUpdate] = useState(false)
-  const [subscriptionUpdateInterval, setSubscriptionUpdateInterval] = useState<number>(60)
+  const [subscriptionUpdateInterval, setSubscriptionUpdateInterval] =
+    useState<number>(60)
 
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
@@ -613,27 +777,43 @@ function NodesPage() {
   const [importTab, setImportTab] = useState<string>('manual')
 
   // 虚拟滚动模式状态 - 从 localStorage 恢复，无缓存时先默认 virtual（后续根据节点数调整）
-  const [renderMode, setRenderMode] = useState<RenderMode>(() => getStoredRenderMode() ?? 'virtual')
-  const [renderModeInitialized, setRenderModeInitialized] = useState(() => getStoredRenderMode() !== null)
+  const [renderMode, setRenderMode] = useState<RenderMode>(
+    () => getStoredRenderMode() ?? 'virtual'
+  )
+  const [renderModeInitialized, setRenderModeInitialized] = useState(
+    () => getStoredRenderMode() !== null
+  )
   const [nodePage, setNodePage] = useState(1)
-  const [nodePageSize, setNodePageSize] = useState<number>(() => getStoredNodePageSize())
+  const [nodePageSize, setNodePageSize] = useState<number>(() =>
+    getStoredNodePageSize()
+  )
   const [sortMode, setSortMode] = useState(false)
-  const nodeOrderSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nodeOrderSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
   const virtualListRef = useRef<HTMLDivElement>(null)
   const tableVirtualListRef = useRef<HTMLDivElement>(null)
 
   // 批量操作状态 - 从 localStorage 恢复选中状态
-  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(() => getStoredSelectedIds())
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<number>>(() =>
+    getStoredSelectedIds()
+  )
   const [batchTagDialogOpen, setBatchTagDialogOpen] = useState(false)
-  const [batchTagMode, setBatchTagMode] = useState<'add' | 'rename' | 'delete'>('add')
+  const [batchTagMode, setBatchTagMode] = useState<'add' | 'rename' | 'delete'>(
+    'add'
+  )
   const [batchTagInput, setBatchTagInput] = useState('')
-  const [batchTagSelectedTag, setBatchTagSelectedTag] = useState<string | null>(null)
+  const [batchTagSelectedTag, setBatchTagSelectedTag] = useState<string | null>(
+    null
+  )
 
   // 单节点标签管理
   const [tagManageDialogOpen, setTagManageDialogOpen] = useState(false)
   const [tagManageNodeId, setTagManageNodeId] = useState<number | null>(null)
   const [tagManageInput, setTagManageInput] = useState('')
-  const [tagManageSelectedTag, setTagManageSelectedTag] = useState<string | null>(null)
+  const [tagManageSelectedTag, setTagManageSelectedTag] = useState<
+    string | null
+  >(null)
   const [batchRenameDialogOpen, setBatchRenameDialogOpen] = useState(false)
   const [batchRenameText, setBatchRenameText] = useState<string>('')
   const [findText, setFindText] = useState<string>('')
@@ -643,13 +823,18 @@ function NodesPage() {
 
   // Clash 配置编辑状态
   const [clashDialogOpen, setClashDialogOpen] = useState(false)
-  const [editingClashConfig, setEditingClashConfig] = useState<{ nodeId: number; config: string } | null>(null)
+  const [editingClashConfig, setEditingClashConfig] = useState<{
+    nodeId: number
+    config: string
+  } | null>(null)
   const [clashConfigError, setClashConfigError] = useState<string>('')
   const [jsonErrorLines, setJsonErrorLines] = useState<number[]>([])
-  const [configFormat, setConfigFormat] = useState<'json' | 'yaml'>(() =>
-    (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
+  const [configFormat, setConfigFormat] = useState<'json' | 'yaml'>(
+    () =>
+      (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
   )
-  const [isClashDraftRecoveryOpen, setIsClashDraftRecoveryOpen] = useState(false)
+  const [isClashDraftRecoveryOpen, setIsClashDraftRecoveryOpen] =
+    useState(false)
   const pendingClashDraftRef = useRef<any>(null)
   const clashConfigOriginalRef = useRef<string>('')
 
@@ -660,24 +845,36 @@ function NodesPage() {
   // 临时订阅状态
   const [speedDialogOpen, setSpeedDialogOpen] = useState(false)
   const [speedDialogMin, setSpeedDialogMin] = useState(false)
+  const [nodeProbeOpen, setNodeProbeOpen] = useState(false) // 节点探测面板是否打开
   const [tempSubDialogOpen, setTempSubDialogOpen] = useState(false)
   const [tempSubMaxAccess, setTempSubMaxAccess] = useState<number>(1)
   const [tempSubExpireSeconds, setTempSubExpireSeconds] = useState<number>(60)
   const [tempSubUrl, setTempSubUrl] = useState<string>('')
   const [tempSubGenerating, setTempSubGenerating] = useState(false)
-  const [tempSubSingleNodeId, setTempSubSingleNodeId] = useState<number | null>(null) // 单个节点模式
+  const [tempSubSingleNodeId, setTempSubSingleNodeId] = useState<number | null>(
+    null
+  ) // 单个节点模式
 
   // 添加地区 emoji 状态
   const [addingRegionEmoji, setAddingRegionEmoji] = useState(false)
-  const [addingEmojiForNode, setAddingEmojiForNode] = useState<number | null>(null)
+  const [addingEmojiForNode, setAddingEmojiForNode] = useState<number | null>(
+    null
+  )
 
   // 删除重复节点状态
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
-  const [duplicateGroups, setDuplicateGroups] = useState<Array<{ config: string; nodes: ParsedNode[] }>>([])
+  const [duplicateGroups, setDuplicateGroups] = useState<
+    Array<{ config: string; nodes: ParsedNode[] }>
+  >([])
   const [deletingDuplicates, setDeletingDuplicates] = useState(false)
 
   // TCPing 测试状态
-  const [tcpingResults, setTcpingResults] = useState<Record<string, { success: boolean; latency: number; error?: string; loading?: boolean }>>({})
+  const [tcpingResults, setTcpingResults] = useState<
+    Record<
+      string,
+      { success: boolean; latency: number; error?: string; loading?: boolean }
+    >
+  >({})
   const [tcpingNodeId, setTcpingNodeId] = useState<string | null>(null) // 正在测试的节点ID
 
   // 优化的回调函数
@@ -685,17 +882,23 @@ function NodesPage() {
     setUserAgent(value)
   }, [])
 
-  const handleCustomUserAgentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomUserAgent(e.target.value)
-  }, [])
+  const handleCustomUserAgentChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setCustomUserAgent(e.target.value)
+    },
+    []
+  )
 
-  const handleSubscriptionUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSubscriptionUrl(e.target.value)
-  }, [])
+  const handleSubscriptionUrlChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSubscriptionUrl(e.target.value)
+    },
+    []
+  )
 
   // 节点选择回调 - 使用函数式更新避免依赖 selectedNodeIds
   const handleNodeSelect = useCallback((nodeId: number) => {
-    setSelectedNodeIds(prev => {
+    setSelectedNodeIds((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(nodeId)) {
         newSet.delete(nodeId)
@@ -707,15 +910,20 @@ function NodesPage() {
   }, [])
 
   // 表格行点击处理 - 过滤掉按钮/复选框等的点击
-  const handleRowClick = useCallback((e: React.MouseEvent, nodeId: number | undefined) => {
-    const target = e.target as HTMLElement
-    if (target.closest('button, input, [role="checkbox"], [data-drag-handle]')) {
-      return
-    }
-    if (nodeId) {
-      handleNodeSelect(nodeId)
-    }
-  }, [handleNodeSelect])
+  const handleRowClick = useCallback(
+    (e: React.MouseEvent, nodeId: number | undefined) => {
+      const target = e.target as HTMLElement
+      if (
+        target.closest('button, input, [role="checkbox"], [data-drag-handle]')
+      ) {
+        return
+      }
+      if (nodeId) {
+        handleNodeSelect(nodeId)
+      }
+    },
+    [handleNodeSelect]
+  )
 
   // 节点排序状态
   const [nodeOrder, setNodeOrder] = useState<number[]>([])
@@ -725,7 +933,9 @@ function NodesPage() {
   // 标签排序中的 Loading 状态
   const [isReorderingByTag, setIsReorderingByTag] = useState(false)
   // 批量拖动状态：当拖动选中的节点时，记录正在批量拖动的节点ID集合
-  const [batchDraggingIds, setBatchDraggingIds] = useState<Set<number>>(new Set())
+  const [batchDraggingIds, setBatchDraggingIds] = useState<Set<number>>(
+    new Set()
+  )
   // 当前正在拖动的节点ID（用于 DragOverlay）
   const [activeId, setActiveId] = useState<string | null>(null)
   // 获取用户配置
@@ -776,7 +986,10 @@ function NodesPage() {
   // 保存选中节点状态到 localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_SELECTED_IDS, JSON.stringify(Array.from(selectedNodeIds)))
+      localStorage.setItem(
+        STORAGE_KEY_SELECTED_IDS,
+        JSON.stringify(Array.from(selectedNodeIds))
+      )
     } catch {}
   }, [selectedNodeIds])
 
@@ -828,26 +1041,32 @@ function NodesPage() {
     mutationFn: async (newOrder: number[]) => {
       await api.put('/api/user/config', {
         ...userConfig,
-        node_order: newOrder
+        node_order: newOrder,
       })
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['user-config'] })
     },
     onError: (error: any) => {
-      toast.error('保存排序失败: ' + (error.response?.data?.error || error.message))
-    }
+      toast.error(
+        '保存排序失败: ' + (error.response?.data?.error || error.message)
+      )
+    },
   })
 
   // Debounced 排序保存：先更新本地状态，延迟 3s 再调 API
-  const debouncedSaveNodeOrder = useCallback((newOrder: number[]) => {
-    setNodeOrder(newOrder)
-    if (nodeOrderSaveTimerRef.current) clearTimeout(nodeOrderSaveTimerRef.current)
-    nodeOrderSaveTimerRef.current = setTimeout(() => {
-      updateNodeOrderMutation.mutate(newOrder)
-      nodeOrderSaveTimerRef.current = null
-    }, 3000)
-  }, [updateNodeOrderMutation])
+  const debouncedSaveNodeOrder = useCallback(
+    (newOrder: number[]) => {
+      setNodeOrder(newOrder)
+      if (nodeOrderSaveTimerRef.current)
+        clearTimeout(nodeOrderSaveTimerRef.current)
+      nodeOrderSaveTimerRef.current = setTimeout(() => {
+        updateNodeOrderMutation.mutate(newOrder)
+        nodeOrderSaveTimerRef.current = null
+      }, 3000)
+    },
+    [updateNodeOrderMutation]
+  )
 
   // 组件卸载或退出排序模式时，立即保存未提交的排序
   useEffect(() => {
@@ -896,9 +1115,11 @@ function NodesPage() {
   // 节点数据加载后，清理已不存在的选中节点 ID
   useEffect(() => {
     if (!nodesData) return
-    const validIds = new Set(savedNodes.map(n => n.id))
-    setSelectedNodeIds(prev => {
-      const filtered = new Set(Array.from(prev).filter(id => validIds.has(id)))
+    const validIds = new Set(savedNodes.map((n) => n.id))
+    setSelectedNodeIds((prev) => {
+      const filtered = new Set(
+        Array.from(prev).filter((id) => validIds.has(id))
+      )
       // 只有当有变化时才更新，避免不必要的重渲染
       if (filtered.size !== prev.size) {
         return filtered
@@ -940,7 +1161,7 @@ function NodesPage() {
 
   const updateNodeNameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: number; name: string }) => {
-      const target = savedNodes.find(n => n.id === id)
+      const target = savedNodes.find((n) => n.id === id)
       if (!target) {
         throw new Error('未找到节点?')
       }
@@ -974,7 +1195,9 @@ function NodesPage() {
   // DNS解析IP地址
   const resolveIpMutation = useMutation({
     mutationFn: async (hostname: string) => {
-      const response = await api.get(`/api/dns/resolve?hostname=${encodeURIComponent(hostname)}`)
+      const response = await api.get(
+        `/api/dns/resolve?hostname=${encodeURIComponent(hostname)}`
+      )
       return response.data as { ips: string[] }
     },
     onError: (error: any) => {
@@ -986,7 +1209,10 @@ function NodesPage() {
   // 更新节点服务器地址
   const updateNodeServerMutation = useMutation({
     mutationFn: async (payload: { nodeId: number; server: string }) => {
-      const response = await api.put(`/api/admin/nodes/${payload.nodeId}/server`, { server: payload.server })
+      const response = await api.put(
+        `/api/admin/nodes/${payload.nodeId}/server`,
+        { server: payload.server }
+      )
       return response.data
     },
     onSuccess: () => {
@@ -1004,7 +1230,9 @@ function NodesPage() {
   // 恢复节点原始域名
   const restoreNodeServerMutation = useMutation({
     mutationFn: async (nodeId: number) => {
-      const response = await api.put(`/api/admin/nodes/${nodeId}/restore-server`)
+      const response = await api.put(
+        `/api/admin/nodes/${nodeId}/restore-server`
+      )
       return response.data
     },
     onSuccess: () => {
@@ -1019,9 +1247,12 @@ function NodesPage() {
   // 更新节点 Clash 配置
   const updateClashConfigMutation = useMutation({
     mutationFn: async (payload: { nodeId: number; clashConfig: string }) => {
-      const response = await api.put(`/api/admin/nodes/${payload.nodeId}/config`, {
-        clash_config: payload.clashConfig
-      })
+      const response = await api.put(
+        `/api/admin/nodes/${payload.nodeId}/config`,
+        {
+          clash_config: payload.clashConfig,
+        }
+      )
       return response.data
     },
     onSuccess: (_data, variables) => {
@@ -1039,9 +1270,12 @@ function NodesPage() {
   // 更新节点探针绑定
   const updateProbeBindingMutation = useMutation({
     mutationFn: async (payload: { nodeId: number; probeServer: string }) => {
-      const response = await api.put(`/api/admin/nodes/${payload.nodeId}/probe-binding`, {
-        probe_server: payload.probeServer
-      })
+      const response = await api.put(
+        `/api/admin/nodes/${payload.nodeId}/probe-binding`,
+        {
+          probe_server: payload.probeServer,
+        }
+      )
       return response.data
     },
     onSuccess: () => {
@@ -1059,23 +1293,28 @@ function NodesPage() {
   const handleEditClashConfig = useCallback((node: ParsedNode | TempNode) => {
     // 对于已保存节点，使用 clash_config 字段
     // 对于临时节点，使用 clash 对象
-    const clashConfig = 'clash_config' in node
-      ? node.clash_config
-      : (node.clash ? JSON.stringify(node.clash) : null)
+    const clashConfig =
+      'clash_config' in node
+        ? node.clash_config
+        : node.clash
+          ? JSON.stringify(node.clash)
+          : null
 
     if (!clashConfig) return
 
     const nodeId = 'id' in node && typeof node.id === 'number' ? node.id : -1
 
     // 根据当前格式偏好格式化
-    const fmt = (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
+    const fmt =
+      (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
     let formatted: string
     try {
       // 重排 key: name/type/server/port 置顶 (复用 reorderProxyConfig)
       const parsed = reorderProxyConfig(JSON.parse(clashConfig))
-      formatted = fmt === 'yaml'
-        ? dumpYAML(parsed, { indent: 2, lineWidth: -1, noRefs: true })
-        : JSON.stringify(parsed, null, 2)
+      formatted =
+        fmt === 'yaml'
+          ? dumpYAML(parsed, { indent: 2, lineWidth: -1, noRefs: true })
+          : JSON.stringify(parsed, null, 2)
     } catch {
       formatted = clashConfig
     }
@@ -1111,12 +1350,18 @@ function NodesPage() {
 
     try {
       // 根据当前格式解析
-      const parsedConfig = configFormat === 'yaml'
-        ? parseYAML(editingClashConfig.config) as Record<string, unknown>
-        : JSON.parse(editingClashConfig.config)
+      const parsedConfig =
+        configFormat === 'yaml'
+          ? (parseYAML(editingClashConfig.config) as Record<string, unknown>)
+          : JSON.parse(editingClashConfig.config)
 
       // 检查必需字段
-      if (!parsedConfig.name || !parsedConfig.type || !parsedConfig.server || !parsedConfig.port) {
+      if (
+        !parsedConfig.name ||
+        !parsedConfig.type ||
+        !parsedConfig.server ||
+        !parsedConfig.port
+      ) {
         setClashConfigError('配置缺少必需字段: name, type, server, port')
         return
       }
@@ -1124,11 +1369,13 @@ function NodesPage() {
       // 保存配置（压缩 JSON 格式）
       updateClashConfigMutation.mutate({
         nodeId: editingClashConfig.nodeId,
-        clashConfig: JSON.stringify(parsedConfig)
+        clashConfig: JSON.stringify(parsedConfig),
       })
     } catch (error) {
       const label = configFormat === 'yaml' ? 'YAML' : 'JSON'
-      setClashConfigError(`${label} 格式错误: ${error instanceof Error ? error.message : String(error)}`)
+      setClashConfigError(
+        `${label} 格式错误: ${error instanceof Error ? error.message : String(error)}`
+      )
     }
   }
 
@@ -1138,7 +1385,7 @@ function NodesPage() {
 
     setEditingClashConfig({
       ...editingClashConfig,
-      config: value
+      config: value,
     })
 
     // 根据当前格式实时验证
@@ -1168,9 +1415,10 @@ function NodesPage() {
             const lines = value.substring(0, position).split('\n')
             const errorLine = lines.length
             const isMissingCommaError = errorMsg.includes("Expected ',' or '}'")
-            const errorLines = isMissingCommaError && errorLine > 1
-              ? [errorLine - 1, errorLine]
-              : [errorLine]
+            const errorLines =
+              isMissingCommaError && errorLine > 1
+                ? [errorLine - 1, errorLine]
+                : [errorLine]
             setJsonErrorLines(errorLines)
           }
         } else {
@@ -1182,11 +1430,20 @@ function NodesPage() {
 
   // Write clash config draft to localStorage when changed
   useEffect(() => {
-    if (!editingClashConfig || !clashDialogOpen || editingClashConfig.nodeId === -1) return
+    if (
+      !editingClashConfig ||
+      !clashDialogOpen ||
+      editingClashConfig.nodeId === -1
+    )
+      return
     if (editingClashConfig.config === clashConfigOriginalRef.current) return
     localStorage.setItem(
       CLASH_DRAFT_KEY_PREFIX + editingClashConfig.nodeId,
-      JSON.stringify({ nodeId: editingClashConfig.nodeId, config: editingClashConfig.config, savedAt: Date.now() })
+      JSON.stringify({
+        nodeId: editingClashConfig.nodeId,
+        config: editingClashConfig.config,
+        savedAt: Date.now(),
+      })
     )
   }, [editingClashConfig, clashDialogOpen])
 
@@ -1201,7 +1458,9 @@ function NodesPage() {
       setJsonErrorLines([])
     } catch (error) {
       const label = configFormat === 'yaml' ? 'YAML' : 'JSON'
-      setClashConfigError(`${label} 格式错误: ${error instanceof Error ? error.message : String(error)}`)
+      setClashConfigError(
+        `${label} 格式错误: ${error instanceof Error ? error.message : String(error)}`
+      )
     }
     setIsClashDraftRecoveryOpen(false)
     pendingClashDraftRef.current = null
@@ -1209,7 +1468,9 @@ function NodesPage() {
 
   const handleDiscardClashDraft = () => {
     if (editingClashConfig) {
-      localStorage.removeItem(CLASH_DRAFT_KEY_PREFIX + editingClashConfig.nodeId)
+      localStorage.removeItem(
+        CLASH_DRAFT_KEY_PREFIX + editingClashConfig.nodeId
+      )
     }
     setIsClashDraftRecoveryOpen(false)
     pendingClashDraftRef.current = null
@@ -1228,9 +1489,10 @@ function NodesPage() {
       )
 
       // 转为目标格式
-      const converted = fmt === 'yaml'
-        ? dumpYAML(parsed, { indent: 2, lineWidth: -1, noRefs: true })
-        : JSON.stringify(parsed, null, 2)
+      const converted =
+        fmt === 'yaml'
+          ? dumpYAML(parsed, { indent: 2, lineWidth: -1, noRefs: true })
+          : JSON.stringify(parsed, null, 2)
 
       setEditingClashConfig({ ...editingClashConfig, config: converted })
       clashConfigOriginalRef.current = converted
@@ -1238,7 +1500,9 @@ function NodesPage() {
       setJsonErrorLines([])
     } catch {
       // 转换失败不切换，提示用户先修正格式
-      setClashConfigError(`请先修正当前 ${configFormat === 'yaml' ? 'YAML' : 'JSON'} 格式错误后再切换`)
+      setClashConfigError(
+        `请先修正当前 ${configFormat === 'yaml' ? 'YAML' : 'JSON'} 格式错误后再切换`
+      )
       return
     }
 
@@ -1268,7 +1532,10 @@ function NodesPage() {
         setUriDialogOpen(true)
       }
     } catch (error) {
-      toast.error('生成 URI 失败: ' + (error instanceof Error ? error.message : String(error)))
+      toast.error(
+        '生成 URI 失败: ' +
+          (error instanceof Error ? error.message : String(error))
+      )
     }
   }, [])
 
@@ -1278,36 +1545,36 @@ function NodesPage() {
 
     const nodeKey = node.isSaved ? String(node.dbId) : node.id
     setTcpingNodeId(nodeKey)
-    setTcpingResults(prev => ({
+    setTcpingResults((prev) => ({
       ...prev,
-      [nodeKey]: { success: false, latency: 0, loading: true }
+      [nodeKey]: { success: false, latency: 0, loading: true },
     }))
 
     try {
       const result = await api.post('/api/admin/tcping', {
         host: node.parsed.server,
         port: node.parsed.port,
-        timeout: 5000
+        timeout: 5000,
       })
 
-      setTcpingResults(prev => ({
+      setTcpingResults((prev) => ({
         ...prev,
         [nodeKey]: {
           success: result.data.success,
           latency: result.data.latency,
           error: result.data.error,
-          loading: false
-        }
+          loading: false,
+        },
       }))
     } catch (error) {
-      setTcpingResults(prev => ({
+      setTcpingResults((prev) => ({
         ...prev,
         [nodeKey]: {
           success: false,
           latency: 0,
           error: error instanceof Error ? error.message : '测试失败',
-          loading: false
-        }
+          loading: false,
+        },
       }))
     } finally {
       setTcpingNodeId(null)
@@ -1326,7 +1593,12 @@ function NodesPage() {
 
     // 获取选中的节点
     const selectedNodes = deferredFilteredNodes.filter(
-      node => node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) && node.parsed?.server && node.parsed?.port
+      (node) =>
+        node.isSaved &&
+        node.dbId &&
+        selectedNodeIds.has(node.dbId) &&
+        node.parsed?.server &&
+        node.parsed?.port
     )
 
     if (selectedNodes.length === 0) {
@@ -1337,25 +1609,31 @@ function NodesPage() {
     setBatchTcpingLoading(true)
 
     // 设置所有选中节点为加载状态
-    const loadingState: Record<string, { success: boolean; latency: number; loading: boolean }> = {}
-    selectedNodes.forEach(node => {
+    const loadingState: Record<
+      string,
+      { success: boolean; latency: number; loading: boolean }
+    > = {}
+    selectedNodes.forEach((node) => {
       const nodeKey = String(node.dbId)
       loadingState[nodeKey] = { success: false, latency: 0, loading: true }
     })
-    setTcpingResults(prev => ({ ...prev, ...loadingState }))
+    setTcpingResults((prev) => ({ ...prev, ...loadingState }))
 
     try {
       // 构建批量请求
-      const requests = selectedNodes.map(node => ({
+      const requests = selectedNodes.map((node) => ({
         host: node.parsed!.server,
         port: node.parsed!.port,
-        timeout: 5000
+        timeout: 5000,
       }))
 
       const result = await api.post('/api/admin/tcping/batch', requests)
 
       // 更新结果
-      const newResults: Record<string, { success: boolean; latency: number; error?: string; loading: boolean }> = {}
+      const newResults: Record<
+        string,
+        { success: boolean; latency: number; error?: string; loading: boolean }
+      > = {}
       selectedNodes.forEach((node, index) => {
         const nodeKey = String(node.dbId)
         const response = result.data[index]
@@ -1363,31 +1641,40 @@ function NodesPage() {
           success: response.success,
           latency: response.latency,
           error: response.error,
-          loading: false
+          loading: false,
         }
       })
-      setTcpingResults(prev => ({ ...prev, ...newResults }))
+      setTcpingResults((prev) => ({ ...prev, ...newResults }))
 
       // 统计结果
-      const successCount = result.data.filter((r: { success: boolean }) => r.success).length
-      toast.success(`测试完成: ${successCount}/${selectedNodes.length} 个节点连通`)
+      const successCount = result.data.filter(
+        (r: { success: boolean }) => r.success
+      ).length
+      toast.success(
+        `测试完成: ${successCount}/${selectedNodes.length} 个节点连通`
+      )
     } catch (error: unknown) {
       // 提取后端错误信息
       const axiosError = error as { response?: { data?: { error?: string } } }
-      const errorMessage = axiosError.response?.data?.error || (error instanceof Error ? error.message : '测试失败')
+      const errorMessage =
+        axiosError.response?.data?.error ||
+        (error instanceof Error ? error.message : '测试失败')
 
       // 所有节点标记为失败
-      const errorResults: Record<string, { success: boolean; latency: number; error: string; loading: boolean }> = {}
-      selectedNodes.forEach(node => {
+      const errorResults: Record<
+        string,
+        { success: boolean; latency: number; error: string; loading: boolean }
+      > = {}
+      selectedNodes.forEach((node) => {
         const nodeKey = String(node.dbId)
         errorResults[nodeKey] = {
           success: false,
           latency: 0,
           error: errorMessage,
-          loading: false
+          loading: false,
         }
       })
-      setTcpingResults(prev => ({ ...prev, ...errorResults }))
+      setTcpingResults((prev) => ({ ...prev, ...errorResults }))
       toast.error(errorMessage)
     } finally {
       setBatchTcpingLoading(false)
@@ -1435,44 +1722,52 @@ function NodesPage() {
 
   // 更新临时节点的服务器地址
   const updateTempNodeServer = (nodeId: string, server: string) => {
-    setTempNodes(prev => prev.map(n => {
-      if (n.id !== nodeId) return n
+    setTempNodes((prev) =>
+      prev.map((n) => {
+        if (n.id !== nodeId) return n
 
-      // 如果还没有保存原始服务器地址，则保存当前的
-      const originalServer = n.originalServer || n.parsed?.server
+        // 如果还没有保存原始服务器地址，则保存当前的
+        const originalServer = n.originalServer || n.parsed?.server
 
-      // 更新 parsed 配置
-      const updatedParsed = n.parsed ? { ...n.parsed, server } : n.parsed
+        // 更新 parsed 配置
+        const updatedParsed = n.parsed ? { ...n.parsed, server } : n.parsed
 
-      // 更新 clash 配置
-      const updatedClash = n.clash ? { ...n.clash, server } : n.clash
+        // 更新 clash 配置
+        const updatedClash = n.clash ? { ...n.clash, server } : n.clash
 
-      return {
-        ...n,
-        parsed: updatedParsed,
-        clash: updatedClash,
-        originalServer,
-      }
-    }))
+        return {
+          ...n,
+          parsed: updatedParsed,
+          clash: updatedClash,
+          originalServer,
+        }
+      })
+    )
     toast.success('服务器地址已更新')
   }
 
   // 恢复临时节点的原始服务器地址
   const restoreTempNodeServer = (nodeId: string) => {
-    setTempNodes(prev => prev.map(n => {
-      if (n.id !== nodeId || !n.originalServer) return n
+    setTempNodes((prev) =>
+      prev.map((n) => {
+        if (n.id !== nodeId || !n.originalServer) return n
 
-      // 恢复到原始服务器地址
-      const updatedParsed = n.parsed ? { ...n.parsed, server: n.originalServer } : n.parsed
-      const updatedClash = n.clash ? { ...n.clash, server: n.originalServer } : n.clash
+        // 恢复到原始服务器地址
+        const updatedParsed = n.parsed
+          ? { ...n.parsed, server: n.originalServer }
+          : n.parsed
+        const updatedClash = n.clash
+          ? { ...n.clash, server: n.originalServer }
+          : n.clash
 
-      return {
-        ...n,
-        parsed: updatedParsed,
-        clash: updatedClash,
-        originalServer: undefined, // 清除原始服务器地址标记
-      }
-    }))
+        return {
+          ...n,
+          parsed: updatedParsed,
+          clash: updatedClash,
+          originalServer: undefined, // 清除原始服务器地址标记
+        }
+      })
+    )
     toast.success('已恢复原始服务器地址')
   }
 
@@ -1480,22 +1775,29 @@ function NodesPage() {
   const batchCreateMutation = useMutation({
     mutationFn: async (nodes: TempNode[]) => {
       // 根据当前标签类型使用对应的自定义标签
-      const tag = currentTag === 'manual'
-        ? (manualTag.trim() || '手动输入')
-        : (subscriptionTag.trim() || '订阅导入')
+      const tag =
+        currentTag === 'manual'
+          ? manualTag.trim() || '手动输入'
+          : subscriptionTag.trim() || '订阅导入'
 
-      const payload = nodes.map(n => ({
+      const payload = nodes.map((n) => ({
         raw_url: n.rawUrl,
         node_name: n.name || '未知',
         protocol: n.parsed?.type || 'unknown',
-        parsed_config: n.parsed ? JSON.stringify(cloneProxyWithName(n.parsed, n.name)) : '',
-        clash_config: n.clash ? JSON.stringify(cloneProxyWithName(n.clash, n.name)) : '',
+        parsed_config: n.parsed
+          ? JSON.stringify(cloneProxyWithName(n.parsed, n.name))
+          : '',
+        clash_config: n.clash
+          ? JSON.stringify(cloneProxyWithName(n.clash, n.name))
+          : '',
         enabled: n.enabled,
         tag: tag,
         tags: [tag],
       }))
 
-      const response = await api.post('/api/admin/nodes/batch', { nodes: payload })
+      const response = await api.post('/api/admin/nodes/batch', {
+        nodes: payload,
+      })
       return response.data
     },
     onSuccess: (data) => {
@@ -1511,10 +1813,13 @@ function NodesPage() {
       }
 
       // 使用 setQueryData 直接更新缓存，避免闪烁
-      queryClient.setQueryData(['nodes'], (oldData: { nodes: ParsedNode[] } | undefined) => {
-        if (!oldData) return { nodes: newNodes }
-        return { nodes: [...newNodes, ...oldData.nodes] }
-      })
+      queryClient.setQueryData(
+        ['nodes'],
+        (oldData: { nodes: ParsedNode[] } | undefined) => {
+          if (!oldData) return { nodes: newNodes }
+          return { nodes: [...newNodes, ...oldData.nodes] }
+        }
+      )
 
       toast.success('节点保存成功')
       setInput('')
@@ -1528,7 +1833,7 @@ function NodesPage() {
   // 切换节点启用状态
   const toggleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
-      const node = savedNodes.find(n => n.id === id)
+      const node = savedNodes.find((n) => n.id === id)
       if (!node) return
 
       const response = await api.put(`/api/admin/nodes/${id}`, {
@@ -1581,8 +1886,14 @@ function NodesPage() {
 
   // 单节点标签更新
   const updateNodeTagsMutation = useMutation({
-    mutationFn: async ({ nodeId, tags }: { nodeId: number; tags: string[] }) => {
-      const node = savedNodes.find(n => n.id === nodeId)
+    mutationFn: async ({
+      nodeId,
+      tags,
+    }: {
+      nodeId: number
+      tags: string[]
+    }) => {
+      const node = savedNodes.find((n) => n.id === nodeId)
       if (!node) throw new Error('节点未找到')
       return api.put(`/api/admin/nodes/${nodeId}`, {
         raw_url: node.raw_url,
@@ -1609,20 +1920,30 @@ function NodesPage() {
 
   // 批量管理节点标签
   const batchUpdateTagMutation = useMutation({
-    mutationFn: async ({ nodeIds, action, tag, oldTag }: {
-      nodeIds: number[]; action: 'add' | 'rename' | 'delete'; tag: string; oldTag?: string
+    mutationFn: async ({
+      nodeIds,
+      action,
+      tag,
+      oldTag,
+    }: {
+      nodeIds: number[]
+      action: 'add' | 'rename' | 'delete'
+      tag: string
+      oldTag?: string
     }) => {
       const promises = nodeIds.map((id) => {
-        const node = savedNodes.find(n => n.id === id)
+        const node = savedNodes.find((n) => n.id === id)
         if (!node) return Promise.resolve()
 
-        let newTags = [...(node.tags?.length ? node.tags : (node.tag ? [node.tag] : []))]
+        let newTags = [
+          ...(node.tags?.length ? node.tags : node.tag ? [node.tag] : []),
+        ]
         if (action === 'add') {
           if (!newTags.includes(tag)) newTags.push(tag)
         } else if (action === 'rename' && oldTag) {
-          newTags = newTags.map(t => t === oldTag ? tag : t)
+          newTags = newTags.map((t) => (t === oldTag ? tag : t))
         } else if (action === 'delete') {
-          newTags = newTags.filter(t => t !== tag)
+          newTags = newTags.filter((t) => t !== tag)
         }
         if (newTags.length === 0) newTags = ['手动输入']
 
@@ -1641,8 +1962,15 @@ function NodesPage() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      const actionText = variables.action === 'add' ? '添加' : variables.action === 'rename' ? '修改' : '删除'
-      toast.success(`成功${actionText} ${variables.nodeIds.length} 个节点的标签`)
+      const actionText =
+        variables.action === 'add'
+          ? '添加'
+          : variables.action === 'rename'
+            ? '修改'
+            : '删除'
+      toast.success(
+        `成功${actionText} ${variables.nodeIds.length} 个节点的标签`
+      )
       setBatchTagInput('')
       setBatchTagSelectedTag(null)
       if (variables.action !== 'delete') {
@@ -1657,8 +1985,12 @@ function NodesPage() {
 
   // 批量修改节点名称
   const batchRenameMutation = useMutation({
-    mutationFn: async (updates: Array<{ node_id: number; new_name: string }>) => {
-      const response = await api.post('/api/admin/nodes/batch-rename', { updates })
+    mutationFn: async (
+      updates: Array<{ node_id: number; new_name: string }>
+    ) => {
+      const response = await api.post('/api/admin/nodes/batch-rename', {
+        updates,
+      })
       return response.data
     },
     onSuccess: (data) => {
@@ -1678,16 +2010,22 @@ function NodesPage() {
   })
 
   const batchDisableSkipCertMutation = useMutation({
-	mutationFn: async (nodeIds: number[]) => {
-	  const response = await api.post('/api/admin/nodes/batch-disable-skip-cert', { node_ids: nodeIds })
-	  return response.data
-	},
-	onSuccess: (data) => {
-	  queryClient.invalidateQueries({ queryKey: ['nodes'] })
-	  toast.success(`已关闭 ${data.success} 个节点的证书跳过，跳过 ${data.skipped} 个不适用节点`)
-	  setSelectedNodeIds(new Set())
-	},
-	onError: (error: any) => toast.error(error.response?.data?.error || '批量关闭证书验证失败'),
+    mutationFn: async (nodeIds: number[]) => {
+      const response = await api.post(
+        '/api/admin/nodes/batch-disable-skip-cert',
+        { node_ids: nodeIds }
+      )
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success(
+        `已关闭 ${data.success} 个节点的证书跳过，跳过 ${data.skipped} 个不适用节点`
+      )
+      setSelectedNodeIds(new Set())
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.error || '批量关闭证书验证失败'),
   })
 
   // 批量添加地区 emoji
@@ -1705,7 +2043,7 @@ function NodesPage() {
 
     try {
       for (const nodeId of nodeIds) {
-        const node = savedNodes.find(n => n.id === nodeId)
+        const node = savedNodes.find((n) => n.id === nodeId)
         if (!node) continue
 
         // 检查节点名称是否已有 emoji 前缀
@@ -1735,7 +2073,9 @@ function NodesPage() {
           // 如果是域名，先解析为 IP（优先 IPv4）
           if (!isIpAddress(server)) {
             try {
-              const dnsResult = await api.get(`/api/dns/resolve?hostname=${encodeURIComponent(server)}`)
+              const dnsResult = await api.get(
+                `/api/dns/resolve?hostname=${encodeURIComponent(server)}`
+              )
               const ips = dnsResult.data?.ips || []
               if (ips.length === 0) {
                 failCount++
@@ -1765,8 +2105,14 @@ function NodesPage() {
 
           // 更新节点名称
           const newName = `${flag} ${node.node_name}`
-          const updatedParsedConfig = updateConfigName(node.parsed_config, newName)
-          const updatedClashConfig = updateConfigName(node.clash_config, newName)
+          const updatedParsedConfig = updateConfigName(
+            node.parsed_config,
+            newName
+          )
+          const updatedClashConfig = updateConfigName(
+            node.clash_config,
+            newName
+          )
 
           await api.put(`/api/admin/nodes/${nodeId}`, {
             raw_url: node.raw_url,
@@ -1805,119 +2151,133 @@ function NodesPage() {
   }, [selectedNodeIds, savedNodes, queryClient])
 
   // 为单个节点添加地区 emoji
-  const handleAddSingleNodeEmoji = useCallback(async (nodeId: number) => {
-    const node = savedNodes.find(n => n.id === nodeId)
-    if (!node) return
+  const handleAddSingleNodeEmoji = useCallback(
+    async (nodeId: number) => {
+      const node = savedNodes.find((n) => n.id === nodeId)
+      if (!node) return
 
-    setAddingEmojiForNode(nodeId)
+      setAddingEmojiForNode(nodeId)
 
-    try {
-      // 获取 server 地址
-      let parsedConfig
       try {
-        parsedConfig = JSON.parse(node.parsed_config)
-      } catch {
-        toast.error('无法解析节点配置')
-        return
-      }
-
-      const server = parsedConfig?.server
-      if (!server) {
-        toast.error('节点配置中没有 server 地址')
-        return
-      }
-
-      let ip = server
-
-      // 如果是域名，先解析为 IP（优先 IPv4）
-      if (!isIpAddress(server)) {
+        // 获取 server 地址
+        let parsedConfig
         try {
-          const dnsResult = await api.get(`/api/dns/resolve?hostname=${encodeURIComponent(server)}`)
-          const ips = dnsResult.data?.ips || []
-          if (ips.length === 0) {
+          parsedConfig = JSON.parse(node.parsed_config)
+        } catch {
+          toast.error('无法解析节点配置')
+          return
+        }
+
+        const server = parsedConfig?.server
+        if (!server) {
+          toast.error('节点配置中没有 server 地址')
+          return
+        }
+
+        let ip = server
+
+        // 如果是域名，先解析为 IP（优先 IPv4）
+        if (!isIpAddress(server)) {
+          try {
+            const dnsResult = await api.get(
+              `/api/dns/resolve?hostname=${encodeURIComponent(server)}`
+            )
+            const ips = dnsResult.data?.ips || []
+            if (ips.length === 0) {
+              toast.error('DNS 解析失败')
+              return
+            }
+            ip = ips[0]
+          } catch {
             toast.error('DNS 解析失败')
             return
           }
-          ip = ips[0]
-        } catch {
-          toast.error('DNS 解析失败')
+        }
+
+        // 获取 IP 地理位置
+        const geoInfo = await getGeoIPInfo(ip)
+        if (!geoInfo.country_code) {
+          toast.error('获取地理位置失败')
           return
         }
+
+        // 转换为旗帜 emoji
+        const flag = countryCodeToFlag(geoInfo.country_code)
+        if (!flag) {
+          toast.error('无法生成旗帜 emoji')
+          return
+        }
+
+        // 更新节点名称（先去除已有国旗 emoji）
+        const baseName = stripFlagEmoji(node.node_name)
+        const newName = `${flag} ${baseName}`
+        const updatedParsedConfig = updateConfigName(
+          node.parsed_config,
+          newName
+        )
+        const updatedClashConfig = updateConfigName(node.clash_config, newName)
+
+        await api.put(`/api/admin/nodes/${nodeId}`, {
+          raw_url: node.raw_url,
+          node_name: newName,
+          protocol: node.protocol,
+          parsed_config: updatedParsedConfig,
+          clash_config: updatedClashConfig,
+          enabled: node.enabled,
+          tag: node.tag,
+          tags: node.tags || [node.tag],
+        })
+
+        queryClient.invalidateQueries({ queryKey: ['nodes'] })
+        toast.success('已添加地区 emoji')
+      } catch (error) {
+        console.error('Failed to add emoji:', error)
+        toast.error('添加 emoji 失败')
+      } finally {
+        setAddingEmojiForNode(null)
       }
-
-      // 获取 IP 地理位置
-      const geoInfo = await getGeoIPInfo(ip)
-      if (!geoInfo.country_code) {
-        toast.error('获取地理位置失败')
-        return
-      }
-
-      // 转换为旗帜 emoji
-      const flag = countryCodeToFlag(geoInfo.country_code)
-      if (!flag) {
-        toast.error('无法生成旗帜 emoji')
-        return
-      }
-
-      // 更新节点名称（先去除已有国旗 emoji）
-      const baseName = stripFlagEmoji(node.node_name)
-      const newName = `${flag} ${baseName}`
-      const updatedParsedConfig = updateConfigName(node.parsed_config, newName)
-      const updatedClashConfig = updateConfigName(node.clash_config, newName)
-
-      await api.put(`/api/admin/nodes/${nodeId}`, {
-        raw_url: node.raw_url,
-        node_name: newName,
-        protocol: node.protocol,
-        parsed_config: updatedParsedConfig,
-        clash_config: updatedClashConfig,
-        enabled: node.enabled,
-        tag: node.tag,
-        tags: node.tags || [node.tag],
-      })
-
-      queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('已添加地区 emoji')
-    } catch (error) {
-      console.error('Failed to add emoji:', error)
-      toast.error('添加 emoji 失败')
-    } finally {
-      setAddingEmojiForNode(null)
-    }
-  }, [savedNodes, queryClient])
+    },
+    [savedNodes, queryClient]
+  )
 
   // 手动选择国旗 emoji
-  const handleSetNodeFlag = useCallback(async (nodeId: number, flag: string) => {
-    const node = savedNodes.find(n => n.id === nodeId)
-    if (!node) return
+  const handleSetNodeFlag = useCallback(
+    async (nodeId: number, flag: string) => {
+      const node = savedNodes.find((n) => n.id === nodeId)
+      if (!node) return
 
-    setAddingEmojiForNode(nodeId)
-    try {
-      const baseName = stripFlagEmoji(node.node_name)
-      const newName = `${flag} ${baseName}`
-      const updatedParsedConfig = updateConfigName(node.parsed_config, newName)
-      const updatedClashConfig = updateConfigName(node.clash_config, newName)
+      setAddingEmojiForNode(nodeId)
+      try {
+        const baseName = stripFlagEmoji(node.node_name)
+        const newName = `${flag} ${baseName}`
+        const updatedParsedConfig = updateConfigName(
+          node.parsed_config,
+          newName
+        )
+        const updatedClashConfig = updateConfigName(node.clash_config, newName)
 
-      await api.put(`/api/admin/nodes/${nodeId}`, {
-        raw_url: node.raw_url,
-        node_name: newName,
-        protocol: node.protocol,
-        parsed_config: updatedParsedConfig,
-        clash_config: updatedClashConfig,
-        enabled: node.enabled,
-        tag: node.tag,
-        tags: node.tags || [node.tag],
-      })
+        await api.put(`/api/admin/nodes/${nodeId}`, {
+          raw_url: node.raw_url,
+          node_name: newName,
+          protocol: node.protocol,
+          parsed_config: updatedParsedConfig,
+          clash_config: updatedClashConfig,
+          enabled: node.enabled,
+          tag: node.tag,
+          tags: node.tags || [node.tag],
+        })
 
-      queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('已设置国旗 emoji')
-    } catch (error) {
-      console.error('Failed to set flag emoji:', error)
-      toast.error('设置国旗 emoji 失败')
-    } finally {
-      setAddingEmojiForNode(null)
-    }
-  }, [savedNodes, queryClient])
+        queryClient.invalidateQueries({ queryKey: ['nodes'] })
+        toast.success('已设置国旗 emoji')
+      } catch (error) {
+        console.error('Failed to set flag emoji:', error)
+        toast.error('设置国旗 emoji 失败')
+      } finally {
+        setAddingEmojiForNode(null)
+      }
+    },
+    [savedNodes, queryClient]
+  )
 
   // 查找重复节点
   const findDuplicateNodes = useCallback(() => {
@@ -1934,10 +2294,13 @@ function NodesPage() {
         // 解析配置并按 key 排序，同时加上 node_name 作为唯一标识的一部分
         const config = JSON.parse(node.clash_config)
         // 使用数据库中的 node_name（用户可能修改过）而不是配置中的 name
-        const configKey = JSON.stringify({
-          ...config,
-          __node_name__: node.node_name // 使用特殊 key 避免与配置字段冲突
-        }, Object.keys({ ...config, __node_name__: node.node_name }).sort())
+        const configKey = JSON.stringify(
+          {
+            ...config,
+            __node_name__: node.node_name, // 使用特殊 key 避免与配置字段冲突
+          },
+          Object.keys({ ...config, __node_name__: node.node_name }).sort()
+        )
 
         if (!configGroups.has(configKey)) {
           configGroups.set(configKey, [])
@@ -1979,7 +2342,8 @@ function NodesPage() {
     for (const group of duplicateGroups) {
       // 按创建时间排序，保留最早创建的
       const sortedNodes = [...group.nodes].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       )
       // 跳过第一个，删除其余
       for (let i = 1; i < sortedNodes.length; i++) {
@@ -1994,7 +2358,9 @@ function NodesPage() {
 
     setDeletingDuplicates(true)
     try {
-      await api.post('/api/admin/nodes/batch-delete', { node_ids: nodeIdsToDelete })
+      await api.post('/api/admin/nodes/batch-delete', {
+        node_ids: nodeIdsToDelete,
+      })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       toast.success(`成功删除 ${nodeIdsToDelete.length} 个重复节点`)
       setDuplicateDialogOpen(false)
@@ -2007,54 +2373,68 @@ function NodesPage() {
   }, [duplicateGroups, queryClient])
 
   // 生成临时订阅 (支持单个节点或批量模式)
-  const generateTempSubscription = useCallback(async (singleNodeId?: number) => {
-    const nodeIds = singleNodeId !== undefined ? [singleNodeId] : Array.from(selectedNodeIds)
-    if (nodeIds.length === 0) {
-      toast.error('请先选择节点')
-      return
-    }
-
-    setTempSubGenerating(true)
-    try {
-      // 获取节点的 clash 配置（按 nodeOrder 排序）
-      const nodeIdsSet = new Set(nodeIds)
-      // 直接从 savedNodes 获取，按 nodeOrder 排序
-      const orderMap = new Map<number, number>()
-      nodeOrder.forEach((id, index) => orderMap.set(id, index))
-      const nodesData = savedNodes
-        .filter(n => nodeIdsSet.has(n.id))
-        .sort((a, b) => {
-          const orderA = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
-          const orderB = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
-          return orderA - orderB
-        })
-      const proxies = nodesData.map(node => {
-        try {
-          return JSON.parse(node.clash_config)
-        } catch {
-          return null
-        }
-      }).filter(Boolean)
-
-      if (proxies.length === 0) {
-        toast.error('无法解析节点的配置')
+  const generateTempSubscription = useCallback(
+    async (singleNodeId?: number) => {
+      const nodeIds =
+        singleNodeId !== undefined
+          ? [singleNodeId]
+          : Array.from(selectedNodeIds)
+      if (nodeIds.length === 0) {
+        toast.error('请先选择节点')
         return
       }
 
-      const response = await api.post('/api/admin/temp-subscription', {
-        proxies,
-        max_access: tempSubMaxAccess,
-        expire_seconds: tempSubExpireSeconds,
-      })
+      setTempSubGenerating(true)
+      try {
+        // 获取节点的 clash 配置（按 nodeOrder 排序）
+        const nodeIdsSet = new Set(nodeIds)
+        // 直接从 savedNodes 获取，按 nodeOrder 排序
+        const orderMap = new Map<number, number>()
+        nodeOrder.forEach((id, index) => orderMap.set(id, index))
+        const nodesData = savedNodes
+          .filter((n) => nodeIdsSet.has(n.id))
+          .sort((a, b) => {
+            const orderA = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
+            const orderB = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
+            return orderA - orderB
+          })
+        const proxies = nodesData
+          .map((node) => {
+            try {
+              return JSON.parse(node.clash_config)
+            } catch {
+              return null
+            }
+          })
+          .filter(Boolean)
 
-      const fullUrl = `${window.location.origin}${response.data.url}`
-      setTempSubUrl(fullUrl)
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || '生成临时订阅失败')
-    } finally {
-      setTempSubGenerating(false)
-    }
-  }, [selectedNodeIds, savedNodes, nodeOrder, tempSubMaxAccess, tempSubExpireSeconds])
+        if (proxies.length === 0) {
+          toast.error('无法解析节点的配置')
+          return
+        }
+
+        const response = await api.post('/api/admin/temp-subscription', {
+          proxies,
+          max_access: tempSubMaxAccess,
+          expire_seconds: tempSubExpireSeconds,
+        })
+
+        const fullUrl = `${window.location.origin}${response.data.url}`
+        setTempSubUrl(fullUrl)
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || '生成临时订阅失败')
+      } finally {
+        setTempSubGenerating(false)
+      }
+    },
+    [
+      selectedNodeIds,
+      savedNodes,
+      nodeOrder,
+      tempSubMaxAccess,
+      tempSubExpireSeconds,
+    ]
+  )
 
   // 自动生成临时订阅：Dialog 打开时或参数变化时自动生成
   useEffect(() => {
@@ -2065,11 +2445,22 @@ function NodesPage() {
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [tempSubDialogOpen, tempSubMaxAccess, tempSubExpireSeconds, tempSubSingleNodeId])
+  }, [
+    tempSubDialogOpen,
+    tempSubMaxAccess,
+    tempSubExpireSeconds,
+    tempSubSingleNodeId,
+  ])
 
   // 创建链式代理节点
   const createRelayNodeMutation = useMutation({
-    mutationFn: async ({ sourceNode, targetNode }: { sourceNode: ParsedNode; targetNode: ParsedNode }) => {
+    mutationFn: async ({
+      sourceNode,
+      targetNode,
+    }: {
+      sourceNode: ParsedNode
+      targetNode: ParsedNode
+    }) => {
       // 解析源节点的 clash 配置
       let sourceClashConfig: ClashProxy
       try {
@@ -2116,7 +2507,15 @@ function NodesPage() {
 
   // 创建中转组
   const createRelayGroupMutation = useMutation({
-    mutationFn: async ({ sourceNode, groupName, nodeIds }: { sourceNode: ParsedNode; groupName: string; nodeIds: number[] }) => {
+    mutationFn: async ({
+      sourceNode,
+      groupName,
+      nodeIds,
+    }: {
+      sourceNode: ParsedNode
+      groupName: string
+      nodeIds: number[]
+    }) => {
       const response = await api.put(`/api/admin/nodes/${sourceNode.id}`, {
         relay_group_name: groupName,
         relay_group_node_ids: nodeIds,
@@ -2159,7 +2558,12 @@ function NodesPage() {
 
   // 从订阅获取节点
   const fetchSubscriptionMutation = useMutation({
-    mutationFn: async ({ url, userAgent, fetchSkipCertVerify, forceNodeSkipCert }: {
+    mutationFn: async ({
+      url,
+      userAgent,
+      fetchSkipCertVerify,
+      forceNodeSkipCert,
+    }: {
       url: string
       userAgent: string
       fetchSkipCertVerify: boolean
@@ -2261,7 +2665,7 @@ function NodesPage() {
     // 找出所有非空行的最小缩进
     let minIndent = Infinity
     for (const line of lines) {
-      if (line.trim() === '') continue  // 跳过空行
+      if (line.trim() === '') continue // 跳过空行
       const match = line.match(/^(\s*)/)
       if (match) {
         minIndent = Math.min(minIndent, match[1].length)
@@ -2274,10 +2678,15 @@ function NodesPage() {
     }
 
     // 移除每行的公共前导空格
-    let normalized = minIndent > 0 ? lines.map(line => {
-      if (line.trim() === '') return ''
-      return line.slice(minIndent)
-    }).join('\n') : input
+    let normalized =
+      minIndent > 0
+        ? lines
+            .map((line) => {
+              if (line.trim() === '') return ''
+              return line.slice(minIndent)
+            })
+            .join('\n')
+        : input
 
     // 修复首行缩进不一致的问题：
     // 比如 "- name: xxx\n    type: vless" 第一行没缩进但后续行有4空格
@@ -2295,19 +2704,22 @@ function NodesPage() {
         const attrMatch = line.match(/^(\s+)(\w+[-\w]*):/)
         if (attrMatch) {
           const actualIndent = attrMatch[1].length
-          const expectedIndent = 2  // YAML 列表项属性的标准缩进
+          const expectedIndent = 2 // YAML 列表项属性的标准缩进
           if (actualIndent > expectedIndent) {
             // 缩进过多，需要减少
             const excess = actualIndent - expectedIndent
-            normalized = normalizedLines.map((l, idx) => {
-              if (idx === 0 || l.trim() === '') return l.trim() === '' ? '' : l
-              // 减少多余的缩进
-              const currentIndent = l.match(/^(\s*)/)?.[1].length || 0
-              if (currentIndent >= excess) {
-                return l.slice(excess)
-              }
-              return l
-            }).join('\n')
+            normalized = normalizedLines
+              .map((l, idx) => {
+                if (idx === 0 || l.trim() === '')
+                  return l.trim() === '' ? '' : l
+                // 减少多余的缩进
+                const currentIndent = l.match(/^(\s*)/)?.[1].length || 0
+                if (currentIndent >= excess) {
+                  return l.slice(excess)
+                }
+                return l
+              })
+              .join('\n')
           }
           break
         }
@@ -2337,27 +2749,38 @@ function NodesPage() {
       let yamlContent = trimmed
 
       // {name: xxx} 或 {"name": xxx}
-      const isPureInlineFormat = /^\s*\{["']?name["']?:/.test(trimmed) && !trimmed.startsWith('proxies:')
+      const isPureInlineFormat =
+        /^\s*\{["']?name["']?:/.test(trimmed) && !trimmed.startsWith('proxies:')
 
       // - name: xxx 或 - {"name": xxx}
       const isListFormat = /^-\s/.test(trimmed) && !trimmed.includes('proxies:')
 
       if (isPureInlineFormat) {
         // 处理json内联格式
-        const lines = trimmed.split('\n').map(line => {
-          const l = line.trim()
-          if (l && l.startsWith('{')) {
-            return '  - ' + l
-          }
-          return ''
-        }).filter(Boolean)
+        const lines = trimmed
+          .split('\n')
+          .map((line) => {
+            const l = line.trim()
+            if (l && l.startsWith('{')) {
+              return '  - ' + l
+            }
+            return ''
+          })
+          .filter(Boolean)
         yamlContent = 'proxies:\n' + lines.join('\n')
       } else if (isListFormat) {
-        // - name: xxx 
-        yamlContent = 'proxies:\n' + trimmed.split('\n').map(l => '  ' + l).join('\n')
+        // - name: xxx
+        yamlContent =
+          'proxies:\n' +
+          trimmed
+            .split('\n')
+            .map((l) => '  ' + l)
+            .join('\n')
       }
 
-      const parsed = parseYAML(yamlContent) as { proxies?: ClashProxy[] } | ClashProxy[]
+      const parsed = parseYAML(yamlContent) as
+        | { proxies?: ClashProxy[] }
+        | ClashProxy[]
 
       let proxies: ClashProxy[] = []
       if (Array.isArray(parsed)) {
@@ -2414,8 +2837,13 @@ function NodesPage() {
     const lines = input
       .split('\n')
       .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#') && !l.startsWith(';') && !l.startsWith('['))
-    const uriLines: string[] = lines.filter((l) => l.includes('://') || l.includes('='))
+      .filter(
+        (l) =>
+          l && !l.startsWith('#') && !l.startsWith(';') && !l.startsWith('[')
+      )
+    const uriLines: string[] = lines.filter(
+      (l) => l.includes('://') || l.includes('=')
+    )
 
     // 统一交后端解析
     if (uriLines.length > 0) {
@@ -2468,18 +2896,21 @@ function NodesPage() {
   }
 
   const handleToggle = (id: number) => {
-    const node = savedNodes.find(n => n.id === id)
+    const node = savedNodes.find((n) => n.id === id)
     if (node) {
       toggleMutation.mutate({ id, enabled: !node.enabled })
     }
   }
 
-  const handleDelete = useCallback((id: number) => {
-    deleteMutation.mutate(id)
-  }, [deleteMutation])
+  const handleDelete = useCallback(
+    (id: number) => {
+      deleteMutation.mutate(id)
+    },
+    [deleteMutation]
+  )
 
   const handleDeleteTemp = useCallback((id: string) => {
-    setTempNodes(prev => prev.filter(node => node.id !== id))
+    setTempNodes((prev) => prev.filter((node) => node.id !== id))
     toast.success('已移除临时节点')
   }, [])
 
@@ -2488,44 +2919,47 @@ function NodesPage() {
   }, [])
 
   const handleNameEditChange = useCallback((value: string) => {
-    setEditingNode(prev => (prev ? { ...prev, value } : prev))
+    setEditingNode((prev) => (prev ? { ...prev, value } : prev))
   }, [])
 
   const handleNameEditCancel = useCallback(() => {
     setEditingNode(null)
   }, [])
 
-  const handleNameEditSubmit = useCallback((node) => {
-    if (!editingNode) return
-    const trimmed = editingNode.value.trim()
-    if (!trimmed) {
-      toast.error('节点名称不能为空')
-      return
-    }
-    if (trimmed === node.name) {
+  const handleNameEditSubmit = useCallback(
+    (node) => {
+      if (!editingNode) return
+      const trimmed = editingNode.value.trim()
+      if (!trimmed) {
+        toast.error('节点名称不能为空')
+        return
+      }
+      if (trimmed === node.name) {
+        setEditingNode(null)
+        return
+      }
+
+      if (node.isSaved) {
+        updateNodeNameMutation.mutate({ id: node.dbId, name: trimmed })
+        return
+      }
+
+      setTempNodes((prev) =>
+        prev.map((item) => {
+          if (item.id !== node.id) return item
+          return {
+            ...item,
+            name: trimmed,
+            parsed: cloneProxyWithName(item.parsed, trimmed),
+            clash: cloneProxyWithName(item.clash, trimmed),
+          }
+        })
+      )
+      toast.success('已更新临时节点名称')
       setEditingNode(null)
-      return
-    }
-
-    if (node.isSaved) {
-      updateNodeNameMutation.mutate({ id: node.dbId, name: trimmed })
-      return
-    }
-
-    setTempNodes(prev =>
-      prev.map(item => {
-        if (item.id !== node.id) return item
-        return {
-          ...item,
-          name: trimmed,
-          parsed: cloneProxyWithName(item.parsed, trimmed),
-          clash: cloneProxyWithName(item.clash, trimmed),
-        }
-      }),
-    )
-    toast.success('已更新临时节点名称')
-    setEditingNode(null)
-  }, [editingNode, updateNodeNameMutation])
+    },
+    [editingNode, updateNodeNameMutation]
+  )
 
   const handleClearAll = () => {
     clearAllMutation.mutate()
@@ -2538,7 +2972,8 @@ function NodesPage() {
     }
 
     // 确定使用哪个 User-Agent
-    const finalUserAgent = userAgent === '手动输入' ? customUserAgent : userAgent
+    const finalUserAgent =
+      userAgent === '手动输入' ? customUserAgent : userAgent
 
     if (userAgent === '手动输入' && !customUserAgent.trim()) {
       toast.error('请输入自定义 User-Agent')
@@ -2558,7 +2993,7 @@ function NodesPage() {
   // 合并保存的节点和临时节点用于显示
   const displayNodes = useMemo(() => {
     // 将保存的节点转换为显示格式
-    const saved = savedNodes.map(n => {
+    const saved = savedNodes.map((n) => {
       let parsed: ProxyNode | null = null
       let clash: ClashProxy | null = null
       try {
@@ -2567,7 +3002,8 @@ function NodesPage() {
       } catch (e) {
         // 解析失败，保持 null
       }
-      const displayName = (n.node_name && n.node_name.trim()) || parsed?.name || '未知'
+      const displayName =
+        (n.node_name && n.node_name.trim()) || parsed?.name || '未知'
       const parsedWithName = cloneProxyWithName(parsed, displayName)
       const clashWithName = cloneProxyWithName(clash, displayName)
       return {
@@ -2585,7 +3021,7 @@ function NodesPage() {
     })
 
     // 临时节点
-    const temp = tempNodes.map(n => ({
+    const temp = tempNodes.map((n) => ({
       ...n,
       parsed: cloneProxyWithName(n.parsed, n.name),
       clash: cloneProxyWithName(n.clash, n.name),
@@ -2608,95 +3044,112 @@ function NodesPage() {
   }, [savedNodes, tempNodes, nodeOrder])
 
   // 拖拽开始处理：检测是否批量拖动
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    // 锁定 body 滚动
-    document.body.style.overflow = 'hidden'
-    document.body.style.touchAction = 'none'
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      // 锁定 body 滚动
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
 
-    const { active } = event
-    setActiveId(active.id as string)
+      const { active } = event
+      setActiveId(active.id as string)
 
-    const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
-    const activeNode = savedDisplayNodes.find(n => n.id === active.id)
+      const savedDisplayNodes = displayNodes.filter((n) => n.isSaved && n.dbId)
+      const activeNode = savedDisplayNodes.find((n) => n.id === active.id)
 
-    // 如果拖动的节点在选中集合中，且选中了多个节点，则是批量拖动
-    if (activeNode?.dbId && selectedNodeIds.has(activeNode.dbId) && selectedNodeIds.size > 1) {
-      setBatchDraggingIds(new Set(selectedNodeIds))
-    } else {
-      setBatchDraggingIds(new Set())
-    }
-  }, [displayNodes, selectedNodeIds])
+      // 如果拖动的节点在选中集合中，且选中了多个节点，则是批量拖动
+      if (
+        activeNode?.dbId &&
+        selectedNodeIds.has(activeNode.dbId) &&
+        selectedNodeIds.size > 1
+      ) {
+        setBatchDraggingIds(new Set(selectedNodeIds))
+      } else {
+        setBatchDraggingIds(new Set())
+      }
+    },
+    [displayNodes, selectedNodeIds]
+  )
 
   // 拖拽结束处理（支持批量拖动）
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    // 恢复 body 滚动
-    document.body.style.overflow = ''
-    document.body.style.touchAction = ''
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      // 恢复 body 滚动
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
 
-    const { active, over } = event
+      const { active, over } = event
 
-    // 清除拖动状态（无论结果如何都要清除）
-    setActiveId(null)
-    setBatchDraggingIds(new Set())
+      // 清除拖动状态（无论结果如何都要清除）
+      setActiveId(null)
+      setBatchDraggingIds(new Set())
 
-    if (!over || active.id === over.id) return
+      if (!over || active.id === over.id) return
 
-    // 获取当前显示的已保存节点（按当前顺序）
-    const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
-    const activeNode = savedDisplayNodes.find(n => n.id === active.id)
-    if (!activeNode) return
+      // 获取当前显示的已保存节点（按当前顺序）
+      const savedDisplayNodes = displayNodes.filter((n) => n.isSaved && n.dbId)
+      const activeNode = savedDisplayNodes.find((n) => n.id === active.id)
+      if (!activeNode) return
 
-    const overIndex = savedDisplayNodes.findIndex(n => n.id === over.id)
-    if (overIndex === -1) return
+      const overIndex = savedDisplayNodes.findIndex((n) => n.id === over.id)
+      if (overIndex === -1) return
 
-    // 判断是否批量拖动：拖拽的节点在选中集合中，且选中了多个节点
-    const isDraggingSelected = activeNode.dbId && selectedNodeIds.has(activeNode.dbId)
+      // 判断是否批量拖动：拖拽的节点在选中集合中，且选中了多个节点
+      const isDraggingSelected =
+        activeNode.dbId && selectedNodeIds.has(activeNode.dbId)
 
-    if (isDraggingSelected && selectedNodeIds.size > 1) {
-      // 批量拖动逻辑
-      const targetNode = savedDisplayNodes[overIndex]
+      if (isDraggingSelected && selectedNodeIds.size > 1) {
+        // 批量拖动逻辑
+        const targetNode = savedDisplayNodes[overIndex]
 
-      // 如果目标也是选中的节点，忽略操作
-      if (targetNode.dbId && selectedNodeIds.has(targetNode.dbId)) return
+        // 如果目标也是选中的节点，忽略操作
+        if (targetNode.dbId && selectedNodeIds.has(targetNode.dbId)) return
 
-      // 获取选中节点的ID（保持当前显示顺序）
-      const selectedIds = savedDisplayNodes
-        .filter(n => n.dbId && selectedNodeIds.has(n.dbId))
-        .map(n => n.dbId!)
+        // 获取选中节点的ID（保持当前显示顺序）
+        const selectedIds = savedDisplayNodes
+          .filter((n) => n.dbId && selectedNodeIds.has(n.dbId))
+          .map((n) => n.dbId!)
 
-      // 获取未选中的节点
-      const unselectedNodes = savedDisplayNodes.filter(n => !n.dbId || !selectedNodeIds.has(n.dbId))
+        // 获取未选中的节点
+        const unselectedNodes = savedDisplayNodes.filter(
+          (n) => !n.dbId || !selectedNodeIds.has(n.dbId)
+        )
 
-      // 计算在目标位置之前还是之后插入
-      const activeIndex = savedDisplayNodes.findIndex(n => n.id === active.id)
-      const insertAfter = activeIndex < overIndex
+        // 计算在目标位置之前还是之后插入
+        const activeIndex = savedDisplayNodes.findIndex(
+          (n) => n.id === active.id
+        )
+        const insertAfter = activeIndex < overIndex
 
-      // 重新排列：将选中的节点作为整体插入到目标位置
-      const newOrder: number[] = []
-      for (const node of unselectedNodes) {
-        if (node.dbId === targetNode.dbId && !insertAfter) {
-          // 在目标之前插入
-          newOrder.push(...selectedIds)
+        // 重新排列：将选中的节点作为整体插入到目标位置
+        const newOrder: number[] = []
+        for (const node of unselectedNodes) {
+          if (node.dbId === targetNode.dbId && !insertAfter) {
+            // 在目标之前插入
+            newOrder.push(...selectedIds)
+          }
+          newOrder.push(node.dbId!)
+          if (node.dbId === targetNode.dbId && insertAfter) {
+            // 在目标之后插入
+            newOrder.push(...selectedIds)
+          }
         }
-        newOrder.push(node.dbId!)
-        if (node.dbId === targetNode.dbId && insertAfter) {
-          // 在目标之后插入
-          newOrder.push(...selectedIds)
-        }
+
+        debouncedSaveNodeOrder(newOrder)
+      } else {
+        // 单节点拖动（保持原有逻辑）
+        const activeIndex = savedDisplayNodes.findIndex(
+          (n) => n.id === active.id
+        )
+        if (activeIndex === -1) return
+
+        const currentIds = savedDisplayNodes.map((n) => n.dbId!)
+        const newOrderIds = arrayMove(currentIds, activeIndex, overIndex)
+
+        debouncedSaveNodeOrder(newOrderIds)
       }
-
-      debouncedSaveNodeOrder(newOrder)
-    } else {
-      // 单节点拖动（保持原有逻辑）
-      const activeIndex = savedDisplayNodes.findIndex(n => n.id === active.id)
-      if (activeIndex === -1) return
-
-      const currentIds = savedDisplayNodes.map(n => n.dbId!)
-      const newOrderIds = arrayMove(currentIds, activeIndex, overIndex)
-
-      debouncedSaveNodeOrder(newOrderIds)
-    }
-  }, [displayNodes, selectedNodeIds, debouncedSaveNodeOrder])
+    },
+    [displayNodes, selectedNodeIds, debouncedSaveNodeOrder]
+  )
 
   // 拖拽取消处理
   const handleDragCancel = useCallback(() => {
@@ -2705,60 +3158,75 @@ function NodesPage() {
   }, [])
 
   // 节点排序快捷操作：置顶/置底/上移/下移，支持单节点和批量
-  const handleMoveNodes = useCallback((direction: 'top' | 'bottom' | 'up' | 'down', targetIds?: Set<number>) => {
-    const ids = targetIds || selectedNodeIds
-    if (ids.size === 0) return
+  const handleMoveNodes = useCallback(
+    (direction: 'top' | 'bottom' | 'up' | 'down', targetIds?: Set<number>) => {
+      const ids = targetIds || selectedNodeIds
+      if (ids.size === 0) return
 
-    const currentOrder = [...nodeOrder]
-    // 确保所有已保存节点都在 order 中
-    const allSavedIds = savedNodes.map(n => n.id)
-    const orderSet = new Set(currentOrder)
-    for (const id of allSavedIds) {
-      if (!orderSet.has(id)) currentOrder.push(id)
-    }
+      const currentOrder = [...nodeOrder]
+      // 确保所有已保存节点都在 order 中
+      const allSavedIds = savedNodes.map((n) => n.id)
+      const orderSet = new Set(currentOrder)
+      for (const id of allSavedIds) {
+        if (!orderSet.has(id)) currentOrder.push(id)
+      }
 
-    const movingIds = new Set(ids)
-    const movingItems = currentOrder.filter(id => movingIds.has(id))
-    const restItems = currentOrder.filter(id => !movingIds.has(id))
+      const movingIds = new Set(ids)
+      const movingItems = currentOrder.filter((id) => movingIds.has(id))
+      const restItems = currentOrder.filter((id) => !movingIds.has(id))
 
-    let newOrder: number[]
-    if (direction === 'top') {
-      newOrder = [...movingItems, ...restItems]
-    } else if (direction === 'bottom') {
-      newOrder = [...restItems, ...movingItems]
-    } else if (direction === 'up') {
-      // 找到选中节点块在原 order 中的最小索引
-      const firstIdx = currentOrder.findIndex(id => movingIds.has(id))
-      if (firstIdx <= 0) return
-      // 将选中节点整体上移一位：插入到 firstIdx-1 的位置
-      const insertBefore = currentOrder[firstIdx - 1]
-      const insertIdx = restItems.indexOf(insertBefore)
-      newOrder = [...restItems.slice(0, insertIdx), ...movingItems, ...restItems.slice(insertIdx)]
-    } else {
-      // down: 找到选中节点块在原 order 中的最大索引
-      const lastIdx = currentOrder.length - 1 - [...currentOrder].reverse().findIndex(id => movingIds.has(id))
-      if (lastIdx >= currentOrder.length - 1) return
-      // 将选中节点整体下移一位：插入到 lastIdx+1 之后
-      const insertAfter = currentOrder[lastIdx + 1]
-      const insertIdx = restItems.indexOf(insertAfter)
-      newOrder = [...restItems.slice(0, insertIdx + 1), ...movingItems, ...restItems.slice(insertIdx + 1)]
-    }
+      let newOrder: number[]
+      if (direction === 'top') {
+        newOrder = [...movingItems, ...restItems]
+      } else if (direction === 'bottom') {
+        newOrder = [...restItems, ...movingItems]
+      } else if (direction === 'up') {
+        // 找到选中节点块在原 order 中的最小索引
+        const firstIdx = currentOrder.findIndex((id) => movingIds.has(id))
+        if (firstIdx <= 0) return
+        // 将选中节点整体上移一位：插入到 firstIdx-1 的位置
+        const insertBefore = currentOrder[firstIdx - 1]
+        const insertIdx = restItems.indexOf(insertBefore)
+        newOrder = [
+          ...restItems.slice(0, insertIdx),
+          ...movingItems,
+          ...restItems.slice(insertIdx),
+        ]
+      } else {
+        // down: 找到选中节点块在原 order 中的最大索引
+        const lastIdx =
+          currentOrder.length -
+          1 -
+          [...currentOrder].reverse().findIndex((id) => movingIds.has(id))
+        if (lastIdx >= currentOrder.length - 1) return
+        // 将选中节点整体下移一位：插入到 lastIdx+1 之后
+        const insertAfter = currentOrder[lastIdx + 1]
+        const insertIdx = restItems.indexOf(insertAfter)
+        newOrder = [
+          ...restItems.slice(0, insertIdx + 1),
+          ...movingItems,
+          ...restItems.slice(insertIdx + 1),
+        ]
+      }
 
-    debouncedSaveNodeOrder(newOrder)
-  }, [selectedNodeIds, nodeOrder, savedNodes, debouncedSaveNodeOrder])
+      debouncedSaveNodeOrder(newOrder)
+    },
+    [selectedNodeIds, nodeOrder, savedNodes, debouncedSaveNodeOrder]
+  )
 
   const filteredNodes = useMemo(() => {
     let nodes = displayNodes
 
     // 按协议筛选
     if (selectedProtocol !== 'all') {
-      nodes = nodes.filter(node => node.parsed?.type === selectedProtocol)
+      nodes = nodes.filter((node) => node.parsed?.type === selectedProtocol)
     }
 
     // 按标签筛选
     if (tagFilter !== 'all') {
-      nodes = nodes.filter(node =>
-        node.dbNode?.tags?.includes(tagFilter) || node.tag === tagFilter
+      nodes = nodes.filter(
+        (node) =>
+          node.dbNode?.tags?.includes(tagFilter) || node.tag === tagFilter
       )
     }
 
@@ -2773,7 +3241,10 @@ function NodesPage() {
   }, [selectedProtocol, tagFilter, displayNodes.length])
 
   const totalFilteredNodes = deferredFilteredNodes.length
-  const totalNodePages = Math.max(1, Math.ceil(totalFilteredNodes / nodePageSize) || 1)
+  const totalNodePages = Math.max(
+    1,
+    Math.ceil(totalFilteredNodes / nodePageSize) || 1
+  )
 
   useEffect(() => {
     if (nodePage > totalNodePages) {
@@ -2823,12 +3294,18 @@ function NodesPage() {
   const dragOverlayNodes = useMemo(() => {
     if (!activeId) return []
 
-    const activeNode = deferredFilteredNodes.find(n => n.id === activeId)
+    const activeNode = deferredFilteredNodes.find((n) => n.id === activeId)
     if (!activeNode) return []
 
     // 如果是批量拖动，返回所有选中的节点
-    if (activeNode.dbId && selectedNodeIds.has(activeNode.dbId) && selectedNodeIds.size > 1) {
-      return deferredFilteredNodes.filter(n => n.dbId && selectedNodeIds.has(n.dbId))
+    if (
+      activeNode.dbId &&
+      selectedNodeIds.has(activeNode.dbId) &&
+      selectedNodeIds.size > 1
+    ) {
+      return deferredFilteredNodes.filter(
+        (n) => n.dbId && selectedNodeIds.has(n.dbId)
+      )
     }
 
     // 单节点拖动
@@ -2838,15 +3315,21 @@ function NodesPage() {
   const protocolCounts = useMemo(() => {
     const counts: Record<string, number> = { all: displayNodes.length }
     for (const protocol of PROTOCOLS) {
-      counts[protocol] = displayNodes.filter(n => n.parsed?.type === protocol).length
+      counts[protocol] = displayNodes.filter(
+        (n) => n.parsed?.type === protocol
+      ).length
     }
     return counts
   }, [displayNodes])
 
   const tagCounts = useMemo(() => {
     const counts: Record<string, number> = { all: displayNodes.length }
-    displayNodes.forEach(node => {
-      const nodeTags = node.dbNode?.tags?.length ? node.dbNode.tags : (node.tag ? [node.tag] : [])
+    displayNodes.forEach((node) => {
+      const nodeTags = node.dbNode?.tags?.length
+        ? node.dbNode.tags
+        : node.tag
+          ? [node.tag]
+          : []
       for (const t of nodeTags) {
         counts[t] = (counts[t] || 0) + 1
       }
@@ -2856,7 +3339,9 @@ function NodesPage() {
 
   // 排序后的标签列表（根据 tagOrder 排序）
   const sortedTags = useMemo(() => {
-    const tags = Object.keys(tagCounts).filter(tag => tag !== 'all' && tagCounts[tag] > 0)
+    const tags = Object.keys(tagCounts).filter(
+      (tag) => tag !== 'all' && tagCounts[tag] > 0
+    )
     if (tagOrder.length === 0) {
       return tags
     }
@@ -2872,73 +3357,82 @@ function NodesPage() {
   }, [tagCounts, tagOrder])
 
   // 标签拖拽结束处理 - 同步更新节点顺序
-  const handleTagDragEnd = useCallback(async (event: DragEndEvent) => {
-    setDraggingTag(null)
-    const { active, over } = event
-    if (!over || active.id === over.id) return
+  const handleTagDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      setDraggingTag(null)
+      const { active, over } = event
+      if (!over || active.id === over.id) return
 
-    const oldIndex = sortedTags.indexOf(active.id as string)
-    const newIndex = sortedTags.indexOf(over.id as string)
-    if (oldIndex === -1 || newIndex === -1) return
+      const oldIndex = sortedTags.indexOf(active.id as string)
+      const newIndex = sortedTags.indexOf(over.id as string)
+      if (oldIndex === -1 || newIndex === -1) return
 
-    // 开始 Loading
-    setIsReorderingByTag(true)
+      // 开始 Loading
+      setIsReorderingByTag(true)
 
-    // 使用 requestAnimationFrame 让 UI 先更新显示 Loading
-    await new Promise(resolve => requestAnimationFrame(resolve))
+      // 使用 requestAnimationFrame 让 UI 先更新显示 Loading
+      await new Promise((resolve) => requestAnimationFrame(resolve))
 
-    try {
-      // 更新标签顺序
-      const newTagOrder = arrayMove(sortedTags, oldIndex, newIndex)
-      setTagOrder(newTagOrder)
+      try {
+        // 更新标签顺序
+        const newTagOrder = arrayMove(sortedTags, oldIndex, newIndex)
+        setTagOrder(newTagOrder)
 
-      // 根据新的标签顺序，重新排列节点
-      // 1. 获取所有已保存的节点
-      const savedDisplayNodes = displayNodes.filter(n => n.isSaved && n.dbId)
+        // 根据新的标签顺序，重新排列节点
+        // 1. 获取所有已保存的节点
+        const savedDisplayNodes = displayNodes.filter(
+          (n) => n.isSaved && n.dbId
+        )
 
-      // 2. 按新的标签顺序分组节点
-      const nodesByTag: Record<string, typeof savedDisplayNodes> = {}
-      savedDisplayNodes.forEach(node => {
-        const primaryTag = node.dbNode?.tags?.[0] || node.tag || ''
-        if (!nodesByTag[primaryTag]) {
-          nodesByTag[primaryTag] = []
-        }
-        nodesByTag[primaryTag].push(node)
-      })
+        // 2. 按新的标签顺序分组节点
+        const nodesByTag: Record<string, typeof savedDisplayNodes> = {}
+        savedDisplayNodes.forEach((node) => {
+          const primaryTag = node.dbNode?.tags?.[0] || node.tag || ''
+          if (!nodesByTag[primaryTag]) {
+            nodesByTag[primaryTag] = []
+          }
+          nodesByTag[primaryTag].push(node)
+        })
 
-      // 3. 按新的标签顺序重建节点顺序
-      const newNodeOrder: number[] = []
-      newTagOrder.forEach(tag => {
-        const nodesInTag = nodesByTag[tag] || []
-        nodesInTag.forEach(node => {
-          if (node.dbId) {
+        // 3. 按新的标签顺序重建节点顺序
+        const newNodeOrder: number[] = []
+        newTagOrder.forEach((tag) => {
+          const nodesInTag = nodesByTag[tag] || []
+          nodesInTag.forEach((node) => {
+            if (node.dbId) {
+              newNodeOrder.push(node.dbId)
+            }
+          })
+        })
+        // 添加没有标签或标签不在列表中的节点
+        savedDisplayNodes.forEach((node) => {
+          if (node.dbId && !newNodeOrder.includes(node.dbId)) {
             newNodeOrder.push(node.dbId)
           }
         })
-      })
-      // 添加没有标签或标签不在列表中的节点
-      savedDisplayNodes.forEach(node => {
-        if (node.dbId && !newNodeOrder.includes(node.dbId)) {
-          newNodeOrder.push(node.dbId)
-        }
-      })
 
-      // 4. 更新节点顺序并等待数据刷新完成
-      setNodeOrder(newNodeOrder)
-      await updateNodeOrderMutation.mutateAsync(newNodeOrder)
-      // 等待数据刷新完成
-      await queryClient.invalidateQueries({ queryKey: ['user-config'] })
-      await queryClient.invalidateQueries({ queryKey: ['nodes'] })
-    } finally {
-      setIsReorderingByTag(false)
-    }
-  }, [sortedTags, displayNodes, updateNodeOrderMutation, queryClient])
+        // 4. 更新节点顺序并等待数据刷新完成
+        setNodeOrder(newNodeOrder)
+        await updateNodeOrderMutation.mutateAsync(newNodeOrder)
+        // 等待数据刷新完成
+        await queryClient.invalidateQueries({ queryKey: ['user-config'] })
+        await queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      } finally {
+        setIsReorderingByTag(false)
+      }
+    },
+    [sortedTags, displayNodes, updateNodeOrderMutation, queryClient]
+  )
 
   // 提取所有唯一的标签
   const allUniqueTags = useMemo(() => {
     const tags = new Set<string>()
-    savedNodes.forEach(node => {
-      const nodeTags = node.tags?.length ? node.tags : (node.tag ? [node.tag] : [])
+    savedNodes.forEach((node) => {
+      const nodeTags = node.tags?.length
+        ? node.tags
+        : node.tag
+          ? [node.tag]
+          : []
       for (const t of nodeTags) {
         if (t.trim()) tags.add(t.trim())
       }
@@ -2953,54 +3447,72 @@ function NodesPage() {
     if (!nodesData) return
 
     // 检查 tagFilter
-    if (tagFilter !== 'all' && (!tagCounts[tagFilter] || tagCounts[tagFilter] === 0)) {
+    if (
+      tagFilter !== 'all' &&
+      (!tagCounts[tagFilter] || tagCounts[tagFilter] === 0)
+    ) {
       setTagFilter('all')
     }
     // 检查 selectedProtocol
-    if (selectedProtocol !== 'all' && (!protocolCounts[selectedProtocol] || protocolCounts[selectedProtocol] === 0)) {
+    if (
+      selectedProtocol !== 'all' &&
+      (!protocolCounts[selectedProtocol] ||
+        protocolCounts[selectedProtocol] === 0)
+    ) {
       setSelectedProtocol('all')
     }
   }, [nodesData, tagCounts, protocolCounts, tagFilter, selectedProtocol])
 
   return (
-    <div className='min-h-svh bg-background'>
+    <div className='bg-background min-h-svh'>
       <Topbar />
-      <main className='mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 pt-24'>
+      <main className='mx-auto w-full max-w-7xl px-4 py-8 pt-24 sm:px-6'>
         <section className='space-y-4'>
           <div>
             <h1 className='text-3xl font-semibold tracking-tight'>节点管理</h1>
             <p className='text-muted-foreground mt-2'>
-              输入代理节点信息，每行一个节点，支持 VMess、VLESS、Trojan、Shadowsocks、Hysteria、Socks、TUIC、AnyTLS、WireGuard、Snell 协议。
+              输入代理节点信息，每行一个节点，支持
+              VMess、VLESS、Trojan、Shadowsocks、Hysteria、Socks、TUIC、AnyTLS、WireGuard、Snell
+              协议。
             </p>
           </div>
 
-          <Collapsible open={isInputCardExpanded} onOpenChange={setIsInputCardExpanded}>
+          <Collapsible
+            open={isInputCardExpanded}
+            onOpenChange={setIsInputCardExpanded}
+          >
             <Card>
               <CollapsibleTrigger asChild>
-                <CardHeader className='cursor-pointer hover:bg-muted/50 transition-colors rounded-t-lg'>
+                <CardHeader className='hover:bg-muted/50 cursor-pointer rounded-t-lg transition-colors'>
                   <div className='flex items-center justify-between'>
                     <CardTitle>导入节点</CardTitle>
                     <div className='p-1.5 transition-all duration-200'>
-                      <ChevronDown className={cn(
-                        'h-5 w-5 transition-transform duration-200',
-                        isInputCardExpanded ? 'rotate-180' : 'animate-bounce'
-                      )} />
+                      <ChevronDown
+                        className={cn(
+                          'h-5 w-5 transition-transform duration-200',
+                          isInputCardExpanded ? 'rotate-180' : 'animate-bounce'
+                        )}
+                      />
                     </div>
                   </div>
                 </CardHeader>
               </CollapsibleTrigger>
               <CollapsibleContent className='CollapsibleContent'>
                 <CardContent>
-                  <Tabs value={importTab} onValueChange={setImportTab} className='w-full'>
+                  <Tabs
+                    value={importTab}
+                    onValueChange={setImportTab}
+                    className='w-full'
+                  >
                     <TabsList className='grid w-full grid-cols-2'>
                       <TabsTrigger value='manual'>手动输入</TabsTrigger>
                       <TabsTrigger value='subscription'>订阅导入</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value='manual' className='space-y-4 mt-4'>
+                    <TabsContent value='manual' className='mt-4 space-y-4'>
                       <div className='relative'>
-                      <Textarea
-                        placeholder={`vmess://eyJwcyI6IuWPsOa5vualviIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoidXVpZCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0bHMiOiJ0bHMifQ==
+                        <Textarea
+                          placeholder={`vmess://eyJwcyI6IuWPsOa5vualviIsImFkZCI6ImV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoidXVpZCIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0bHMiOiJ0bHMifQ==
 vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
 # 支持 Clash YAML 格式:
@@ -3010,28 +3522,42 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 - name: 节点2
   type: vless
   ...`}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        className='min-h-[200px] font-mono text-sm'
-                      />
-                      {easterEggLine >= 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type='button'
-                              className='absolute right-2 cursor-pointer z-10 text-primary hover:scale-125 transition-transform animate-bounce'
-                              style={{ top: `${8 + easterEggLine * 20}px` }}
-                              onClick={() => setEasterEggOpen(true)}
-                            >
-                              <img src={CaidanIcon} alt='' className='w-[62.5px] h-[62.5px] dark:hidden' /><img src={CaidanWIcon} alt='' className='w-[62.5px] h-[62.5px] hidden dark:block' />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>恭喜你，触发了一个彩蛋！</TooltipContent>
-                        </Tooltip>
-                      )}
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          className='min-h-[200px] font-mono text-sm'
+                        />
+                        {easterEggLine >= 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type='button'
+                                className='text-primary absolute right-2 z-10 animate-bounce cursor-pointer transition-transform hover:scale-125'
+                                style={{ top: `${8 + easterEggLine * 20}px` }}
+                                onClick={() => setEasterEggOpen(true)}
+                              >
+                                <img
+                                  src={CaidanIcon}
+                                  alt=''
+                                  className='h-[62.5px] w-[62.5px] dark:hidden'
+                                />
+                                <img
+                                  src={CaidanWIcon}
+                                  alt=''
+                                  className='hidden h-[62.5px] w-[62.5px] dark:block'
+                                />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              恭喜你，触发了一个彩蛋！
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                       </div>
                       <div className='space-y-2'>
-                        <Label htmlFor='manual-tag' className='text-sm font-medium'>
+                        <Label
+                          htmlFor='manual-tag'
+                          className='text-sm font-medium'
+                        >
                           节点标签
                         </Label>
                         {allUniqueTags.length > 0 && (
@@ -3039,8 +3565,10 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             {allUniqueTags.map((tag) => (
                               <Badge
                                 key={tag}
-                                variant={manualTag === tag ? 'default' : 'outline'}
-                                className='cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs'
+                                variant={
+                                  manualTag === tag ? 'default' : 'outline'
+                                }
+                                className='hover:bg-primary hover:text-primary-foreground cursor-pointer text-xs transition-colors'
                                 onClick={() => setManualTag(tag)}
                               >
                                 {tag}
@@ -3054,74 +3582,112 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             placeholder='手动输入'
                             value={manualTag}
                             onChange={(e) => setManualTag(e.target.value)}
-                            className='font-mono text-sm flex-1'
+                            className='flex-1 font-mono text-sm'
                           />
-                          <div className='flex items-center gap-2 shrink-0'>
+                          <div className='flex shrink-0 items-center gap-2'>
                             <Switch
                               id='skip-cert-verify-manual'
                               checked={forceNodeSkipCert}
                               onCheckedChange={setForceNodeSkipCert}
                             />
-                            <Label htmlFor='skip-cert-verify-manual' className='text-sm whitespace-nowrap cursor-pointer'>
+                            <Label
+                              htmlFor='skip-cert-verify-manual'
+                              className='cursor-pointer text-sm whitespace-nowrap'
+                            >
                               强制节点跳过证书验证
                             </Label>
                           </div>
                         </div>
-                        <p className='text-xs text-muted-foreground'>
+                        <p className='text-muted-foreground text-xs'>
                           为这些节点设置标签，用于节点管理中的分类和筛选
                         </p>
                       </div>
                       <div className='flex justify-end gap-2'>
-                        <Button onClick={() => void handleParse()} disabled={!input.trim()} variant='outline'>
+                        <Button
+                          onClick={() => void handleParse()}
+                          disabled={!input.trim()}
+                          variant='outline'
+                        >
                           解析节点
                         </Button>
                         <Button
                           onClick={handleSave}
-                          disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
+                          disabled={
+                            tempNodes.length === 0 ||
+                            batchCreateMutation.isPending
+                          }
                         >
-                          {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
+                          {batchCreateMutation.isPending
+                            ? '保存中...'
+                            : '保存节点'}
                         </Button>
                       </div>
                     </TabsContent>
 
-                    <TabsContent value='subscription' className='space-y-4 mt-4'>
+                    <TabsContent
+                      value='subscription'
+                      className='mt-4 space-y-4'
+                    >
                       <div className='space-y-2'>
                         <div className='relative'>
-                        <Input
-                          ref={subscriptionUrlInputRef}
-                          placeholder='https://example.com/api/clash/subscribe?token=xxx'
-                          value={subscriptionUrl}
-                          onChange={handleSubscriptionUrlChange}
-                          className='font-mono text-sm'
-                        />
-                        {showSubEasterEgg && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type='button'
-                                className='absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer z-10 text-primary hover:scale-125 transition-transform animate-bounce'
-                                onClick={() => setEasterEggOpen(true)}
-                              >
-                                <img src={CaidanIcon} alt='' className='w-[62.5px] h-[62.5px] dark:hidden' /><img src={CaidanWIcon} alt='' className='w-[62.5px] h-[62.5px] hidden dark:block' />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>恭喜你，触发了一个彩蛋！</TooltipContent>
-                          </Tooltip>
-                        )}
+                          <Input
+                            ref={subscriptionUrlInputRef}
+                            placeholder='https://example.com/api/clash/subscribe?token=xxx'
+                            value={subscriptionUrl}
+                            onChange={handleSubscriptionUrlChange}
+                            className='font-mono text-sm'
+                          />
+                          {showSubEasterEgg && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type='button'
+                                  className='text-primary absolute top-1/2 right-2 z-10 -translate-y-1/2 animate-bounce cursor-pointer transition-transform hover:scale-125'
+                                  onClick={() => setEasterEggOpen(true)}
+                                >
+                                  <img
+                                    src={CaidanIcon}
+                                    alt=''
+                                    className='h-[62.5px] w-[62.5px] dark:hidden'
+                                  />
+                                  <img
+                                    src={CaidanWIcon}
+                                    alt=''
+                                    className='hidden h-[62.5px] w-[62.5px] dark:block'
+                                  />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                恭喜你，触发了一个彩蛋！
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
-                        <p className='text-xs text-muted-foreground'>
+                        <p className='text-muted-foreground text-xs'>
                           请输入 Clash 订阅链接，系统将自动获取并解析节点
                         </p>
                       </div>
                       <div className='flex items-center gap-2'>
-                        <Label htmlFor='user-agent' className='whitespace-nowrap'>User-Agent:</Label>
-                        <Select value={userAgent} onValueChange={handleUserAgentChange}>
+                        <Label
+                          htmlFor='user-agent'
+                          className='whitespace-nowrap'
+                        >
+                          User-Agent:
+                        </Label>
+                        <Select
+                          value={userAgent}
+                          onValueChange={handleUserAgentChange}
+                        >
                           <SelectTrigger id='user-agent' className='w-[200px]'>
                             <SelectValue placeholder='选择 User-Agent' />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value='clash.meta'>clash.meta</SelectItem>
-                            <SelectItem value='clash-verge/v1.5.1'>clash-verge/v1.5.1</SelectItem>
+                            <SelectItem value='clash.meta'>
+                              clash.meta
+                            </SelectItem>
+                            <SelectItem value='clash-verge/v1.5.1'>
+                              clash-verge/v1.5.1
+                            </SelectItem>
                             <SelectItem value='Clash'>Clash</SelectItem>
                             <SelectItem value='v2ray'>v2ray</SelectItem>
                             <SelectItem value='手动输入'>手动输入</SelectItem>
@@ -3132,12 +3698,15 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             placeholder='输入自定义 User-Agent'
                             value={customUserAgent}
                             onChange={handleCustomUserAgentChange}
-                            className='font-mono text-sm flex-1'
+                            className='flex-1 font-mono text-sm'
                           />
                         )}
                       </div>
                       <div className='space-y-2'>
-                        <Label htmlFor='subscription-tag' className='text-sm font-medium'>
+                        <Label
+                          htmlFor='subscription-tag'
+                          className='text-sm font-medium'
+                        >
                           节点标签
                         </Label>
                         {allUniqueTags.length > 0 && (
@@ -3145,8 +3714,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             {allUniqueTags.map((tag) => (
                               <Badge
                                 key={tag}
-                                variant={subscriptionTag === tag ? 'default' : 'outline'}
-                                className='cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs'
+                                variant={
+                                  subscriptionTag === tag
+                                    ? 'default'
+                                    : 'outline'
+                                }
+                                className='hover:bg-primary hover:text-primary-foreground cursor-pointer text-xs transition-colors'
                                 onClick={() => setSubscriptionTag(tag)}
                               >
                                 {tag}
@@ -3160,30 +3733,36 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             placeholder='默认使用服务器地址作为标签'
                             value={subscriptionTag}
                             onChange={(e) => setSubscriptionTag(e.target.value)}
-                            className='font-mono text-sm flex-1'
+                            className='flex-1 font-mono text-sm'
                           />
-                          <div className='flex items-center gap-2 shrink-0'>
+                          <div className='flex shrink-0 items-center gap-2'>
                             <Switch
                               id='skip-cert-verify'
                               checked={fetchSkipCertVerify}
                               onCheckedChange={setFetchSkipCertVerify}
                             />
-                            <Label htmlFor='skip-cert-verify' className='text-sm whitespace-nowrap cursor-pointer'>
+                            <Label
+                              htmlFor='skip-cert-verify'
+                              className='cursor-pointer text-sm whitespace-nowrap'
+                            >
                               拉取时跳过证书验证
                             </Label>
                           </div>
                         </div>
-                        <p className='text-xs text-muted-foreground'>
+                        <p className='text-muted-foreground text-xs'>
                           为订阅导入的节点设置标签，留空将使用服务器地址作为标签
                         </p>
                       </div>
                       <div className='space-y-2 rounded-md border p-3'>
                         <div className='flex items-center justify-between gap-3'>
                           <div className='space-y-1'>
-                            <Label htmlFor='subscription-auto-update' className='text-sm font-medium cursor-pointer'>
+                            <Label
+                              htmlFor='subscription-auto-update'
+                              className='cursor-pointer text-sm font-medium'
+                            >
                               定时更新此订阅
                             </Label>
-                            <p className='text-xs text-muted-foreground'>
+                            <p className='text-muted-foreground text-xs'>
                               开启后，服务端会按设定间隔自动拉取订阅并同步节点
                             </p>
                           </div>
@@ -3195,14 +3774,22 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         </div>
                         {subscriptionAutoUpdate && (
                           <div className='flex flex-wrap items-center gap-2 pt-1'>
-                            <Label htmlFor='subscription-update-interval' className='text-sm whitespace-nowrap'>
+                            <Label
+                              htmlFor='subscription-update-interval'
+                              className='text-sm whitespace-nowrap'
+                            >
                               更新间隔
                             </Label>
                             <Select
                               value={String(subscriptionUpdateInterval)}
-                              onValueChange={(v) => setSubscriptionUpdateInterval(Number(v))}
+                              onValueChange={(v) =>
+                                setSubscriptionUpdateInterval(Number(v))
+                              }
                             >
-                              <SelectTrigger id='subscription-update-interval' className='w-[160px]'>
+                              <SelectTrigger
+                                id='subscription-update-interval'
+                                className='w-[160px]'
+                              >
                                 <SelectValue placeholder='选择间隔' />
                               </SelectTrigger>
                               <SelectContent>
@@ -3220,16 +3807,26 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                       <div className='flex justify-end gap-2'>
                         <Button
                           onClick={handleFetchSubscription}
-                          disabled={!subscriptionUrl.trim() || fetchSubscriptionMutation.isPending}
+                          disabled={
+                            !subscriptionUrl.trim() ||
+                            fetchSubscriptionMutation.isPending
+                          }
                           variant='outline'
                         >
-                          {fetchSubscriptionMutation.isPending ? '导入中...' : '导入节点'}
+                          {fetchSubscriptionMutation.isPending
+                            ? '导入中...'
+                            : '导入节点'}
                         </Button>
                         <Button
                           onClick={handleSave}
-                          disabled={tempNodes.length === 0 || batchCreateMutation.isPending}
+                          disabled={
+                            tempNodes.length === 0 ||
+                            batchCreateMutation.isPending
+                          }
                         >
-                          {batchCreateMutation.isPending ? '保存中...' : '保存节点'}
+                          {batchCreateMutation.isPending
+                            ? '保存中...'
+                            : '保存节点'}
                         </Button>
                       </div>
                     </TabsContent>
@@ -3247,47 +3844,77 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     <CardTitle>
                       节点列表 ({deferredFilteredNodes.length})
                       {totalFilteredNodes > 0 && (
-                        <span className='ml-2 text-sm font-normal text-muted-foreground'>
+                        <span className='text-muted-foreground ml-2 text-sm font-normal'>
                           显示 {pageRangeLabel}
                         </span>
                       )}
                     </CardTitle>
-                    <p className='mt-2 text-sm font-semibold text-destructive'>注意!!! 节点的修改与删除均会同步更新所有订阅 </p>
-                    <p className='mt-2 text-xs text-primary flex flex-wrap items-center gap-1'>
-                      <Pencil className='h-4 w-4 inline' /> 编辑节点名称，
-                      <img src={ExchangeIcon} alt='链式代理' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 创建链式代理，
-                      <Activity className='h-4 w-4 inline' /> 绑定探针，
-                      <Zap className='h-4 w-4 inline' /> TCPing延迟测试，
-                      <Flag className='h-4 w-4 inline' /> 添加地区emoji，
-                      <img src={IpIcon} alt='解析IP地址' className='h-4 w-4 inline [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /> 解析IP地址，
-                      <Undo2 className='h-4 w-4 inline' /> 恢复原始域名，
-                      <Eye className='h-4 w-4 inline' /> 查看修改配置，
-                      <Copy className='h-4 w-4 inline' /> 复制URI，
-                      <Link2 className='h-4 w-4 inline' /> 生成临时订阅
+                    <p className='text-destructive mt-2 text-sm font-semibold'>
+                      注意!!! 节点的修改与删除均会同步更新所有订阅{' '}
+                    </p>
+                    <p className='text-primary mt-2 flex flex-wrap items-center gap-1 text-xs'>
+                      <Pencil className='inline h-4 w-4' /> 编辑节点名称，
+                      <img
+                        src={ExchangeIcon}
+                        alt='链式代理'
+                        className='inline h-4 w-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                      />{' '}
+                      创建链式代理，
+                      <Activity className='inline h-4 w-4' /> 绑定探针，
+                      <Zap className='inline h-4 w-4' /> TCPing延迟测试，
+                      <Flag className='inline h-4 w-4' /> 添加地区emoji，
+                      <img
+                        src={IpIcon}
+                        alt='解析IP地址'
+                        className='inline h-4 w-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                      />{' '}
+                      解析IP地址，
+                      <Undo2 className='inline h-4 w-4' /> 恢复原始域名，
+                      <Eye className='inline h-4 w-4' /> 查看修改配置，
+                      <Copy className='inline h-4 w-4' /> 复制URI，
+                      <Link2 className='inline h-4 w-4' /> 生成临时订阅
                     </p>
                   </div>
-                  <div className='flex flex-wrap gap-2 justify-end'>
+                  <div className='flex flex-wrap justify-end gap-2'>
                     <Button
                       variant='outline'
                       size='sm'
-                      onClick={() => { setSpeedDialogOpen(true); setSpeedDialogMin(false) }}
+                      onClick={() => {
+                        setSpeedDialogOpen(true)
+                        setSpeedDialogMin(false)
+                      }}
                     >
-                      <Gauge className='size-4 mr-1' />
+                      <Gauge className='mr-1 size-4' />
                       节点测速
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => setNodeProbeOpen(true)}
+                    >
+                      <Activity className='mr-1 size-4' />
+                      节点探测
                     </Button>
                     <Button
                       variant='outline'
                       size='sm'
                       onClick={() => {
                         toast.promise(
-						  api.post('/api/admin/sync-external-subscriptions'),
+                          api.post('/api/admin/sync-external-subscriptions'),
                           {
                             loading: '正在同步外部订阅...',
-							success: (response) => {
-							  queryClient.invalidateQueries({ queryKey: ['nodes'] })
-							  return externalSyncSelection.present(response.data) ? '已有节点已更新，请选择新增节点' : (response.data.message || '外部订阅同步成功')
+                            success: (response) => {
+                              queryClient.invalidateQueries({
+                                queryKey: ['nodes'],
+                              })
+                              return externalSyncSelection.present(
+                                response.data
+                              )
+                                ? '已有节点已更新，请选择新增节点'
+                                : response.data.message || '外部订阅同步成功'
                             },
-                            error: (error) => error.response?.data?.error || '同步失败'
+                            error: (error) =>
+                              error.response?.data?.error || '同步失败',
                           }
                         )
                       }}
@@ -3302,15 +3929,24 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           onClick={handleAddRegionEmoji}
                           disabled={addingRegionEmoji}
                         >
-                          {addingRegionEmoji ? '添加中...' : `添加emoji (${selectedNodeIds.size})`}
+                          {addingRegionEmoji
+                            ? '添加中...'
+                            : `添加emoji (${selectedNodeIds.size})`}
                         </Button>
                         <Button
                           variant='default'
                           size='sm'
                           onClick={() => {
                             // 按 displayNodes 顺序获取选中节点名称
-                            const selectedNodes = displayNodes.filter(n => n.isSaved && n.dbId && selectedNodeIds.has(n.dbId))
-                            const names = selectedNodes.map(n => n.name).join('\n')
+                            const selectedNodes = displayNodes.filter(
+                              (n) =>
+                                n.isSaved &&
+                                n.dbId &&
+                                selectedNodeIds.has(n.dbId)
+                            )
+                            const names = selectedNodes
+                              .map((n) => n.name)
+                              .join('\n')
                             setBatchRenameText(names)
                             setBatchRenameDialogOpen(true)
                           }}
@@ -3324,14 +3960,18 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         >
                           管理标签 ({selectedNodeIds.size})
                         </Button>
-						<Button
-						  variant='outline'
-						  size='sm'
-						  disabled={batchDisableSkipCertMutation.isPending}
-						  onClick={() => batchDisableSkipCertMutation.mutate(Array.from(selectedNodeIds))}
-						>
-						  关闭证书跳过 ({selectedNodeIds.size})
-						</Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={batchDisableSkipCertMutation.isPending}
+                          onClick={() =>
+                            batchDisableSkipCertMutation.mutate(
+                              Array.from(selectedNodeIds)
+                            )
+                          }
+                        >
+                          关闭证书跳过 ({selectedNodeIds.size})
+                        </Button>
                         <Button
                           variant='outline'
                           size='sm'
@@ -3340,12 +3980,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         >
                           {batchTcpingLoading ? (
                             <>
-                              <Loader2 className='size-4 mr-1 animate-spin' />
+                              <Loader2 className='mr-1 size-4 animate-spin' />
                               测试中...
                             </>
                           ) : (
                             <>
-                              <Zap className='size-4 mr-1' />
+                              <Zap className='mr-1 size-4' />
                               TCPing ({selectedNodeIds.size})
                             </>
                           )}
@@ -3363,18 +4003,18 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button
-                              variant='destructive'
-                              size='sm'
-                            >
+                            <Button variant='destructive' size='sm'>
                               批量删除 ({selectedNodeIds.size})
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>确认批量删除节点</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                确认批量删除节点
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
-                                确定要删除选中的 {selectedNodeIds.size} 个节点吗？此操作不可撤销。
+                                确定要删除选中的 {selectedNodeIds.size}{' '}
+                                个节点吗？此操作不可撤销。
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -3383,19 +4023,31 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                 onClick={() => {
                                   // 使用批量删除 API
                                   const ids = Array.from(selectedNodeIds)
-                                  api.post('/api/admin/nodes/batch-delete', { node_ids: ids })
+                                  api
+                                    .post('/api/admin/nodes/batch-delete', {
+                                      node_ids: ids,
+                                    })
                                     .then((response) => {
-                                      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+                                      queryClient.invalidateQueries({
+                                        queryKey: ['nodes'],
+                                      })
                                       setSelectedNodeIds(new Set())
                                       const { deleted, total } = response.data
                                       if (deleted === total) {
-                                        toast.success(`成功删除 ${deleted} 个节点`)
+                                        toast.success(
+                                          `成功删除 ${deleted} 个节点`
+                                        )
                                       } else {
-                                        toast.success(`成功删除 ${deleted}/${total} 个节点`)
+                                        toast.success(
+                                          `成功删除 ${deleted}/${total} 个节点`
+                                        )
                                       }
                                     })
                                     .catch((error) => {
-                                      toast.error(error.response?.data?.error || '批量删除失败')
+                                      toast.error(
+                                        error.response?.data?.error ||
+                                          '批量删除失败'
+                                      )
                                     })
                                 }}
                               >
@@ -3414,14 +4066,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             size='sm'
                             disabled={clearAllMutation.isPending}
                           >
-                            {clearAllMutation.isPending ? '清空中...' : '清空所有'}
+                            {clearAllMutation.isPending
+                              ? '清空中...'
+                              : '清空所有'}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>确认清空所有节点</AlertDialogTitle>
+                            <AlertDialogTitle>
+                              确认清空所有节点
+                            </AlertDialogTitle>
                             <AlertDialogDescription>
-                              确定要清空所有已保存的节点吗？此操作不可撤销，将删除 {savedNodes.length} 个节点。
+                              确定要清空所有已保存的节点吗？此操作不可撤销，将删除{' '}
+                              {savedNodes.length} 个节点。
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -3449,23 +4106,29 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 {/* 协议筛选按钮 */}
                 <div className='space-y-3'>
                   <div>
-                    <div className='text-sm font-medium mb-2'>按协议筛选</div>
+                    <div className='mb-2 text-sm font-medium'>按协议筛选</div>
                     <div className='flex flex-wrap gap-2'>
                       <Button
                         size='sm'
-                        variant={selectedProtocol === 'all' ? 'default' : 'outline'}
+                        variant={
+                          selectedProtocol === 'all' ? 'default' : 'outline'
+                        }
                         onClick={() => setSelectedProtocol('all')}
                       >
                         全部 ({protocolCounts.all})
                       </Button>
-                      {PROTOCOLS.map(protocol => {
+                      {PROTOCOLS.map((protocol) => {
                         const count = protocolCounts[protocol] || 0
                         if (count === 0) return null
                         return (
                           <Button
                             key={protocol}
                             size='sm'
-                            variant={selectedProtocol === protocol ? 'default' : 'outline'}
+                            variant={
+                              selectedProtocol === protocol
+                                ? 'default'
+                                : 'outline'
+                            }
                             onClick={() => setSelectedProtocol(protocol)}
                           >
                             {protocol.toUpperCase()} ({count})
@@ -3477,7 +4140,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
                   {/* 标签筛选按钮 - 支持拖拽排序 */}
                   <div>
-                    <div className='text-sm font-medium mb-2'>按标签筛选 <span className='text-xs text-muted-foreground'>(拖拽标签可排序节点)</span></div>
+                    <div className='mb-2 text-sm font-medium'>
+                      按标签筛选{' '}
+                      <span className='text-muted-foreground text-xs'>
+                        (拖拽标签可排序节点)
+                      </span>
+                    </div>
                     <div className='flex flex-wrap items-center justify-between gap-2'>
                       <div className='flex flex-wrap gap-2'>
                         <Button
@@ -3487,15 +4155,26 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             setTagFilter('all')
                             // 计算应该选中的节点
                             const nodesToSelect = displayNodes
-                              .filter(n => n.isSaved && n.dbId)
-                              .filter(n => selectedProtocol === 'all' || n.dbNode?.protocol?.toLowerCase() === selectedProtocol)
-                            const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.dbId!))
+                              .filter((n) => n.isSaved && n.dbId)
+                              .filter(
+                                (n) =>
+                                  selectedProtocol === 'all' ||
+                                  n.dbNode?.protocol?.toLowerCase() ===
+                                    selectedProtocol
+                              )
+                            const nodeIdsToSelect = new Set(
+                              nodesToSelect.map((n) => n.dbId!)
+                            )
 
                             // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
-                            const currentIds = Array.from(selectedNodeIds).sort()
+                            const currentIds =
+                              Array.from(selectedNodeIds).sort()
                             const targetIds = Array.from(nodeIdsToSelect).sort()
-                            if (tagFilter === 'all' && currentIds.length === targetIds.length &&
-                                currentIds.every((id, i) => id === targetIds[i])) {
+                            if (
+                              tagFilter === 'all' &&
+                              currentIds.length === targetIds.length &&
+                              currentIds.every((id, i) => id === targetIds[i])
+                            ) {
                               setSelectedNodeIds(new Set())
                             } else {
                               setSelectedNodeIds(nodeIdsToSelect)
@@ -3505,59 +4184,85 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           全部 ({tagCounts.all})
                         </Button>
                         <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragStart={(event) => setDraggingTag(event.active.id as string)}
-                        onDragEnd={handleTagDragEnd}
-                        onDragCancel={() => setDraggingTag(null)}
-                      >
-                        <SortableContext
-                          items={sortedTags}
-                          strategy={horizontalListSortingStrategy}
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragStart={(event) =>
+                            setDraggingTag(event.active.id as string)
+                          }
+                          onDragEnd={handleTagDragEnd}
+                          onDragCancel={() => setDraggingTag(null)}
                         >
-                          {sortedTags.map(tag => (
-                            <SortableTagButton
-                              key={tag}
-                              tag={tag}
-                              count={tagCounts[tag]}
-                              isActive={tagFilter === tag}
-                              onClick={() => {
-                                setTagFilter(tag)
-                                // 计算应该选中的节点
-                                const nodesToSelect = displayNodes
-                                  .filter(n => n.isSaved && n.dbId && n.dbNode?.tags?.includes(tag))
-                                  .filter(n => selectedProtocol === 'all' || n.dbNode?.protocol?.toLowerCase() === selectedProtocol)
-                                const nodeIdsToSelect = new Set(nodesToSelect.map(n => n.dbId!))
+                          <SortableContext
+                            items={sortedTags}
+                            strategy={horizontalListSortingStrategy}
+                          >
+                            {sortedTags.map((tag) => (
+                              <SortableTagButton
+                                key={tag}
+                                tag={tag}
+                                count={tagCounts[tag]}
+                                isActive={tagFilter === tag}
+                                onClick={() => {
+                                  setTagFilter(tag)
+                                  // 计算应该选中的节点
+                                  const nodesToSelect = displayNodes
+                                    .filter(
+                                      (n) =>
+                                        n.isSaved &&
+                                        n.dbId &&
+                                        n.dbNode?.tags?.includes(tag)
+                                    )
+                                    .filter(
+                                      (n) =>
+                                        selectedProtocol === 'all' ||
+                                        n.dbNode?.protocol?.toLowerCase() ===
+                                          selectedProtocol
+                                    )
+                                  const nodeIdsToSelect = new Set(
+                                    nodesToSelect.map((n) => n.dbId!)
+                                  )
 
-                                // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
-                                const currentIds = Array.from(selectedNodeIds).sort()
-                                const targetIds = Array.from(nodeIdsToSelect).sort()
-                                if (tagFilter === tag && currentIds.length === targetIds.length &&
-                                    currentIds.every((id, i) => id === targetIds[i])) {
-                                  setSelectedNodeIds(new Set())
-                                } else {
-                                  setSelectedNodeIds(nodeIdsToSelect)
-                                }
-                              }}
-                            />
-                          ))}
-                        </SortableContext>
-                        {draggingTag && createPortal(
-                          <DragOverlay>
-                            <Button size='sm' variant='default' className='opacity-80 shadow-lg'>
-                              {draggingTag} ({tagCounts[draggingTag]})
-                            </Button>
-                          </DragOverlay>,
-                          document.body
-                        )}
-                      </DndContext>
+                                  // 如果当前选中的节点和应该选中的节点完全一致，则取消选中
+                                  const currentIds =
+                                    Array.from(selectedNodeIds).sort()
+                                  const targetIds =
+                                    Array.from(nodeIdsToSelect).sort()
+                                  if (
+                                    tagFilter === tag &&
+                                    currentIds.length === targetIds.length &&
+                                    currentIds.every(
+                                      (id, i) => id === targetIds[i]
+                                    )
+                                  ) {
+                                    setSelectedNodeIds(new Set())
+                                  } else {
+                                    setSelectedNodeIds(nodeIdsToSelect)
+                                  }
+                                }}
+                              />
+                            ))}
+                          </SortableContext>
+                          {draggingTag &&
+                            createPortal(
+                              <DragOverlay>
+                                <Button
+                                  size='sm'
+                                  variant='default'
+                                  className='opacity-80 shadow-lg'
+                                >
+                                  {draggingTag} ({tagCounts[draggingTag]})
+                                </Button>
+                              </DragOverlay>,
+                              document.body
+                            )}
+                        </DndContext>
                       </div>
                       <div className='flex gap-2'>
                         <Button
                           variant={sortMode ? 'default' : 'outline'}
                           size='sm'
                           onClick={() => {
-                            setSortMode(m => !m)
+                            setSortMode((m) => !m)
                             if (sortMode) {
                               setSelectedNodeIds(new Set())
                               // 退出排序模式时，立即保存未提交的排序
@@ -3569,26 +4274,30 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                             }
                           }}
                         >
-                          <ArrowUpDown className='size-3.5 mr-1' />
+                          <ArrowUpDown className='mr-1 size-3.5' />
                           排序模式
                         </Button>
                         <Button
                           variant='outline'
                           size='sm'
-                          onClick={() => setRenderMode(m => m === 'virtual' ? 'expanded' : 'virtual')}
+                          onClick={() =>
+                            setRenderMode((m) =>
+                              m === 'virtual' ? 'expanded' : 'virtual'
+                            )
+                          }
                         >
-                        {renderMode === 'virtual' ? (
-                          <>
-                            <Expand className='size-3.5 mr-1' />
-                            展开模式
-                          </>
-                        ) : (
-                          <>
-                            <List className='size-3.5 mr-1' />
-                            滚动模式
-                          </>
-                        )}
-                      </Button>
+                          {renderMode === 'virtual' ? (
+                            <>
+                              <Expand className='mr-1 size-3.5' />
+                              展开模式
+                            </>
+                          ) : (
+                            <>
+                              <List className='mr-1 size-3.5' />
+                              滚动模式
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -3598,10 +4307,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 <div className='relative'>
                   {/* Loading Overlay */}
                   {isReorderingByTag && (
-                    <div className='absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-start justify-center pt-8 rounded-md'>
-                      <div className='flex items-center gap-2 bg-background/95 px-4 py-2 rounded-md shadow-lg border'>
-                        <Loader2 className='size-5 animate-spin text-primary' />
-                        <span className='text-sm text-muted-foreground'>正在重新排序节点...</span>
+                    <div className='bg-background/80 absolute inset-0 z-50 flex items-start justify-center rounded-md pt-8 backdrop-blur-sm'>
+                      <div className='bg-background/95 flex items-center gap-2 rounded-md border px-4 py-2 shadow-lg'>
+                        <Loader2 className='text-primary size-5 animate-spin' />
+                        <span className='text-muted-foreground text-sm'>
+                          正在重新排序节点...
+                        </span>
                       </div>
                     </div>
                   )}
@@ -3619,452 +4330,67 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     }}
                   />
 
-                {/* 移动端卡片视图 (<768px) */}
-                {!isTablet && renderMode === 'expanded' && (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={handleDragCancel}
-                >
-                  <SortableContext
-                    items={paginatedNodes.map(n => n.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className='space-y-3'>
-                      {deferredFilteredNodes.length === 0 ? (
-                        <Card>
-                          <CardContent className='text-center text-muted-foreground py-8'>
-                            没有找到匹配的节点
-                          </CardContent>
-                        </Card>
-                      ) : (
-                        paginatedNodes.map(node => (
-                          <SortableCard
-                            key={node.id}
-                            id={node.id}
-                            isSaved={node.isSaved}
-                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
-                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                            onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
-                          >
-                            <CardContent className='p-3 space-y-2'>
-                              {/* 头部：协议、节点名称、已保存标签 */}
-                              <div>
-                                <div className='flex items-center justify-between gap-2 mb-1'>
-                                  <div className='flex items-center gap-2'>
-                                    {node.isSaved && (
-                                      <DragHandle id={node.id} size='large' />
-                                    )}
-                                    {node.isSaved && node.dbId && (
-                                      <Checkbox
-                                        className='hidden sm:flex'
-                                        checked={selectedNodeIds.has(node.dbId)}
-                                        onCheckedChange={(checked) => {
-                                          const newSet = new Set(selectedNodeIds)
-                                          if (checked) {
-                                            newSet.add(node.dbId!)
-                                          } else {
-                                            newSet.delete(node.dbId!)
-                                          }
-                                          setSelectedNodeIds(newSet)
-                                        }}
-                                      />
-                                    )}
-                                {node.parsed ? (
-                                  <Badge
-                                    variant='outline'
-                                    className={
-                                      node.dbNode?.protocol?.includes('⇋')
-                                        ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                        : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                    }
-                                  >
-                                    {node.dbNode?.protocol?.includes('⇋')
-                                      ? node.dbNode.protocol.toUpperCase()
-                                      : node.parsed.type.toUpperCase()}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant='destructive'>解析失败</Badge>
-                                )}
-                                {node.isSaved && (
-                                  <Check className='size-4 text-green-600' />
-                                )}
-                              </div>
-                            {/* 编辑、交换和探针绑定按钮 */}
-                            {editingNode?.id !== node.id && (
-                              <div className='flex items-center gap-1 shrink-0' onClick={(e) => e.stopPropagation()}>
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                  onClick={() => handleNameEditStart(node)}
-                                      disabled={node.isSaved ? isUpdatingNodeName : false}
-                                >
-                                  <Pencil className='size-4' />
-                                </Button>
-                                {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                    onClick={() => {
-                                      setSourceNodeForExchange(node.dbNode)
-                                      setExchangeDialogOpen(true)
-                                    }}
-                                  >
-                                    <img
-                                      src={ExchangeIcon}
-                                      alt='交换'
-                                      className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                    />
-                                  </Button>
-                                )}
-                                {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                    onClick={() => {
-                                      setSelectedNodeForProbe(node.dbNode!)
-                                      setProbeBindingDialogOpen(true)
-                                      refetchProbeConfig()
-                                    }}
-                                  >
-                                    <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`} />
-                                  </Button>
-                                )}
-                                {/* TCPing 测试按钮 - 平板视图 */}
-                                {node.parsed && (
-                                  (() => {
-                                    const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                    const tcpingResult = tcpingResults[nodeKey]
-                                    const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-
-                                    // 测试成功后显示延迟数字
-                                    if (tcpingResult?.success && !isLoading) {
-                                      const latencyColor = tcpingResult.latency < 100
-                                        ? 'text-green-600 hover:text-green-700'
-                                        : tcpingResult.latency < 200
-                                          ? 'text-yellow-500 hover:text-yellow-600'
-                                          : 'text-red-500 hover:text-red-600'
-                                      return (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              variant='ghost'
-                                              size='sm'
-                                              className={`h-7 px-1.5 text-xs font-mono ${latencyColor}`}
-                                              onClick={() => handleTcping(node)}
-                                            >
-                                              {tcpingResult.latency < 1000
-                                                ? `${Math.round(tcpingResult.latency)}ms`
-                                                : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>点击重新测试</TooltipContent>
-                                        </Tooltip>
-                                      )
-                                    }
-
-                                    // 测试失败显示超时
-                                    if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                      return (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              variant='ghost'
-                                              size='sm'
-                                              className='h-7 px-1.5 text-xs font-mono text-red-500 hover:text-red-600'
-                                              onClick={() => handleTcping(node)}
-                                            >
-                                              超时
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
-                                        </Tooltip>
-                                      )
-                                    }
-
-                                    // 默认状态或加载中
-                                    return (
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            variant='ghost'
-                                            size='icon'
-                                            className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                            disabled={isLoading}
-                                            onClick={() => handleTcping(node)}
-                                          >
-                                            {isLoading ? (
-                                              <Loader2 className='size-4 animate-spin' />
-                                            ) : (
-                                              <Zap className='size-4' />
-                                            )}
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
-                                      </Tooltip>
-                                    )
-                                  })()
-                                )}
-                                {node.isSaved && node.dbNode && (
-                                  <FlagEmojiPicker
-                                    onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                    onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                    disabled={addingEmojiForNode === node.dbNode!.id}
-                                    loading={addingEmojiForNode === node.dbNode!.id}
-                                  />
-                                )}
-                                {node.isSaved && node.dbId && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant='ghost'
-                                        size='icon'
-                                        className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                        onClick={() => {
-                                          setTempSubSingleNodeId(node.dbId!)
-                                          setTempSubUrl('')
-                                          setTempSubDialogOpen(true)
-                                        }}
-                                      >
-                                        <Link2 className='size-4' />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>生成临时订阅</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                              {/* 节点名称 */}
-                              {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
-                                  <Input
-                                    value={editingNode.value}
-                                    onChange={(event) => handleNameEditChange(event.target.value)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        handleNameEditSubmit(node)
-                                      } else if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        handleNameEditCancel()
-                                      }
-                                    }}
-                                    className='h-7 flex-1 min-w-0'
-                                    autoFocus
-                                  />
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-emerald-600 shrink-0'
-                                    onClick={() => handleNameEditSubmit(node)}
-                                    disabled={node.isSaved ? isUpdatingNodeName : false}
-                                  >
-                                    <Check className='size-3.5' />
-                                  </Button>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-muted-foreground shrink-0'
-                                    onClick={handleNameEditCancel}
-                                  >
-                                    <X className='size-3.5' />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <>
-                                  {(() => {
-                                    const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                    const relayName = node.dbNode?.relay_group_name
-                                    const label = relayName || chainName
-                                    if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                  })()}
-                                  <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
-                                </>
-                              )}
-                          </div>
-
-                          {/* 服务器地址和标签 */}
-                          <div className='space-y-1.5'>
-                            {node.parsed && (
-                              <div className='flex items-center gap-2 flex-wrap text-xs'>
-                                <span className='text-muted-foreground shrink-0'>地址:</span>
-                                <span className='font-mono break-all'>{node.parsed.server}:{node.parsed.port}</span>
-                                {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                  <Badge variant='outline' className='text-xs'>
-                                    {node.parsed.network}
-                                  </Badge>
-                                )}
-                                {node.parsed.network === 'xhttp' && node.parsed.mode && (
-                                  <Badge variant='outline' className='text-xs'>
-                                    {node.parsed.mode}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                            <div className='flex items-center gap-2 flex-wrap text-xs'>
-                              <span className='text-muted-foreground shrink-0'>标签:</span>
-                              {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                <Badge key={t} variant='secondary' className='text-xs cursor-pointer hover:bg-primary/20 transition-colors' onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (node.isSaved && node.dbNode) {
-                                    setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                  }
-                                }}>{t}</Badge>
-                              ))}
-                              {node.isSaved && node.dbNode?.probe_server && (
-                                <Badge variant='secondary' className='text-xs flex items-center gap-1'>
-                                  <Activity className='size-3' />
-                                  {node.dbNode.probe_server}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* 操作按钮组 */}
-                          <div className='flex items-center justify-center gap-2 pt-2 border-t' onClick={(e) => e.stopPropagation()}>
-                            {node.clash && (
-                              <Button
-                                variant='outline'
-                                size='sm'
-                                className='flex-1'
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (node.isSaved && node.dbNode) {
-                                    handleEditClashConfig(node.dbNode)
-                                  } else if (!node.isSaved) {
-                                    handleEditClashConfig(node)
-                                  }
-                                  setClashDialogOpen(true)
-                                }}
-                              >
-                                <Eye className='size-4 mr-1' />
-                                配置
-                              </Button>
-                            )}
-                            {node.clash && node.isSaved && (
-                              <Button
-                                variant='outline'
-                                size='sm'
-                                className='flex-1'
-                                onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
-                              >
-                                <Copy className='size-4 mr-1' />
-                                复制
-                              </Button>
-                            )}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant='outline'
-                                  size='sm'
-                                  className='flex-1 text-destructive hover:text-destructive hover:bg-destructive/10'
-                                  disabled={node.isSaved && isDeletingNode}
-                                >
-                                  删除
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    确定要删除节点 "{node.name || '未知'}" 吗？
-                                    {node.isSaved && '此操作不可撤销。'}
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>取消</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                  >
-                                    删除
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </CardContent>
-                      </SortableCard>
-                    ))
-                  )}
-                    </div>
-                  </SortableContext>
-                  {createPortal(
-                    <DragOverlay dropAnimation={null}>
-                      {activeId && (
-                        <DragOverlayContent nodes={dragOverlayNodes} protocolColors={PROTOCOL_COLORS} />
-                      )}
-                    </DragOverlay>,
-                    document.body
-                  )}
-                </DndContext>
-                )}
-
-                {/* 移动端虚拟滚动模式 (<768px) */}
-                {!isTablet && renderMode === 'virtual' && (
-                  <div
-                    ref={virtualListRef}
-                    className='overflow-auto'
-                    style={{ height: 'calc(100vh - 380px)', minHeight: '400px', contain: 'strict', willChange: 'transform' }}
-                  >
-                    {deferredFilteredNodes.length === 0 ? (
-                      <Card>
-                        <CardContent className='text-center text-muted-foreground py-8'>
-                          没有找到匹配的节点
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <div
-                        style={{
-                          height: `${rowVirtualizer.getTotalSize()}px`,
-                          position: 'relative',
-                          contain: 'content',
-                        }}
+                  {/* 移动端卡片视图 (<768px) */}
+                  {!isTablet && renderMode === 'expanded' && (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onDragCancel={handleDragCancel}
+                    >
+                      <SortableContext
+                        items={paginatedNodes.map((n) => n.id)}
+                        strategy={verticalListSortingStrategy}
                       >
-                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                          const node = paginatedNodes[virtualRow.index]
-                          if (!node) return null
-                          return (
-                            <div
-                              key={node.id}
-                              data-index={virtualRow.index}
-                              ref={rowVirtualizer.measureElement}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                transform: `translateY(${virtualRow.start}px)`,
-                                paddingBottom: '12px',
-                              }}
-                            >
-                              <Card
-                                className={cn(
-                                  'cursor-pointer transition-colors',
-                                  node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) && 'ring-2 ring-primary bg-primary/5'
+                        <div className='space-y-3'>
+                          {deferredFilteredNodes.length === 0 ? (
+                            <Card>
+                              <CardContent className='text-muted-foreground py-8 text-center'>
+                                没有找到匹配的节点
+                              </CardContent>
+                            </Card>
+                          ) : (
+                            paginatedNodes.map((node) => (
+                              <SortableCard
+                                key={node.id}
+                                id={node.id}
+                                isSaved={node.isSaved}
+                                isBatchDragging={Boolean(
+                                  node.dbId && batchDraggingIds.has(node.dbId)
                                 )}
-                                onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
+                                isSelected={
+                                  node.isSaved && node.dbId
+                                    ? selectedNodeIds.has(node.dbId)
+                                    : false
+                                }
+                                onClick={
+                                  node.isSaved && node.dbId
+                                    ? () => handleNodeSelect(node.dbId!)
+                                    : undefined
+                                }
                               >
-                                <CardContent className='p-3 space-y-2'>
+                                <CardContent className='space-y-2 p-3'>
                                   {/* 头部：协议、节点名称、已保存标签 */}
-                                  <div className='flex items-start justify-between gap-2'>
-                                    <div className='flex-1 min-w-0'>
-                                      <div className='flex items-center gap-2 mb-1'>
+                                  <div>
+                                    <div className='mb-1 flex items-center justify-between gap-2'>
+                                      <div className='flex items-center gap-2'>
+                                        {node.isSaved && (
+                                          <DragHandle
+                                            id={node.id}
+                                            size='large'
+                                          />
+                                        )}
                                         {node.isSaved && node.dbId && (
                                           <Checkbox
                                             className='hidden sm:flex'
-                                            checked={selectedNodeIds.has(node.dbId)}
+                                            checked={selectedNodeIds.has(
+                                              node.dbId
+                                            )}
                                             onCheckedChange={(checked) => {
-                                              const newSet = new Set(selectedNodeIds)
+                                              const newSet = new Set(
+                                                selectedNodeIds
+                                              )
                                               if (checked) {
                                                 newSet.add(node.dbId!)
                                               } else {
@@ -4072,199 +4398,443 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                               }
                                               setSelectedNodeIds(newSet)
                                             }}
-                                            onClick={(e) => e.stopPropagation()}
                                           />
                                         )}
                                         {node.parsed ? (
                                           <Badge
                                             variant='outline'
                                             className={
-                                              node.dbNode?.protocol?.includes('⇋')
-                                                ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                                : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
+                                              node.dbNode?.protocol?.includes(
+                                                '⇋'
+                                              )
+                                                ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                                : PROTOCOL_COLORS[
+                                                    node.parsed.type
+                                                  ] || 'bg-gray-500/10'
                                             }
                                           >
-                                            {node.dbNode?.protocol?.includes('⇋')
+                                            {node.dbNode?.protocol?.includes(
+                                              '⇋'
+                                            )
                                               ? node.dbNode.protocol.toUpperCase()
                                               : node.parsed.type.toUpperCase()}
                                           </Badge>
                                         ) : (
-                                          <Badge variant='destructive'>解析失败</Badge>
+                                          <Badge variant='destructive'>
+                                            解析失败
+                                          </Badge>
                                         )}
                                         {node.isSaved && (
                                           <Check className='size-4 text-green-600' />
                                         )}
                                       </div>
-                                      {/* 节点名称 */}
-                                      {editingNode?.id === node.id ? (
-                                        <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
-                                          <Input
-                                            value={editingNode.value}
-                                            onChange={(event) => handleNameEditChange(event.target.value)}
-                                            onKeyDown={(event) => {
-                                              if (event.key === 'Enter') {
-                                                event.preventDefault()
-                                                handleNameEditSubmit(node)
-                                              } else if (event.key === 'Escape') {
-                                                event.preventDefault()
-                                                handleNameEditCancel()
-                                              }
-                                            }}
-                                            className='h-7 flex-1 min-w-0'
-                                            autoFocus
-                                          />
-                                          <Button
-                                            variant='ghost'
-                                            size='icon'
-                                            className='size-7 text-emerald-600 shrink-0'
-                                            onClick={() => handleNameEditSubmit(node)}
-                                            disabled={node.isSaved ? isUpdatingNodeName : false}
-                                          >
-                                            <Check className='size-3.5' />
-                                          </Button>
-                                          <Button
-                                            variant='ghost'
-                                            size='icon'
-                                            className='size-7 text-muted-foreground shrink-0'
-                                            onClick={handleNameEditCancel}
-                                          >
-                                            <X className='size-3.5' />
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          {(() => {
-                                            const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                            const relayName = node.dbNode?.relay_group_name
-                                            const label = relayName || chainName
-                                            if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                          })()}
-                                          <div className='font-medium text-sm truncate'><Twemoji>{node.name || '未知'}</Twemoji></div>
-                                        </>
-                                      )}
-                                    </div>
-                                    {/* 编辑按钮 */}
-                                    {editingNode?.id !== node.id && (
-                                      <div className='flex items-center gap-1 shrink-0' onClick={(e) => e.stopPropagation()}>
-                                        <Button
-                                          variant='ghost'
-                                          size='icon'
-                                          className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                          onClick={() => handleNameEditStart(node)}
-                                          disabled={node.isSaved ? isUpdatingNodeName : false}
+                                      {/* 编辑、交换和探针绑定按钮 */}
+                                      {editingNode?.id !== node.id && (
+                                        <div
+                                          className='flex shrink-0 items-center gap-1'
+                                          onClick={(e) => e.stopPropagation()}
                                         >
-                                          <Pencil className='size-4' />
-                                        </Button>
-                                        {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
                                           <Button
                                             variant='ghost'
                                             size='icon'
                                             className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                            onClick={() => {
-                                              setSourceNodeForExchange(node.dbNode)
-                                              setExchangeDialogOpen(true)
-                                            }}
+                                            onClick={() =>
+                                              handleNameEditStart(node)
+                                            }
+                                            disabled={
+                                              node.isSaved
+                                                ? isUpdatingNodeName
+                                                : false
+                                            }
                                           >
-                                            <img
-                                              src={ExchangeIcon}
-                                              alt='交换'
-                                              className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                            />
+                                            <Pencil className='size-4' />
                                           </Button>
-                                        )}
-                                        {/* TCPing 测试按钮 */}
-                                        {node.parsed && (
-                                          (() => {
-                                            const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                            const tcpingResult = tcpingResults[nodeKey]
-                                            const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-
-                                            if (tcpingResult?.success && !isLoading) {
-                                              const latencyColor = tcpingResult.latency < 100
-                                                ? 'text-green-600 hover:text-green-700'
-                                                : tcpingResult.latency < 200
-                                                  ? 'text-yellow-500 hover:text-yellow-600'
-                                                  : 'text-red-500 hover:text-red-600'
-                                              return (
-                                                <Button
-                                                  variant='ghost'
-                                                  size='sm'
-                                                  className={`h-7 px-1.5 text-xs font-mono ${latencyColor}`}
-                                                  onClick={() => handleTcping(node)}
-                                                >
-                                                  {tcpingResult.latency < 1000
-                                                    ? `${Math.round(tcpingResult.latency)}ms`
-                                                    : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
-                                                </Button>
-                                              )
-                                            }
-
-                                            if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                              return (
-                                                <Button
-                                                  variant='ghost'
-                                                  size='sm'
-                                                  className='h-7 px-1.5 text-xs font-mono text-red-500 hover:text-red-600'
-                                                  onClick={() => handleTcping(node)}
-                                                >
-                                                  超时
-                                                </Button>
-                                              )
-                                            }
-
-                                            return (
+                                          {node.isSaved &&
+                                            node.dbNode &&
+                                            !node.dbNode.protocol.includes(
+                                              '⇋'
+                                            ) && (
                                               <Button
                                                 variant='ghost'
                                                 size='icon'
                                                 className='size-7 text-[#d97757] hover:text-[#c66647]'
-                                                disabled={isLoading}
-                                                onClick={() => handleTcping(node)}
+                                                onClick={() => {
+                                                  setSourceNodeForExchange(
+                                                    node.dbNode
+                                                  )
+                                                  setExchangeDialogOpen(true)
+                                                }}
                                               >
-                                                {isLoading ? (
-                                                  <Loader2 className='size-4 animate-spin' />
-                                                ) : (
-                                                  <Zap className='size-4' />
-                                                )}
+                                                <img
+                                                  src={ExchangeIcon}
+                                                  alt='交换'
+                                                  className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                />
                                               </Button>
+                                            )}
+                                          {userConfig?.enable_probe_binding &&
+                                            node.isSaved &&
+                                            node.dbNode && (
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                                onClick={() => {
+                                                  setSelectedNodeForProbe(
+                                                    node.dbNode!
+                                                  )
+                                                  setProbeBindingDialogOpen(
+                                                    true
+                                                  )
+                                                  refetchProbeConfig()
+                                                }}
+                                              >
+                                                <Activity
+                                                  className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : ''}`}
+                                                />
+                                              </Button>
+                                            )}
+                                          {/* TCPing 测试按钮 - 平板视图 */}
+                                          {node.parsed &&
+                                            (() => {
+                                              const nodeKey = node.isSaved
+                                                ? String(node.dbId)
+                                                : node.id
+                                              const tcpingResult =
+                                                tcpingResults[nodeKey]
+                                              const isLoading =
+                                                tcpingNodeId === nodeKey ||
+                                                tcpingResult?.loading
+
+                                              // 测试成功后显示延迟数字
+                                              if (
+                                                tcpingResult?.success &&
+                                                !isLoading
+                                              ) {
+                                                const latencyColor =
+                                                  tcpingResult.latency < 100
+                                                    ? 'text-green-600 hover:text-green-700'
+                                                    : tcpingResult.latency < 200
+                                                      ? 'text-yellow-500 hover:text-yellow-600'
+                                                      : 'text-red-500 hover:text-red-600'
+                                                return (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className={`h-7 px-1.5 font-mono text-xs ${latencyColor}`}
+                                                        onClick={() =>
+                                                          handleTcping(node)
+                                                        }
+                                                      >
+                                                        {tcpingResult.latency <
+                                                        1000
+                                                          ? `${Math.round(tcpingResult.latency)}ms`
+                                                          : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      点击重新测试
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )
+                                              }
+
+                                              // 测试失败显示超时
+                                              if (
+                                                tcpingResult &&
+                                                !tcpingResult.success &&
+                                                !isLoading
+                                              ) {
+                                                return (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='h-7 px-1.5 font-mono text-xs text-red-500 hover:text-red-600'
+                                                        onClick={() =>
+                                                          handleTcping(node)
+                                                        }
+                                                      >
+                                                        超时
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      {tcpingResult.error ||
+                                                        '连接失败，点击重试'}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )
+                                              }
+
+                                              // 默认状态或加载中
+                                              return (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='icon'
+                                                      className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        handleTcping(node)
+                                                      }
+                                                    >
+                                                      {isLoading ? (
+                                                        <Loader2 className='size-4 animate-spin' />
+                                                      ) : (
+                                                        <Zap className='size-4' />
+                                                      )}
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    {isLoading
+                                                      ? '测试中...'
+                                                      : 'TCPing 测试'}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )
+                                            })()}
+                                          {node.isSaved && node.dbNode && (
+                                            <FlagEmojiPicker
+                                              onSelect={(flag) =>
+                                                handleSetNodeFlag(
+                                                  node.dbNode!.id,
+                                                  flag
+                                                )
+                                              }
+                                              onAutoDetect={() =>
+                                                handleAddSingleNodeEmoji(
+                                                  node.dbNode!.id
+                                                )
+                                              }
+                                              disabled={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              loading={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                            />
+                                          )}
+                                          {node.isSaved && node.dbId && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                                  onClick={() => {
+                                                    setTempSubSingleNodeId(
+                                                      node.dbId!
+                                                    )
+                                                    setTempSubUrl('')
+                                                    setTempSubDialogOpen(true)
+                                                  }}
+                                                >
+                                                  <Link2 className='size-4' />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                生成临时订阅
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* 节点名称 */}
+                                    {editingNode?.id === node.id ? (
+                                      <div
+                                        className='flex items-center gap-1'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Input
+                                          value={editingNode.value}
+                                          onChange={(event) =>
+                                            handleNameEditChange(
+                                              event.target.value
                                             )
-                                          })()
-                                        )}
+                                          }
+                                          onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                              event.preventDefault()
+                                              handleNameEditSubmit(node)
+                                            } else if (event.key === 'Escape') {
+                                              event.preventDefault()
+                                              handleNameEditCancel()
+                                            }
+                                          }}
+                                          className='h-7 min-w-0 flex-1'
+                                          autoFocus
+                                        />
+                                        <Button
+                                          variant='ghost'
+                                          size='icon'
+                                          className='size-7 shrink-0 text-emerald-600'
+                                          onClick={() =>
+                                            handleNameEditSubmit(node)
+                                          }
+                                          disabled={
+                                            node.isSaved
+                                              ? isUpdatingNodeName
+                                              : false
+                                          }
+                                        >
+                                          <Check className='size-3.5' />
+                                        </Button>
+                                        <Button
+                                          variant='ghost'
+                                          size='icon'
+                                          className='text-muted-foreground size-7 shrink-0'
+                                          onClick={handleNameEditCancel}
+                                        >
+                                          <X className='size-3.5' />
+                                        </Button>
                                       </div>
+                                    ) : (
+                                      <>
+                                        {(() => {
+                                          const chainName = node.dbNode
+                                            ?.chain_proxy_node_id
+                                            ? nodeIdToName.get(
+                                                node.dbNode.chain_proxy_node_id
+                                              )
+                                            : undefined
+                                          const relayName =
+                                            node.dbNode?.relay_group_name
+                                          const label = relayName || chainName
+                                          if (!label) return null
+                                          const tip =
+                                            relayName &&
+                                            node.dbNode?.relay_group_node_ids
+                                              ? node.dbNode.relay_group_node_ids
+                                                  .map((id) =>
+                                                    nodeIdToName.get(id)
+                                                  )
+                                                  .filter(Boolean)
+                                                  .join('\n')
+                                              : (chainName ?? '')
+                                          return (
+                                            <div
+                                              className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                              title={tip}
+                                            >
+                                              <span className='min-w-0 truncate'>
+                                                ⬐ {label}
+                                                {relayName
+                                                  ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                  : ''}
+                                              </span>
+                                              {relayName && (
+                                                <button
+                                                  type='button'
+                                                  className='hover:text-destructive shrink-0'
+                                                  title='解除中转组'
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    unbindRelayGroupMutation.mutate(
+                                                      node.dbNode!.id
+                                                    )
+                                                  }}
+                                                >
+                                                  <X className='size-3' />
+                                                </button>
+                                              )}
+                                            </div>
+                                          )
+                                        })()}
+                                        <div className='truncate text-sm font-medium'>
+                                          <Twemoji>
+                                            {node.name || '未知'}
+                                          </Twemoji>
+                                        </div>
+                                      </>
                                     )}
                                   </div>
 
                                   {/* 服务器地址和标签 */}
                                   <div className='space-y-1.5'>
                                     {node.parsed && (
-                                      <div className='flex items-center gap-2 flex-wrap text-xs'>
-                                        <span className='text-muted-foreground shrink-0'>地址:</span>
-                                        <span className='font-mono break-all'>{node.parsed.server}:{node.parsed.port}</span>
-                                        {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                          <Badge variant='outline' className='text-xs'>
-                                            {node.parsed.network}
-                                          </Badge>
-                                        )}
+                                      <div className='flex flex-wrap items-center gap-2 text-xs'>
+                                        <span className='text-muted-foreground shrink-0'>
+                                          地址:
+                                        </span>
+                                        <span className='font-mono break-all'>
+                                          {node.parsed.server}:
+                                          {node.parsed.port}
+                                        </span>
+                                        {node.parsed.network &&
+                                          node.parsed.network !== 'tcp' && (
+                                            <Badge
+                                              variant='outline'
+                                              className='text-xs'
+                                            >
+                                              {node.parsed.network}
+                                            </Badge>
+                                          )}
+                                        {node.parsed.network === 'xhttp' &&
+                                          node.parsed.mode && (
+                                            <Badge
+                                              variant='outline'
+                                              className='text-xs'
+                                            >
+                                              {node.parsed.mode}
+                                            </Badge>
+                                          )}
                                       </div>
                                     )}
-                                    <div className='flex items-center gap-2 flex-wrap text-xs'>
-                                      <span className='text-muted-foreground shrink-0'>标签:</span>
-                                      {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                        <Badge key={t} variant='secondary' className='text-xs cursor-pointer hover:bg-primary/20 transition-colors' onClick={(e) => {
-                                          e.stopPropagation()
-                                          if (node.isSaved && node.dbNode) {
-                                            setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                          }
-                                        }}>{t}</Badge>
+                                    <div className='flex flex-wrap items-center gap-2 text-xs'>
+                                      <span className='text-muted-foreground shrink-0'>
+                                        标签:
+                                      </span>
+                                      {(node.isSaved &&
+                                      node.dbNode?.tags?.length
+                                        ? node.dbNode.tags
+                                        : [
+                                            node.dbNode?.tag ||
+                                              node.tag ||
+                                              '手动输入',
+                                          ]
+                                      ).map((t) => (
+                                        <Badge
+                                          key={t}
+                                          variant='secondary'
+                                          className='hover:bg-primary/20 cursor-pointer text-xs transition-colors'
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (node.isSaved && node.dbNode) {
+                                              setTagManageNodeId(node.dbNode.id)
+                                              setTagManageSelectedTag(t)
+                                              setTagManageInput(t)
+                                              setTagManageDialogOpen(true)
+                                            }
+                                          }}
+                                        >
+                                          {t}
+                                        </Badge>
                                       ))}
+                                      {node.isSaved &&
+                                        node.dbNode?.probe_server && (
+                                          <Badge
+                                            variant='secondary'
+                                            className='flex items-center gap-1 text-xs'
+                                          >
+                                            <Activity className='size-3' />
+                                            {node.dbNode.probe_server}
+                                          </Badge>
+                                        )}
                                     </div>
                                   </div>
 
                                   {/* 操作按钮组 */}
-                                  <div className='flex items-center justify-center gap-2 pt-2 border-t' onClick={(e) => e.stopPropagation()}>
+                                  <div
+                                    className='flex items-center justify-center gap-2 border-t pt-2'
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {node.clash && (
                                       <Button
                                         variant='outline'
@@ -4280,7 +4850,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                           setClashDialogOpen(true)
                                         }}
                                       >
-                                        <Eye className='size-4 mr-1' />
+                                        <Eye className='mr-1 size-4' />
                                         配置
                                       </Button>
                                     )}
@@ -4289,9 +4859,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                         variant='outline'
                                         size='sm'
                                         className='flex-1'
-                                        onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
+                                        onClick={() =>
+                                          node.isSaved &&
+                                          handleCopyUri(node.dbNode!)
+                                        }
                                       >
-                                        <Copy className='size-4 mr-1' />
+                                        <Copy className='mr-1 size-4' />
                                         复制
                                       </Button>
                                     )}
@@ -4300,24 +4873,35 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                         <Button
                                           variant='outline'
                                           size='sm'
-                                          className='flex-1 text-destructive hover:text-destructive hover:bg-destructive/10'
-                                          disabled={node.isSaved && isDeletingNode}
+                                          className='text-destructive hover:text-destructive hover:bg-destructive/10 flex-1'
+                                          disabled={
+                                            node.isSaved && isDeletingNode
+                                          }
                                         >
                                           删除
                                         </Button>
                                       </AlertDialogTrigger>
                                       <AlertDialogContent>
                                         <AlertDialogHeader>
-                                          <AlertDialogTitle>确认删除</AlertDialogTitle>
+                                          <AlertDialogTitle>
+                                            确认删除
+                                          </AlertDialogTitle>
                                           <AlertDialogDescription>
-                                            确定要删除节点 "{node.name || '未知'}" 吗？
+                                            确定要删除节点 "
+                                            {node.name || '未知'}" 吗？
                                             {node.isSaved && '此操作不可撤销。'}
                                           </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                          <AlertDialogCancel>取消</AlertDialogCancel>
+                                          <AlertDialogCancel>
+                                            取消
+                                          </AlertDialogCancel>
                                           <AlertDialogAction
-                                            onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
+                                            onClick={() =>
+                                              node.isSaved
+                                                ? handleDelete(node.dbId)
+                                                : handleDeleteTemp(node.id)
+                                            }
                                           >
                                             删除
                                           </AlertDialogAction>
@@ -4326,205 +4910,3178 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                     </AlertDialog>
                                   </div>
                                 </CardContent>
-                              </Card>
-                            </div>
-                          )
-                        })}
+                              </SortableCard>
+                            ))
+                          )}
+                        </div>
+                      </SortableContext>
+                      {createPortal(
+                        <DragOverlay dropAnimation={null}>
+                          {activeId && (
+                            <DragOverlayContent
+                              nodes={dragOverlayNodes}
+                              protocolColors={PROTOCOL_COLORS}
+                            />
+                          )}
+                        </DragOverlay>,
+                        document.body
+                      )}
+                    </DndContext>
+                  )}
+
+                  {/* 移动端虚拟滚动模式 (<768px) */}
+                  {!isTablet && renderMode === 'virtual' && (
+                    <div
+                      ref={virtualListRef}
+                      className='overflow-auto'
+                      style={{
+                        height: 'calc(100vh - 380px)',
+                        minHeight: '400px',
+                        contain: 'strict',
+                        willChange: 'transform',
+                      }}
+                    >
+                      {deferredFilteredNodes.length === 0 ? (
+                        <Card>
+                          <CardContent className='text-muted-foreground py-8 text-center'>
+                            没有找到匹配的节点
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div
+                          style={{
+                            height: `${rowVirtualizer.getTotalSize()}px`,
+                            position: 'relative',
+                            contain: 'content',
+                          }}
+                        >
+                          {rowVirtualizer
+                            .getVirtualItems()
+                            .map((virtualRow) => {
+                              const node = paginatedNodes[virtualRow.index]
+                              if (!node) return null
+                              return (
+                                <div
+                                  key={node.id}
+                                  data-index={virtualRow.index}
+                                  ref={rowVirtualizer.measureElement}
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    transform: `translateY(${virtualRow.start}px)`,
+                                    paddingBottom: '12px',
+                                  }}
+                                >
+                                  <Card
+                                    className={cn(
+                                      'cursor-pointer transition-colors',
+                                      node.isSaved &&
+                                        node.dbId &&
+                                        selectedNodeIds.has(node.dbId) &&
+                                        'ring-primary bg-primary/5 ring-2'
+                                    )}
+                                    onClick={
+                                      node.isSaved && node.dbId
+                                        ? () => handleNodeSelect(node.dbId!)
+                                        : undefined
+                                    }
+                                  >
+                                    <CardContent className='space-y-2 p-3'>
+                                      {/* 头部：协议、节点名称、已保存标签 */}
+                                      <div className='flex items-start justify-between gap-2'>
+                                        <div className='min-w-0 flex-1'>
+                                          <div className='mb-1 flex items-center gap-2'>
+                                            {node.isSaved && node.dbId && (
+                                              <Checkbox
+                                                className='hidden sm:flex'
+                                                checked={selectedNodeIds.has(
+                                                  node.dbId
+                                                )}
+                                                onCheckedChange={(checked) => {
+                                                  const newSet = new Set(
+                                                    selectedNodeIds
+                                                  )
+                                                  if (checked) {
+                                                    newSet.add(node.dbId!)
+                                                  } else {
+                                                    newSet.delete(node.dbId!)
+                                                  }
+                                                  setSelectedNodeIds(newSet)
+                                                }}
+                                                onClick={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                              />
+                                            )}
+                                            {node.parsed ? (
+                                              <Badge
+                                                variant='outline'
+                                                className={
+                                                  node.dbNode?.protocol?.includes(
+                                                    '⇋'
+                                                  )
+                                                    ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                                    : PROTOCOL_COLORS[
+                                                        node.parsed.type
+                                                      ] || 'bg-gray-500/10'
+                                                }
+                                              >
+                                                {node.dbNode?.protocol?.includes(
+                                                  '⇋'
+                                                )
+                                                  ? node.dbNode.protocol.toUpperCase()
+                                                  : node.parsed.type.toUpperCase()}
+                                              </Badge>
+                                            ) : (
+                                              <Badge variant='destructive'>
+                                                解析失败
+                                              </Badge>
+                                            )}
+                                            {node.isSaved && (
+                                              <Check className='size-4 text-green-600' />
+                                            )}
+                                          </div>
+                                          {/* 节点名称 */}
+                                          {editingNode?.id === node.id ? (
+                                            <div
+                                              className='flex items-center gap-1'
+                                              onClick={(e) =>
+                                                e.stopPropagation()
+                                              }
+                                            >
+                                              <Input
+                                                value={editingNode.value}
+                                                onChange={(event) =>
+                                                  handleNameEditChange(
+                                                    event.target.value
+                                                  )
+                                                }
+                                                onKeyDown={(event) => {
+                                                  if (event.key === 'Enter') {
+                                                    event.preventDefault()
+                                                    handleNameEditSubmit(node)
+                                                  } else if (
+                                                    event.key === 'Escape'
+                                                  ) {
+                                                    event.preventDefault()
+                                                    handleNameEditCancel()
+                                                  }
+                                                }}
+                                                className='h-7 min-w-0 flex-1'
+                                                autoFocus
+                                              />
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='size-7 shrink-0 text-emerald-600'
+                                                onClick={() =>
+                                                  handleNameEditSubmit(node)
+                                                }
+                                                disabled={
+                                                  node.isSaved
+                                                    ? isUpdatingNodeName
+                                                    : false
+                                                }
+                                              >
+                                                <Check className='size-3.5' />
+                                              </Button>
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='text-muted-foreground size-7 shrink-0'
+                                                onClick={handleNameEditCancel}
+                                              >
+                                                <X className='size-3.5' />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <>
+                                              {(() => {
+                                                const chainName = node.dbNode
+                                                  ?.chain_proxy_node_id
+                                                  ? nodeIdToName.get(
+                                                      node.dbNode
+                                                        .chain_proxy_node_id
+                                                    )
+                                                  : undefined
+                                                const relayName =
+                                                  node.dbNode?.relay_group_name
+                                                const label =
+                                                  relayName || chainName
+                                                if (!label) return null
+                                                const tip =
+                                                  relayName &&
+                                                  node.dbNode
+                                                    ?.relay_group_node_ids
+                                                    ? node.dbNode.relay_group_node_ids
+                                                        .map((id) =>
+                                                          nodeIdToName.get(id)
+                                                        )
+                                                        .filter(Boolean)
+                                                        .join('\n')
+                                                    : (chainName ?? '')
+                                                return (
+                                                  <div
+                                                    className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                                    title={tip}
+                                                  >
+                                                    <span className='min-w-0 truncate'>
+                                                      ⬐ {label}
+                                                      {relayName
+                                                        ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                        : ''}
+                                                    </span>
+                                                    {relayName && (
+                                                      <button
+                                                        type='button'
+                                                        className='hover:text-destructive shrink-0'
+                                                        title='解除中转组'
+                                                        onClick={(e) => {
+                                                          e.stopPropagation()
+                                                          unbindRelayGroupMutation.mutate(
+                                                            node.dbNode!.id
+                                                          )
+                                                        }}
+                                                      >
+                                                        <X className='size-3' />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                )
+                                              })()}
+                                              <div className='truncate text-sm font-medium'>
+                                                <Twemoji>
+                                                  {node.name || '未知'}
+                                                </Twemoji>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                        {/* 编辑按钮 */}
+                                        {editingNode?.id !== node.id && (
+                                          <div
+                                            className='flex shrink-0 items-center gap-1'
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                              onClick={() =>
+                                                handleNameEditStart(node)
+                                              }
+                                              disabled={
+                                                node.isSaved
+                                                  ? isUpdatingNodeName
+                                                  : false
+                                              }
+                                            >
+                                              <Pencil className='size-4' />
+                                            </Button>
+                                            {node.isSaved &&
+                                              node.dbNode &&
+                                              !node.dbNode.protocol.includes(
+                                                '⇋'
+                                              ) && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                                  onClick={() => {
+                                                    setSourceNodeForExchange(
+                                                      node.dbNode
+                                                    )
+                                                    setExchangeDialogOpen(true)
+                                                  }}
+                                                >
+                                                  <img
+                                                    src={ExchangeIcon}
+                                                    alt='交换'
+                                                    className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                  />
+                                                </Button>
+                                              )}
+                                            {/* TCPing 测试按钮 */}
+                                            {node.parsed &&
+                                              (() => {
+                                                const nodeKey = node.isSaved
+                                                  ? String(node.dbId)
+                                                  : node.id
+                                                const tcpingResult =
+                                                  tcpingResults[nodeKey]
+                                                const isLoading =
+                                                  tcpingNodeId === nodeKey ||
+                                                  tcpingResult?.loading
+
+                                                if (
+                                                  tcpingResult?.success &&
+                                                  !isLoading
+                                                ) {
+                                                  const latencyColor =
+                                                    tcpingResult.latency < 100
+                                                      ? 'text-green-600 hover:text-green-700'
+                                                      : tcpingResult.latency <
+                                                          200
+                                                        ? 'text-yellow-500 hover:text-yellow-600'
+                                                        : 'text-red-500 hover:text-red-600'
+                                                  return (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className={`h-7 px-1.5 font-mono text-xs ${latencyColor}`}
+                                                      onClick={() =>
+                                                        handleTcping(node)
+                                                      }
+                                                    >
+                                                      {tcpingResult.latency <
+                                                      1000
+                                                        ? `${Math.round(tcpingResult.latency)}ms`
+                                                        : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                    </Button>
+                                                  )
+                                                }
+
+                                                if (
+                                                  tcpingResult &&
+                                                  !tcpingResult.success &&
+                                                  !isLoading
+                                                ) {
+                                                  return (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='h-7 px-1.5 font-mono text-xs text-red-500 hover:text-red-600'
+                                                      onClick={() =>
+                                                        handleTcping(node)
+                                                      }
+                                                    >
+                                                      超时
+                                                    </Button>
+                                                  )
+                                                }
+
+                                                return (
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='icon'
+                                                    className='size-7 text-[#d97757] hover:text-[#c66647]'
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleTcping(node)
+                                                    }
+                                                  >
+                                                    {isLoading ? (
+                                                      <Loader2 className='size-4 animate-spin' />
+                                                    ) : (
+                                                      <Zap className='size-4' />
+                                                    )}
+                                                  </Button>
+                                                )
+                                              })()}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* 服务器地址和标签 */}
+                                      <div className='space-y-1.5'>
+                                        {node.parsed && (
+                                          <div className='flex flex-wrap items-center gap-2 text-xs'>
+                                            <span className='text-muted-foreground shrink-0'>
+                                              地址:
+                                            </span>
+                                            <span className='font-mono break-all'>
+                                              {node.parsed.server}:
+                                              {node.parsed.port}
+                                            </span>
+                                            {node.parsed.network &&
+                                              node.parsed.network !== 'tcp' && (
+                                                <Badge
+                                                  variant='outline'
+                                                  className='text-xs'
+                                                >
+                                                  {node.parsed.network}
+                                                </Badge>
+                                              )}
+                                          </div>
+                                        )}
+                                        <div className='flex flex-wrap items-center gap-2 text-xs'>
+                                          <span className='text-muted-foreground shrink-0'>
+                                            标签:
+                                          </span>
+                                          {(node.isSaved &&
+                                          node.dbNode?.tags?.length
+                                            ? node.dbNode.tags
+                                            : [
+                                                node.dbNode?.tag ||
+                                                  node.tag ||
+                                                  '手动输入',
+                                              ]
+                                          ).map((t) => (
+                                            <Badge
+                                              key={t}
+                                              variant='secondary'
+                                              className='hover:bg-primary/20 cursor-pointer text-xs transition-colors'
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                if (
+                                                  node.isSaved &&
+                                                  node.dbNode
+                                                ) {
+                                                  setTagManageNodeId(
+                                                    node.dbNode.id
+                                                  )
+                                                  setTagManageSelectedTag(t)
+                                                  setTagManageInput(t)
+                                                  setTagManageDialogOpen(true)
+                                                }
+                                              }}
+                                            >
+                                              {t}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {/* 操作按钮组 */}
+                                      <div
+                                        className='flex items-center justify-center gap-2 border-t pt-2'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {node.clash && (
+                                          <Button
+                                            variant='outline'
+                                            size='sm'
+                                            className='flex-1'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (node.isSaved && node.dbNode) {
+                                                handleEditClashConfig(
+                                                  node.dbNode
+                                                )
+                                              } else if (!node.isSaved) {
+                                                handleEditClashConfig(node)
+                                              }
+                                              setClashDialogOpen(true)
+                                            }}
+                                          >
+                                            <Eye className='mr-1 size-4' />
+                                            配置
+                                          </Button>
+                                        )}
+                                        {node.clash && node.isSaved && (
+                                          <Button
+                                            variant='outline'
+                                            size='sm'
+                                            className='flex-1'
+                                            onClick={() =>
+                                              node.isSaved &&
+                                              handleCopyUri(node.dbNode!)
+                                            }
+                                          >
+                                            <Copy className='mr-1 size-4' />
+                                            复制
+                                          </Button>
+                                        )}
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button
+                                              variant='outline'
+                                              size='sm'
+                                              className='text-destructive hover:text-destructive hover:bg-destructive/10 flex-1'
+                                              disabled={
+                                                node.isSaved && isDeletingNode
+                                              }
+                                            >
+                                              删除
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>
+                                                确认删除
+                                              </AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                确定要删除节点 "
+                                                {node.name || '未知'}" 吗？
+                                                {node.isSaved &&
+                                                  '此操作不可撤销。'}
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>
+                                                取消
+                                              </AlertDialogCancel>
+                                              <AlertDialogAction
+                                                onClick={() =>
+                                                  node.isSaved
+                                                    ? handleDelete(node.dbId)
+                                                    : handleDeleteTemp(node.id)
+                                                }
+                                              >
+                                                删除
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 平板端和桌面端共享 DndContext */}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    {/* 平板端表格视图 - 展开模式 (768-1024px) */}
+                    {isTablet && !isDesktop && renderMode === 'expanded' && (
+                      <div className='rounded-md border'>
+                        <SortableContext
+                          items={paginatedNodes.map((n) => n.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Table className='w-full'>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead
+                                  style={{ width: '36px' }}
+                                ></TableHead>
+                                <TableHead style={{ width: '60px' }}>
+                                  协议
+                                </TableHead>
+                                <TableHead>节点名称</TableHead>
+                                <TableHead style={{ width: '100px' }}>
+                                  标签
+                                </TableHead>
+                                <TableHead
+                                  style={{ width: '70px' }}
+                                  className='text-center'
+                                >
+                                  配置
+                                </TableHead>
+                                <TableHead
+                                  style={{ width: '70px' }}
+                                  className='text-center'
+                                >
+                                  操作
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {deferredFilteredNodes.length === 0 ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={6}
+                                    className='text-muted-foreground py-8 text-center'
+                                  >
+                                    没有找到匹配的节点
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                paginatedNodes.map((node) => (
+                                  <SortableTableRow
+                                    key={node.id}
+                                    id={node.id}
+                                    isSaved={node.isSaved}
+                                    isBatchDragging={Boolean(
+                                      node.dbId &&
+                                        batchDraggingIds.has(node.dbId)
+                                    )}
+                                    isSelected={
+                                      node.isSaved && node.dbId
+                                        ? selectedNodeIds.has(node.dbId)
+                                        : false
+                                    }
+                                    onClick={
+                                      node.isSaved && node.dbId
+                                        ? (e) => handleRowClick(e, node.dbId)
+                                        : undefined
+                                    }
+                                  >
+                                    <TableCell className='w-9 px-2'>
+                                      {node.isSaved && (
+                                        <DragHandle id={node.id} />
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {node.parsed ? (
+                                        <Badge
+                                          variant='outline'
+                                          className={
+                                            node.dbNode?.protocol?.includes('⇋')
+                                              ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                              : PROTOCOL_COLORS[
+                                                  node.parsed.type
+                                                ] || 'bg-gray-500/10'
+                                          }
+                                        >
+                                          {node.dbNode?.protocol?.includes('⇋')
+                                            ? node.dbNode.protocol.toUpperCase()
+                                            : node.parsed.type.toUpperCase()}
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant='destructive'>
+                                          解析失败
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className='max-w-[300px] min-w-[200px] font-medium'>
+                                      {editingNode?.id === node.id ? (
+                                        <div className='min-w-0'>
+                                          <div className='flex items-center gap-1'>
+                                            <Input
+                                              value={editingNode.value}
+                                              onChange={(e) =>
+                                                handleNameEditChange(
+                                                  e.target.value
+                                                )
+                                              }
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  e.preventDefault()
+                                                  handleNameEditSubmit(node)
+                                                } else if (e.key === 'Escape') {
+                                                  e.preventDefault()
+                                                  handleNameEditCancel()
+                                                }
+                                              }}
+                                              className='h-7 min-w-0 flex-1'
+                                              autoFocus
+                                              onClick={(e) =>
+                                                e.stopPropagation()
+                                              }
+                                            />
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='size-7 shrink-0 text-emerald-600'
+                                              onClick={() =>
+                                                handleNameEditSubmit(node)
+                                              }
+                                              disabled={
+                                                node.isSaved
+                                                  ? isUpdatingNodeName
+                                                  : false
+                                              }
+                                            >
+                                              <Check className='size-3.5' />
+                                            </Button>
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='text-muted-foreground size-7 shrink-0'
+                                              onClick={handleNameEditCancel}
+                                            >
+                                              <X className='size-3.5' />
+                                            </Button>
+                                          </div>
+                                          {/* 编辑时也保留服务器地址显示，避免行高变化 */}
+                                          {node.parsed && (
+                                            <div className='text-muted-foreground mt-0.5 flex items-center gap-1 text-xs'>
+                                              <span className='truncate font-mono'>
+                                                {node.parsed.server}:
+                                                {node.parsed.port}
+                                              </span>
+                                              {node.parsed.network &&
+                                                node.parsed.network !==
+                                                  'tcp' && (
+                                                  <Badge
+                                                    variant='outline'
+                                                    className='shrink-0 text-xs'
+                                                  >
+                                                    {node.parsed.network}
+                                                  </Badge>
+                                                )}
+                                              {node.parsed.network ===
+                                                'xhttp' &&
+                                                node.parsed.mode && (
+                                                  <Badge
+                                                    variant='outline'
+                                                    className='shrink-0 text-xs'
+                                                  >
+                                                    {node.parsed.mode}
+                                                  </Badge>
+                                                )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className='flex min-w-0 items-center gap-2'>
+                                          <div className='min-w-0 flex-1'>
+                                            {(() => {
+                                              const chainName = node.dbNode
+                                                ?.chain_proxy_node_id
+                                                ? nodeIdToName.get(
+                                                    node.dbNode
+                                                      .chain_proxy_node_id
+                                                  )
+                                                : undefined
+                                              const relayName =
+                                                node.dbNode?.relay_group_name
+                                              const label =
+                                                relayName || chainName
+                                              if (!label) return null
+                                              const tip =
+                                                relayName &&
+                                                node.dbNode
+                                                  ?.relay_group_node_ids
+                                                  ? node.dbNode.relay_group_node_ids
+                                                      .map((id) =>
+                                                        nodeIdToName.get(id)
+                                                      )
+                                                      .filter(Boolean)
+                                                      .join('\n')
+                                                  : (chainName ?? '')
+                                              return (
+                                                <div
+                                                  className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                                  title={tip}
+                                                >
+                                                  <span className='min-w-0 truncate'>
+                                                    ⬐ {label}
+                                                    {relayName
+                                                      ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                      : ''}
+                                                  </span>
+                                                  {relayName && (
+                                                    <button
+                                                      type='button'
+                                                      className='hover:text-destructive shrink-0'
+                                                      title='解除中转组'
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        unbindRelayGroupMutation.mutate(
+                                                          node.dbNode!.id
+                                                        )
+                                                      }}
+                                                    >
+                                                      <X className='size-3' />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                            <div className='flex items-center gap-1'>
+                                              <span className='truncate'>
+                                                <Twemoji>
+                                                  {node.name || '未知'}
+                                                </Twemoji>
+                                              </span>
+                                              {node.isSaved && (
+                                                <Check className='size-4 shrink-0 text-green-600' />
+                                              )}
+                                            </div>
+                                            {/* 服务器地址显示在节点名称下方 */}
+                                            {node.parsed && (
+                                              <div className='text-muted-foreground mt-0.5 flex items-center gap-1 text-xs'>
+                                                <span className='truncate font-mono'>
+                                                  {node.parsed.server}:
+                                                  {node.parsed.port}
+                                                </span>
+                                                {node.parsed.network &&
+                                                  node.parsed.network !==
+                                                    'tcp' && (
+                                                    <Badge
+                                                      variant='outline'
+                                                      className='shrink-0 text-xs'
+                                                    >
+                                                      {node.parsed.network}
+                                                    </Badge>
+                                                  )}
+                                                {node.parsed.network ===
+                                                  'xhttp' &&
+                                                  node.parsed.mode && (
+                                                    <Badge
+                                                      variant='outline'
+                                                      className='shrink-0 text-xs'
+                                                    >
+                                                      {node.parsed.mode}
+                                                    </Badge>
+                                                  )}
+                                                {/* 平板端操作按钮: IP解析、绑定探针、TCPing测试、临时订阅 */}
+                                                {node.parsed?.server &&
+                                                  (() => {
+                                                    const nodeKey = node.isSaved
+                                                      ? String(node.dbId)
+                                                      : node.id
+                                                    const serverIsIp =
+                                                      isIpAddress(
+                                                        node.parsed.server
+                                                      )
+                                                    const hasOriginalServer =
+                                                      !node.isSaved &&
+                                                      node.originalServer
+
+                                                    // 已保存的节点且服务器地址已经是IP，不显示IP按钮
+                                                    if (
+                                                      node.isSaved &&
+                                                      serverIsIp
+                                                    ) {
+                                                      return null
+                                                    }
+
+                                                    // 未保存的节点且有原始服务器地址，显示回退按钮
+                                                    if (hasOriginalServer) {
+                                                      return (
+                                                        <Button
+                                                          variant='ghost'
+                                                          size='sm'
+                                                          className='size-5 shrink-0 border border-orange-500/50 p-0 hover:border-orange-500'
+                                                          title='恢复原始域名'
+                                                          onClick={() =>
+                                                            restoreTempNodeServer(
+                                                              node.id
+                                                            )
+                                                          }
+                                                        >
+                                                          <Undo2 className='size-3 text-orange-500' />
+                                                        </Button>
+                                                      )
+                                                    }
+
+                                                    // 显示IP解析菜单或按钮
+                                                    return ipMenuState?.nodeId ===
+                                                      nodeKey ? (
+                                                      <DropdownMenu
+                                                        open={true}
+                                                        onOpenChange={(open) =>
+                                                          !open &&
+                                                          setIpMenuState(null)
+                                                        }
+                                                      >
+                                                        <DropdownMenuTrigger
+                                                          asChild
+                                                        >
+                                                          <Button
+                                                            variant='ghost'
+                                                            size='sm'
+                                                            className='border-primary/50 hover:border-primary size-5 shrink-0 border p-0'
+                                                            title='选择IP地址'
+                                                          >
+                                                            <img
+                                                              src={IpIcon}
+                                                              alt='IP'
+                                                              className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                            />
+                                                          </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align='start'>
+                                                          {ipMenuState.ips.map(
+                                                            (ip) => (
+                                                              <DropdownMenuItem
+                                                                key={ip}
+                                                                onClick={() => {
+                                                                  if (
+                                                                    node.isSaved &&
+                                                                    node.dbId
+                                                                  ) {
+                                                                    updateNodeServerMutation.mutate(
+                                                                      {
+                                                                        nodeId:
+                                                                          node.dbId,
+                                                                        server:
+                                                                          ip,
+                                                                      }
+                                                                    )
+                                                                  } else {
+                                                                    updateTempNodeServer(
+                                                                      node.id,
+                                                                      ip
+                                                                    )
+                                                                    setIpMenuState(
+                                                                      null
+                                                                    )
+                                                                  }
+                                                                }}
+                                                              >
+                                                                <span className='font-mono'>
+                                                                  {ip}
+                                                                </span>
+                                                              </DropdownMenuItem>
+                                                            )
+                                                          )}
+                                                        </DropdownMenuContent>
+                                                      </DropdownMenu>
+                                                    ) : (
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='border-primary/50 hover:border-primary size-5 shrink-0 border p-0'
+                                                        title='解析IP地址'
+                                                        disabled={
+                                                          resolvingIpFor ===
+                                                          nodeKey
+                                                        }
+                                                        onClick={() =>
+                                                          handleResolveIp(node)
+                                                        }
+                                                      >
+                                                        <img
+                                                          src={IpIcon}
+                                                          alt='IP'
+                                                          className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                        />
+                                                      </Button>
+                                                    )
+                                                  })()}
+                                                {node.isSaved &&
+                                                  node.dbNode
+                                                    ?.original_server && (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='border-primary/50 hover:border-primary size-5 shrink-0 border p-0'
+                                                      title='恢复原始域名'
+                                                      disabled={
+                                                        restoreNodeServerMutation.isPending
+                                                      }
+                                                      onClick={() =>
+                                                        restoreNodeServerMutation.mutate(
+                                                          node.dbId
+                                                        )
+                                                      }
+                                                    >
+                                                      <Undo2 className='size-3' />
+                                                    </Button>
+                                                  )}
+                                                {userConfig?.enable_probe_binding &&
+                                                  node.isSaved &&
+                                                  node.dbNode && (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='border-primary/50 hover:border-primary size-5 shrink-0 border p-0'
+                                                      title={
+                                                        node.dbNode.probe_server
+                                                          ? `当前绑定: ${node.dbNode.probe_server}`
+                                                          : '绑定探针服务器'
+                                                      }
+                                                      onClick={() => {
+                                                        setSelectedNodeForProbe(
+                                                          node.dbNode!
+                                                        )
+                                                        setProbeBindingDialogOpen(
+                                                          true
+                                                        )
+                                                        refetchProbeConfig()
+                                                      }}
+                                                    >
+                                                      <Activity
+                                                        className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`}
+                                                      />
+                                                    </Button>
+                                                  )}
+                                                {/* TCPing 测试按钮 */}
+                                                {node.parsed &&
+                                                  (() => {
+                                                    const nodeKey = node.isSaved
+                                                      ? String(node.dbId)
+                                                      : node.id
+                                                    const tcpingResult =
+                                                      tcpingResults[nodeKey]
+                                                    const isLoading =
+                                                      tcpingNodeId ===
+                                                        nodeKey ||
+                                                      tcpingResult?.loading
+
+                                                    // 测试成功后显示延迟数字
+                                                    if (
+                                                      tcpingResult?.success &&
+                                                      !isLoading
+                                                    ) {
+                                                      const latencyColor =
+                                                        tcpingResult.latency <
+                                                        100
+                                                          ? 'border-green-500/50 hover:border-green-500 text-green-600'
+                                                          : tcpingResult.latency <
+                                                              200
+                                                            ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
+                                                            : 'border-red-500/50 hover:border-red-500 text-red-500'
+                                                      return (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <Button
+                                                              variant='ghost'
+                                                              size='sm'
+                                                              className={`h-5 shrink-0 border px-1 font-mono text-xs ${latencyColor}`}
+                                                              onClick={() =>
+                                                                handleTcping(
+                                                                  node
+                                                                )
+                                                              }
+                                                            >
+                                                              {tcpingResult.latency <
+                                                              1000
+                                                                ? `${Math.round(tcpingResult.latency)}ms`
+                                                                : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                            </Button>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            点击重新测试
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )
+                                                    }
+
+                                                    // 测试失败显示超时
+                                                    if (
+                                                      tcpingResult &&
+                                                      !tcpingResult.success &&
+                                                      !isLoading
+                                                    ) {
+                                                      return (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <Button
+                                                              variant='ghost'
+                                                              size='sm'
+                                                              className='h-5 shrink-0 border border-red-500/50 px-1 font-mono text-xs text-red-500 hover:border-red-500'
+                                                              onClick={() =>
+                                                                handleTcping(
+                                                                  node
+                                                                )
+                                                              }
+                                                            >
+                                                              超时
+                                                            </Button>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            {tcpingResult.error ||
+                                                              '连接失败，点击重试'}
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )
+                                                    }
+
+                                                    // 默认状态或加载中
+                                                    return (
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <Button
+                                                            variant='ghost'
+                                                            size='sm'
+                                                            className='border-primary/50 hover:border-primary size-5 shrink-0 border p-0'
+                                                            disabled={isLoading}
+                                                            onClick={() =>
+                                                              handleTcping(node)
+                                                            }
+                                                          >
+                                                            {isLoading ? (
+                                                              <Loader2 className='text-primary size-3 animate-spin' />
+                                                            ) : (
+                                                              <Zap className='size-3 text-[#d97757]' />
+                                                            )}
+                                                          </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          {isLoading
+                                                            ? '测试中...'
+                                                            : 'TCPing 测试'}
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    )
+                                                  })()}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                            onClick={() =>
+                                              handleNameEditStart(node)
+                                            }
+                                            disabled={
+                                              node.isSaved
+                                                ? isUpdatingNodeName
+                                                : false
+                                            }
+                                          >
+                                            <Pencil className='size-4' />
+                                          </Button>
+                                          {node.isSaved &&
+                                            node.dbNode &&
+                                            !node.dbNode.protocol.includes(
+                                              '⇋'
+                                            ) && (
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                                onClick={() => {
+                                                  setSourceNodeForExchange(
+                                                    node.dbNode
+                                                  )
+                                                  setExchangeDialogOpen(true)
+                                                }}
+                                              >
+                                                <img
+                                                  src={ExchangeIcon}
+                                                  alt='交换'
+                                                  className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                />
+                                              </Button>
+                                            )}
+                                          {node.isSaved && node.dbNode && (
+                                            <FlagEmojiPicker
+                                              onSelect={(flag) =>
+                                                handleSetNodeFlag(
+                                                  node.dbNode!.id,
+                                                  flag
+                                                )
+                                              }
+                                              onAutoDetect={() =>
+                                                handleAddSingleNodeEmoji(
+                                                  node.dbNode!.id
+                                                )
+                                              }
+                                              disabled={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              loading={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                            />
+                                          )}
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className='flex flex-wrap gap-1'>
+                                        {(node.isSaved &&
+                                        node.dbNode?.tags?.length
+                                          ? node.dbNode.tags
+                                          : [
+                                              node.dbNode?.tag ||
+                                                node.tag ||
+                                                '手动输入',
+                                            ]
+                                        ).map((t) => (
+                                          <Badge
+                                            key={t}
+                                            variant='secondary'
+                                            className='hover:bg-primary/20 max-w-[90px] cursor-pointer truncate text-xs transition-colors'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (node.isSaved && node.dbNode) {
+                                                setTagManageNodeId(
+                                                  node.dbNode.id
+                                                )
+                                                setTagManageSelectedTag(t)
+                                                setTagManageInput(t)
+                                                setTagManageDialogOpen(true)
+                                              }
+                                            }}
+                                          >
+                                            {t}
+                                          </Badge>
+                                        ))}
+                                        {node.isSaved &&
+                                          node.dbNode?.probe_server && (
+                                            <Badge
+                                              variant='secondary'
+                                              className='flex items-center gap-1 text-xs'
+                                            >
+                                              <Activity className='size-3' />
+                                            </Badge>
+                                          )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className='text-center'>
+                                      {node.clash ? (
+                                        <div className='flex justify-center gap-1'>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='h-7 w-7'
+                                            onClick={() => {
+                                              if (node.isSaved && node.dbNode) {
+                                                handleEditClashConfig(
+                                                  node.dbNode
+                                                )
+                                              } else if (!node.isSaved) {
+                                                handleEditClashConfig(node)
+                                              }
+                                            }}
+                                          >
+                                            <Eye className='h-4 w-4' />
+                                          </Button>
+                                          {node.isSaved && (
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='h-7 w-7'
+                                              title='复制 URI'
+                                              onClick={() =>
+                                                handleCopyUri(node.dbNode!)
+                                              }
+                                            >
+                                              <Copy className='h-4 w-4' />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className='text-muted-foreground text-xs'>
+                                          -
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className='text-center'>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            variant='ghost'
+                                            size='sm'
+                                            className='h-7 text-xs'
+                                            disabled={
+                                              node.isSaved && isDeletingNode
+                                            }
+                                          >
+                                            删除
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              确认删除
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              确定要删除节点 "
+                                              {node.name || '未知'}" 吗？
+                                              {node.isSaved &&
+                                                '此操作不可撤销。'}
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              取消
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                node.isSaved
+                                                  ? handleDelete(node.dbId)
+                                                  : handleDeleteTemp(node.id)
+                                              }
+                                            >
+                                              删除
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </TableCell>
+                                  </SortableTableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </SortableContext>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* 平板端和桌面端共享 DndContext */}
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={handleDragCancel}
-                >
-                  {/* 平板端表格视图 - 展开模式 (768-1024px) */}
-                  {isTablet && !isDesktop && renderMode === 'expanded' && (
-                  <div className='rounded-md border'>
-                    <SortableContext
-                    items={paginatedNodes.map(n => n.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                    <Table className='w-full'>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead style={{ width: '36px' }}></TableHead>
-                          <TableHead style={{ width: '60px' }}>协议</TableHead>
-                          <TableHead>节点名称</TableHead>
-                          <TableHead style={{ width: '100px' }}>标签</TableHead>
-                          <TableHead style={{ width: '70px' }} className='text-center'>配置</TableHead>
-                        <TableHead style={{ width: '70px' }} className='text-center'>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {deferredFilteredNodes.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className='text-center text-muted-foreground py-8'>
-                            没有找到匹配的节点
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        paginatedNodes.map(node => (
-                          <SortableTableRow
-                            key={node.id}
-                            id={node.id}
-                            isSaved={node.isSaved}
-                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
-                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                            onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
-                          >
-                            <TableCell className='w-9 px-2'>
-                              {node.isSaved && (
-                                <DragHandle id={node.id} />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {node.parsed ? (
-                                <Badge
-                                  variant='outline'
-                                  className={
-                                    node.dbNode?.protocol?.includes('⇋')
-                                      ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                      : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                  }
-                                >
-                                  {node.dbNode?.protocol?.includes('⇋')
-                                    ? node.dbNode.protocol.toUpperCase()
-                                    : node.parsed.type.toUpperCase()}
-                                </Badge>
-                              ) : (
-                                <Badge variant='destructive'>解析失败</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className='font-medium min-w-[200px] max-w-[300px]'>
-                              {editingNode?.id === node.id ? (
-                                <div className='min-w-0'>
-                                  <div className='flex items-center gap-1'>
-                                    <Input
-                                      value={editingNode.value}
-                                      onChange={(e) => handleNameEditChange(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault()
-                                          handleNameEditSubmit(node)
-                                        } else if (e.key === 'Escape') {
-                                          e.preventDefault()
-                                          handleNameEditCancel()
-                                        }
+                    {/* 平板端表格视图 - 虚拟滚动模式 (768-1024px) */}
+                    {isTablet && !isDesktop && renderMode === 'virtual' && (
+                      <div className='rounded-md border'>
+                        <Table className='w-full'>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead style={{ width: '36px' }}></TableHead>
+                              <TableHead style={{ width: '60px' }}>
+                                协议
+                              </TableHead>
+                              <TableHead>节点名称</TableHead>
+                              <TableHead style={{ width: '100px' }}>
+                                标签
+                              </TableHead>
+                              <TableHead
+                                style={{ width: '70px' }}
+                                className='text-center'
+                              >
+                                配置
+                              </TableHead>
+                              <TableHead
+                                style={{ width: '70px' }}
+                                className='text-center'
+                              >
+                                操作
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                        </Table>
+                        <div
+                          ref={tableVirtualListRef}
+                          className='overflow-auto'
+                          style={{
+                            height: 'calc(100vh - 420px)',
+                            minHeight: '400px',
+                            contain: 'strict',
+                            willChange: 'transform',
+                          }}
+                        >
+                          {deferredFilteredNodes.length === 0 ? (
+                            <div className='text-muted-foreground py-8 text-center'>
+                              没有找到匹配的节点
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                height: `${tableVirtualizer.getTotalSize()}px`,
+                                position: 'relative',
+                                contain: 'content',
+                              }}
+                            >
+                              {tableVirtualizer
+                                .getVirtualItems()
+                                .map((virtualRow) => {
+                                  const node = paginatedNodes[virtualRow.index]
+                                  if (!node) return null
+                                  return (
+                                    <div
+                                      key={node.id}
+                                      data-index={virtualRow.index}
+                                      ref={tableVirtualizer.measureElement}
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        transform: `translateY(${virtualRow.start}px)`,
                                       }}
-                                      className='h-7 flex-1 min-w-0'
-                                      autoFocus
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-emerald-600 shrink-0'
-                                      onClick={() => handleNameEditSubmit(node)}
-                                      disabled={node.isSaved ? isUpdatingNodeName : false}
+                                      className={cn(
+                                        'hover:bg-muted/50 flex cursor-pointer items-center border-b px-2 py-2',
+                                        node.isSaved &&
+                                          node.dbId &&
+                                          selectedNodeIds.has(node.dbId) &&
+                                          'bg-primary/5'
+                                      )}
+                                      onClick={
+                                        node.isSaved && node.dbId
+                                          ? () => handleNodeSelect(node.dbId!)
+                                          : undefined
+                                      }
                                     >
-                                      <Check className='size-3.5' />
-                                    </Button>
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-muted-foreground shrink-0'
-                                      onClick={handleNameEditCancel}
-                                    >
-                                      <X className='size-3.5' />
-                                    </Button>
-                                  </div>
-                                  {/* 编辑时也保留服务器地址显示，避免行高变化 */}
-                                  {node.parsed && (
-                                    <div className='flex items-center gap-1 mt-0.5 text-xs text-muted-foreground'>
-                                      <span className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</span>
-                                      {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                        <Badge variant='outline' className='text-xs shrink-0'>
-                                          {node.parsed.network}
-                                        </Badge>
-                                      )}
-                                      {node.parsed.network === 'xhttp' && node.parsed.mode && (
-                                        <Badge variant='outline' className='text-xs shrink-0'>
-                                          {node.parsed.mode}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className='flex items-center gap-2 min-w-0'>
-                                  <div className='flex-1 min-w-0'>
-                                    {(() => {
-                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                      const relayName = node.dbNode?.relay_group_name
-                                      const label = relayName || chainName
-                                      if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                    })()}
-                                    <div className='flex items-center gap-1'>
-                                      <span className='truncate'><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                      {node.isSaved && (
-                                        <Check className='size-4 text-green-600 shrink-0' />
-                                      )}
-                                    </div>
-                                    {/* 服务器地址显示在节点名称下方 */}
-                                    {node.parsed && (
-                                      <div className='flex items-center gap-1 mt-0.5 text-xs text-muted-foreground'>
-                                        <span className='font-mono truncate'>{node.parsed.server}:{node.parsed.port}</span>
-                                        {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                          <Badge variant='outline' className='text-xs shrink-0'>
-                                            {node.parsed.network}
-                                          </Badge>
+                                      {/* Checkbox */}
+                                      <div
+                                        style={{ width: '36px' }}
+                                        className='shrink-0'
+                                      >
+                                        {node.isSaved && node.dbId && (
+                                          <Checkbox
+                                            checked={selectedNodeIds.has(
+                                              node.dbId
+                                            )}
+                                            onCheckedChange={(checked) => {
+                                              const newSet = new Set(
+                                                selectedNodeIds
+                                              )
+                                              if (checked) {
+                                                newSet.add(node.dbId!)
+                                              } else {
+                                                newSet.delete(node.dbId!)
+                                              }
+                                              setSelectedNodeIds(newSet)
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
                                         )}
-                                        {node.parsed.network === 'xhttp' && node.parsed.mode && (
-                                          <Badge variant='outline' className='text-xs shrink-0'>
-                                            {node.parsed.mode}
-                                          </Badge>
-                                        )}
-                                        {/* 平板端操作按钮: IP解析、绑定探针、TCPing测试、临时订阅 */}
-                                        {node.parsed?.server && (
-                                          (() => {
-                                            const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                            const serverIsIp = isIpAddress(node.parsed.server)
-                                            const hasOriginalServer = !node.isSaved && node.originalServer
-
-                                            // 已保存的节点且服务器地址已经是IP，不显示IP按钮
-                                            if (node.isSaved && serverIsIp) {
-                                              return null
+                                      </div>
+                                      {/* 协议 */}
+                                      <div
+                                        style={{ width: '60px' }}
+                                        className='shrink-0'
+                                      >
+                                        {node.parsed ? (
+                                          <Badge
+                                            variant='outline'
+                                            className={
+                                              node.dbNode?.protocol?.includes(
+                                                '⇋'
+                                              )
+                                                ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                                : PROTOCOL_COLORS[
+                                                    node.parsed.type
+                                                  ] || 'bg-gray-500/10'
                                             }
-
-                                            // 未保存的节点且有原始服务器地址，显示回退按钮
-                                            if (hasOriginalServer) {
+                                          >
+                                            {node.dbNode?.protocol?.includes(
+                                              '⇋'
+                                            )
+                                              ? node.dbNode.protocol.toUpperCase()
+                                              : node.parsed.type.toUpperCase()}
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant='destructive'>
+                                            解析失败
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {/* 节点名称 + 服务器地址 */}
+                                      <div
+                                        className='min-w-0 flex-1 px-2'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {(() => {
+                                          const chainName = node.dbNode
+                                            ?.chain_proxy_node_id
+                                            ? nodeIdToName.get(
+                                                node.dbNode.chain_proxy_node_id
+                                              )
+                                            : undefined
+                                          const relayName =
+                                            node.dbNode?.relay_group_name
+                                          const label = relayName || chainName
+                                          if (!label) return null
+                                          const tip =
+                                            relayName &&
+                                            node.dbNode?.relay_group_node_ids
+                                              ? node.dbNode.relay_group_node_ids
+                                                  .map((id) =>
+                                                    nodeIdToName.get(id)
+                                                  )
+                                                  .filter(Boolean)
+                                                  .join('\n')
+                                              : (chainName ?? '')
+                                          return (
+                                            <div
+                                              className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                              title={tip}
+                                            >
+                                              <span className='min-w-0 truncate'>
+                                                ⬐ {label}
+                                                {relayName
+                                                  ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                  : ''}
+                                              </span>
+                                              {relayName && (
+                                                <button
+                                                  type='button'
+                                                  className='hover:text-destructive shrink-0'
+                                                  title='解除中转组'
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    unbindRelayGroupMutation.mutate(
+                                                      node.dbNode!.id
+                                                    )
+                                                  }}
+                                                >
+                                                  <X className='size-3' />
+                                                </button>
+                                              )}
+                                            </div>
+                                          )
+                                        })()}
+                                        <div className='flex min-w-0 items-center gap-2'>
+                                          <span
+                                            className='min-w-0 flex-1 truncate text-sm font-medium'
+                                            title={node.name || '未知'}
+                                          >
+                                            <Twemoji>
+                                              {node.name || '未知'}
+                                            </Twemoji>
+                                          </span>
+                                          {node.isSaved && (
+                                            <Check className='size-4 shrink-0 text-green-600' />
+                                          )}
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='size-7 shrink-0 text-[#d97757]'
+                                            onClick={() =>
+                                              handleNameEditStart(node)
+                                            }
+                                          >
+                                            <Pencil className='size-4' />
+                                          </Button>
+                                          {node.isSaved &&
+                                            node.dbNode &&
+                                            !node.dbNode.protocol.includes(
+                                              '⇋'
+                                            ) && (
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='size-7 shrink-0 text-[#d97757]'
+                                                onClick={() => {
+                                                  setSourceNodeForExchange(
+                                                    node.dbNode
+                                                  )
+                                                  setExchangeDialogOpen(true)
+                                                }}
+                                              >
+                                                <img
+                                                  src={ExchangeIcon}
+                                                  alt='交换'
+                                                  className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                />
+                                              </Button>
+                                            )}
+                                          {node.isSaved && node.dbNode && (
+                                            <FlagEmojiPicker
+                                              onSelect={(flag) =>
+                                                handleSetNodeFlag(
+                                                  node.dbNode!.id,
+                                                  flag
+                                                )
+                                              }
+                                              onAutoDetect={() =>
+                                                handleAddSingleNodeEmoji(
+                                                  node.dbNode!.id
+                                                )
+                                              }
+                                              disabled={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              loading={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              className='size-7 shrink-0 text-[#d97757]'
+                                            />
+                                          )}
+                                        </div>
+                                        {node.parsed && (
+                                          <div className='mt-0.5 flex items-center gap-1'>
+                                            <span className='text-muted-foreground truncate font-mono text-xs'>
+                                              {node.parsed.server}:
+                                              {node.parsed.port}
+                                            </span>
+                                            {/* IP解析 */}
+                                            {(() => {
+                                              const nodeKey = node.isSaved
+                                                ? String(node.dbId)
+                                                : node.id
+                                              const serverIsIp = isIpAddress(
+                                                node.parsed.server
+                                              )
+                                              if (node.isSaved && serverIsIp)
+                                                return null
+                                              if (
+                                                !node.isSaved &&
+                                                node.originalServer
+                                              ) {
+                                                return (
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='size-5 shrink-0 border border-orange-500/50 p-0'
+                                                    onClick={() =>
+                                                      restoreTempNodeServer(
+                                                        node.id
+                                                      )
+                                                    }
+                                                  >
+                                                    <Undo2 className='size-3 text-orange-500' />
+                                                  </Button>
+                                                )
+                                              }
                                               return (
                                                 <Button
                                                   variant='ghost'
                                                   size='sm'
-                                                  className='size-5 p-0 border border-orange-500/50 hover:border-orange-500 shrink-0'
-                                                  title='恢复原始域名'
-                                                  onClick={() => restoreTempNodeServer(node.id)}
+                                                  className='border-primary/50 size-5 shrink-0 border p-0'
+                                                  disabled={
+                                                    resolvingIpFor === nodeKey
+                                                  }
+                                                  onClick={() =>
+                                                    handleResolveIp(node)
+                                                  }
                                                 >
-                                                  <Undo2 className='size-3 text-orange-500' />
+                                                  <img
+                                                    src={IpIcon}
+                                                    alt='IP'
+                                                    className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                  />
                                                 </Button>
                                               )
-                                            }
-
-                                            // 显示IP解析菜单或按钮
-                                            return ipMenuState?.nodeId === nodeKey ? (
-                                              <DropdownMenu open={true} onOpenChange={(open) => !open && setIpMenuState(null)}>
-                                                <DropdownMenuTrigger asChild>
+                                            })()}
+                                            {/* 探针 */}
+                                            {userConfig?.enable_probe_binding &&
+                                              node.isSaved &&
+                                              node.dbNode && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 size-5 shrink-0 border p-0'
+                                                  onClick={() => {
+                                                    setSelectedNodeForProbe(
+                                                      node.dbNode!
+                                                    )
+                                                    setProbeBindingDialogOpen(
+                                                      true
+                                                    )
+                                                    refetchProbeConfig()
+                                                  }}
+                                                >
+                                                  <Activity
+                                                    className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`}
+                                                  />
+                                                </Button>
+                                              )}
+                                            {/* TCPing */}
+                                            {(() => {
+                                              const nodeKey = node.isSaved
+                                                ? String(node.dbId)
+                                                : node.id
+                                              const tcpingResult =
+                                                tcpingResults[nodeKey]
+                                              const isLoading =
+                                                tcpingNodeId === nodeKey ||
+                                                tcpingResult?.loading
+                                              if (
+                                                tcpingResult?.success &&
+                                                !isLoading
+                                              ) {
+                                                const c =
+                                                  tcpingResult.latency < 100
+                                                    ? 'text-green-600'
+                                                    : tcpingResult.latency < 200
+                                                      ? 'text-yellow-500'
+                                                      : 'text-red-500'
+                                                return (
                                                   <Button
                                                     variant='ghost'
                                                     size='sm'
-                                                    className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                                    title='选择IP地址'
+                                                    className={`h-5 shrink-0 border px-1 font-mono text-xs ${c}`}
+                                                    onClick={() =>
+                                                      handleTcping(node)
+                                                    }
+                                                  >
+                                                    {Math.round(
+                                                      tcpingResult.latency
+                                                    )}
+                                                    ms
+                                                  </Button>
+                                                )
+                                              }
+                                              if (
+                                                tcpingResult &&
+                                                !tcpingResult.success &&
+                                                !isLoading
+                                              ) {
+                                                return (
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='h-5 shrink-0 border border-red-500/50 px-1 text-xs text-red-500'
+                                                    onClick={() =>
+                                                      handleTcping(node)
+                                                    }
+                                                  >
+                                                    超时
+                                                  </Button>
+                                                )
+                                              }
+                                              return (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 size-5 shrink-0 border p-0'
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    handleTcping(node)
+                                                  }
+                                                >
+                                                  {isLoading ? (
+                                                    <Loader2 className='size-3 animate-spin' />
+                                                  ) : (
+                                                    <Zap className='size-3 text-[#d97757]' />
+                                                  )}
+                                                </Button>
+                                              )
+                                            })()}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* 标签 */}
+                                      <div
+                                        style={{ width: '100px' }}
+                                        className='flex shrink-0 flex-wrap gap-0.5 px-2'
+                                      >
+                                        {(node.isSaved &&
+                                        node.dbNode?.tags?.length
+                                          ? node.dbNode.tags
+                                          : [
+                                              node.dbNode?.tag ||
+                                                node.tag ||
+                                                '手动输入',
+                                            ]
+                                        ).map((t) => (
+                                          <Badge
+                                            key={t}
+                                            variant='secondary'
+                                            className='hover:bg-primary/20 max-w-full cursor-pointer truncate text-xs transition-colors'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (node.isSaved && node.dbNode) {
+                                                setTagManageNodeId(
+                                                  node.dbNode.id
+                                                )
+                                                setTagManageSelectedTag(t)
+                                                setTagManageInput(t)
+                                                setTagManageDialogOpen(true)
+                                              }
+                                            }}
+                                          >
+                                            {t}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                      {/* 配置按钮 */}
+                                      <div
+                                        style={{ width: '70px' }}
+                                        className='shrink-0 text-center'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {node.clash && (
+                                          <div className='flex justify-center gap-1'>
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='h-7 w-7'
+                                              onClick={() => {
+                                                if (
+                                                  node.isSaved &&
+                                                  node.dbNode
+                                                ) {
+                                                  handleEditClashConfig(
+                                                    node.dbNode
+                                                  )
+                                                } else if (!node.isSaved) {
+                                                  handleEditClashConfig(node)
+                                                }
+                                                setClashDialogOpen(true)
+                                              }}
+                                            >
+                                              <Eye className='h-3.5 w-3.5' />
+                                            </Button>
+                                            {node.isSaved && (
+                                              <>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='h-7 w-7'
+                                                  onClick={() =>
+                                                    handleCopyUri(node.dbNode!)
+                                                  }
+                                                >
+                                                  <Copy className='h-3.5 w-3.5' />
+                                                </Button>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='h-7 w-7'
+                                                  title='生成临时订阅'
+                                                  onClick={() => {
+                                                    setTempSubSingleNodeId(
+                                                      node.dbId!
+                                                    )
+                                                    setTempSubUrl('')
+                                                    setTempSubDialogOpen(true)
+                                                  }}
+                                                >
+                                                  <Link2 className='h-3.5 w-3.5' />
+                                                </Button>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* 操作按钮 */}
+                                      <div
+                                        style={{ width: '70px' }}
+                                        className='shrink-0 text-center'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button
+                                              variant='ghost'
+                                              size='sm'
+                                              className='h-7 text-xs'
+                                              disabled={
+                                                node.isSaved && isDeletingNode
+                                              }
+                                            >
+                                              删除
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>
+                                                确认删除
+                                              </AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                确定要删除节点 "
+                                                {node.name || '未知'}" 吗？
+                                                {node.isSaved &&
+                                                  '此操作不可撤销。'}
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>
+                                                取消
+                                              </AlertDialogCancel>
+                                              <AlertDialogAction
+                                                onClick={() =>
+                                                  node.isSaved
+                                                    ? handleDelete(node.dbId)
+                                                    : handleDeleteTemp(node.id)
+                                                }
+                                              >
+                                                删除
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 桌面端表格视图 - 展开模式 (>=1024px) */}
+                    {isDesktop && renderMode === 'expanded' && (
+                      <div className='rounded-md border'>
+                        <SortableContext
+                          items={paginatedNodes.map((n) => n.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Table className='w-full'>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead
+                                  style={{ width: '36px' }}
+                                ></TableHead>
+                                <TableHead style={{ width: '90px' }}>
+                                  协议
+                                </TableHead>
+                                <TableHead>节点名称</TableHead>
+                                <TableHead style={{ width: '120px' }}>
+                                  标签
+                                </TableHead>
+                                <TableHead
+                                  style={{ width: '280px', maxWidth: '280px' }}
+                                >
+                                  服务器地址
+                                </TableHead>
+                                <TableHead
+                                  style={{ width: '80px' }}
+                                  className='text-center'
+                                >
+                                  配置
+                                </TableHead>
+                                <TableHead
+                                  style={{ width: '80px' }}
+                                  className='text-center'
+                                >
+                                  操作
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {deferredFilteredNodes.length === 0 ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={7}
+                                    className='text-muted-foreground py-8 text-center'
+                                  >
+                                    没有找到匹配的节点
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                paginatedNodes.map((node) => (
+                                  <SortableTableRow
+                                    key={node.id}
+                                    id={node.id}
+                                    isSaved={node.isSaved}
+                                    isBatchDragging={Boolean(
+                                      node.dbId &&
+                                        batchDraggingIds.has(node.dbId)
+                                    )}
+                                    isSelected={
+                                      node.isSaved && node.dbId
+                                        ? selectedNodeIds.has(node.dbId)
+                                        : false
+                                    }
+                                    onClick={
+                                      node.isSaved && node.dbId
+                                        ? (e) => handleRowClick(e, node.dbId)
+                                        : undefined
+                                    }
+                                  >
+                                    <TableCell className='w-9 px-2'>
+                                      {node.isSaved && (
+                                        <DragHandle id={node.id} />
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {node.parsed ? (
+                                        <Badge
+                                          variant='outline'
+                                          className={
+                                            node.dbNode?.protocol?.includes('⇋')
+                                              ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                              : PROTOCOL_COLORS[
+                                                  node.parsed.type
+                                                ] || 'bg-gray-500/10'
+                                          }
+                                        >
+                                          {node.dbNode?.protocol?.includes('⇋')
+                                            ? node.dbNode.protocol.toUpperCase()
+                                            : node.parsed.type.toUpperCase()}
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant='destructive'>
+                                          解析失败
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className='max-w-[300px] min-w-[200px] font-medium'>
+                                      {editingNode?.id === node.id ? (
+                                        <div className='flex items-center gap-1'>
+                                          <Input
+                                            value={editingNode.value}
+                                            onChange={(event) =>
+                                              handleNameEditChange(
+                                                event.target.value
+                                              )
+                                            }
+                                            onKeyDown={(event) => {
+                                              if (event.key === 'Enter') {
+                                                event.preventDefault()
+                                                handleNameEditSubmit(node)
+                                              } else if (
+                                                event.key === 'Escape'
+                                              ) {
+                                                event.preventDefault()
+                                                handleNameEditCancel()
+                                              }
+                                            }}
+                                            className='h-7 min-w-0 flex-1'
+                                            autoFocus
+                                          />
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='size-7 shrink-0 text-emerald-600'
+                                            onClick={() =>
+                                              handleNameEditSubmit(node)
+                                            }
+                                            disabled={
+                                              node.isSaved
+                                                ? isUpdatingNodeName
+                                                : false
+                                            }
+                                          >
+                                            <Check className='size-3.5' />
+                                          </Button>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='text-muted-foreground size-7 shrink-0'
+                                            onClick={handleNameEditCancel}
+                                          >
+                                            <X className='size-3.5' />
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <div className='min-w-0'>
+                                          {(() => {
+                                            const chainName = node.dbNode
+                                              ?.chain_proxy_node_id
+                                              ? nodeIdToName.get(
+                                                  node.dbNode
+                                                    .chain_proxy_node_id
+                                                )
+                                              : undefined
+                                            const relayName =
+                                              node.dbNode?.relay_group_name
+                                            const label = relayName || chainName
+                                            if (!label) return null
+                                            const tip =
+                                              relayName &&
+                                              node.dbNode?.relay_group_node_ids
+                                                ? node.dbNode.relay_group_node_ids
+                                                    .map((id) =>
+                                                      nodeIdToName.get(id)
+                                                    )
+                                                    .filter(Boolean)
+                                                    .join('\n')
+                                                : (chainName ?? '')
+                                            return (
+                                              <div
+                                                className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                                title={tip}
+                                              >
+                                                <span className='min-w-0 truncate'>
+                                                  ⬐ {label}
+                                                  {relayName
+                                                    ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                    : ''}
+                                                </span>
+                                                {relayName && (
+                                                  <button
+                                                    type='button'
+                                                    className='hover:text-destructive shrink-0'
+                                                    title='解除中转组'
+                                                    onClick={(e) => {
+                                                      e.stopPropagation()
+                                                      unbindRelayGroupMutation.mutate(
+                                                        node.dbNode!.id
+                                                      )
+                                                    }}
+                                                  >
+                                                    <X className='size-3' />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            )
+                                          })()}
+                                          <div className='flex min-w-0 items-center gap-2'>
+                                            <span
+                                              className='min-w-0 flex-1 truncate'
+                                              title={node.name || '未知'}
+                                            >
+                                              <Twemoji>
+                                                {node.name || '未知'}
+                                              </Twemoji>
+                                            </span>
+                                            {node.isSaved && (
+                                              <Check className='size-4 shrink-0 text-green-600' />
+                                            )}
+                                            <Button
+                                              variant='ghost'
+                                              size='icon'
+                                              className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                              onClick={() =>
+                                                handleNameEditStart(node)
+                                              }
+                                              disabled={
+                                                node.isSaved
+                                                  ? isUpdatingNodeName
+                                                  : false
+                                              }
+                                            >
+                                              <Pencil className='size-4' />
+                                            </Button>
+                                            {node.isSaved &&
+                                              node.dbNode &&
+                                              !node.dbNode.protocol.includes(
+                                                '⇋'
+                                              ) && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='text-muted-foreground hover:text-foreground size-7 shrink-0'
+                                                  onClick={() => {
+                                                    setSourceNodeForExchange(
+                                                      node.dbNode
+                                                    )
+                                                    setExchangeDialogOpen(true)
+                                                  }}
+                                                >
+                                                  <img
+                                                    src={ExchangeIcon}
+                                                    alt='交换'
+                                                    className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                  />
+                                                </Button>
+                                              )}
+                                            {node.isSaved && node.dbNode && (
+                                              <FlagEmojiPicker
+                                                onSelect={(flag) =>
+                                                  handleSetNodeFlag(
+                                                    node.dbNode!.id,
+                                                    flag
+                                                  )
+                                                }
+                                                onAutoDetect={() =>
+                                                  handleAddSingleNodeEmoji(
+                                                    node.dbNode!.id
+                                                  )
+                                                }
+                                                disabled={
+                                                  addingEmojiForNode ===
+                                                  node.dbNode!.id
+                                                }
+                                                loading={
+                                                  addingEmojiForNode ===
+                                                  node.dbNode!.id
+                                                }
+                                                className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className='flex flex-wrap gap-1'>
+                                        {(node.isSaved &&
+                                        node.dbNode?.tags?.length
+                                          ? node.dbNode.tags
+                                          : [
+                                              node.dbNode?.tag ||
+                                                node.tag ||
+                                                '手动输入',
+                                            ]
+                                        ).map((t) => (
+                                          <Badge
+                                            key={t}
+                                            variant='secondary'
+                                            className='hover:bg-primary/20 max-w-[120px] cursor-pointer truncate text-xs transition-colors'
+                                            title={t}
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (node.isSaved && node.dbNode) {
+                                                setTagManageNodeId(
+                                                  node.dbNode.id
+                                                )
+                                                setTagManageSelectedTag(t)
+                                                setTagManageInput(t)
+                                                setTagManageDialogOpen(true)
+                                              }
+                                            }}
+                                          >
+                                            {t}
+                                          </Badge>
+                                        ))}
+                                        {node.isSaved &&
+                                          node.dbNode?.probe_server && (
+                                            <Badge
+                                              variant='secondary'
+                                              className='flex items-center gap-1 text-xs'
+                                            >
+                                              <Activity className='size-3' />
+                                              {node.dbNode.probe_server}
+                                            </Badge>
+                                          )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell style={{ maxWidth: '280px' }}>
+                                      <div className='text-muted-foreground text-sm'>
+                                        {node.parsed ? (
+                                          <div className='flex min-w-0 items-center gap-2'>
+                                            <div className='min-w-0 flex-1'>
+                                              <div
+                                                className='truncate font-mono'
+                                                title={`${node.parsed.server}:${node.parsed.port}`}
+                                              >
+                                                {node.parsed.server}:
+                                                {node.parsed.port}
+                                              </div>
+                                              {node.parsed.network &&
+                                                node.parsed.network !==
+                                                  'tcp' && (
+                                                  <div className='mt-1 flex items-center gap-1 text-xs'>
+                                                    <Badge
+                                                      variant='outline'
+                                                      className='text-xs'
+                                                    >
+                                                      {node.parsed.network}
+                                                    </Badge>
+                                                    {node.parsed.network ===
+                                                      'xhttp' &&
+                                                      node.parsed.mode && (
+                                                        <Badge
+                                                          variant='outline'
+                                                          className='text-xs'
+                                                        >
+                                                          {node.parsed.mode}
+                                                        </Badge>
+                                                      )}
+                                                  </div>
+                                                )}
+                                            </div>
+                                            {node.parsed?.server &&
+                                              (() => {
+                                                const nodeKey = node.isSaved
+                                                  ? String(node.dbId)
+                                                  : node.id
+                                                const serverIsIp = isIpAddress(
+                                                  node.parsed.server
+                                                )
+                                                const hasOriginalServer =
+                                                  !node.isSaved &&
+                                                  node.originalServer
+
+                                                // 已保存的节点且服务器地址已经是IP，不显示按钮
+                                                if (
+                                                  node.isSaved &&
+                                                  serverIsIp
+                                                ) {
+                                                  return null
+                                                }
+
+                                                // 未保存的节点且有原始服务器地址，显示回退按钮
+                                                if (hasOriginalServer) {
+                                                  return (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='size-6 shrink-0 border border-orange-500/50 p-0 hover:border-orange-500'
+                                                      title='恢复原始域名'
+                                                      onClick={() =>
+                                                        restoreTempNodeServer(
+                                                          node.id
+                                                        )
+                                                      }
+                                                    >
+                                                      <Undo2 className='size-4 text-orange-500' />
+                                                    </Button>
+                                                  )
+                                                }
+
+                                                // 显示IP解析菜单或按钮
+                                                return ipMenuState?.nodeId ===
+                                                  nodeKey ? (
+                                                  <DropdownMenu
+                                                    open={true}
+                                                    onOpenChange={(open) =>
+                                                      !open &&
+                                                      setIpMenuState(null)
+                                                    }
+                                                  >
+                                                    <DropdownMenuTrigger
+                                                      asChild
+                                                    >
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                        title='选择IP地址'
+                                                      >
+                                                        <img
+                                                          src={IpIcon}
+                                                          alt='IP'
+                                                          className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                        />
+                                                      </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align='start'>
+                                                      {ipMenuState.ips.map(
+                                                        (ip) => (
+                                                          <DropdownMenuItem
+                                                            key={ip}
+                                                            onClick={() => {
+                                                              if (
+                                                                node.isSaved &&
+                                                                node.dbId
+                                                              ) {
+                                                                updateNodeServerMutation.mutate(
+                                                                  {
+                                                                    nodeId:
+                                                                      node.dbId,
+                                                                    server: ip,
+                                                                  }
+                                                                )
+                                                              } else {
+                                                                updateTempNodeServer(
+                                                                  node.id,
+                                                                  ip
+                                                                )
+                                                                setIpMenuState(
+                                                                  null
+                                                                )
+                                                              }
+                                                            }}
+                                                          >
+                                                            <span className='font-mono'>
+                                                              {ip}
+                                                            </span>
+                                                          </DropdownMenuItem>
+                                                        )
+                                                      )}
+                                                    </DropdownMenuContent>
+                                                  </DropdownMenu>
+                                                ) : (
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                    title='解析IP地址'
+                                                    disabled={
+                                                      resolvingIpFor === nodeKey
+                                                    }
+                                                    onClick={() =>
+                                                      handleResolveIp(node)
+                                                    }
+                                                  >
+                                                    <img
+                                                      src={IpIcon}
+                                                      alt='IP'
+                                                      className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                    />
+                                                  </Button>
+                                                )
+                                              })()}
+                                            {node.isSaved &&
+                                              node.dbNode?.original_server && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 hover:border-primary ml-1 size-6 shrink-0 border p-0'
+                                                  title='恢复原始域名'
+                                                  disabled={
+                                                    restoreNodeServerMutation.isPending
+                                                  }
+                                                  onClick={() =>
+                                                    restoreNodeServerMutation.mutate(
+                                                      node.dbId
+                                                    )
+                                                  }
+                                                >
+                                                  <Undo2 className='size-3' />
+                                                </Button>
+                                              )}
+                                            {userConfig?.enable_probe_binding &&
+                                              node.isSaved &&
+                                              node.dbNode && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 hover:border-primary ml-1 size-6 shrink-0 border p-0'
+                                                  title={
+                                                    node.dbNode.probe_server
+                                                      ? `当前绑定: ${node.dbNode.probe_server}`
+                                                      : '绑定探针服务器'
+                                                  }
+                                                  onClick={() => {
+                                                    setSelectedNodeForProbe(
+                                                      node.dbNode!
+                                                    )
+                                                    setProbeBindingDialogOpen(
+                                                      true
+                                                    )
+                                                    refetchProbeConfig() // 打开对话框时查询探针配置
+                                                  }}
+                                                >
+                                                  <Activity
+                                                    className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`}
+                                                  />
+                                                </Button>
+                                              )}
+                                            {/* TCPing 测试按钮 */}
+                                            {node.parsed &&
+                                              (() => {
+                                                const nodeKey = node.isSaved
+                                                  ? String(node.dbId)
+                                                  : node.id
+                                                const tcpingResult =
+                                                  tcpingResults[nodeKey]
+                                                const isLoading =
+                                                  tcpingNodeId === nodeKey ||
+                                                  tcpingResult?.loading
+
+                                                // 测试成功后显示延迟数字
+                                                if (
+                                                  tcpingResult?.success &&
+                                                  !isLoading
+                                                ) {
+                                                  const latencyColor =
+                                                    tcpingResult.latency < 100
+                                                      ? 'border-green-500/50 hover:border-green-500 text-green-600'
+                                                      : tcpingResult.latency <
+                                                          200
+                                                        ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
+                                                        : 'border-red-500/50 hover:border-red-500 text-red-500'
+                                                  return (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <Button
+                                                          variant='ghost'
+                                                          size='sm'
+                                                          className={`ml-1 h-6 shrink-0 border px-1.5 font-mono text-xs ${latencyColor}`}
+                                                          onClick={() =>
+                                                            handleTcping(node)
+                                                          }
+                                                        >
+                                                          {tcpingResult.latency <
+                                                          1000
+                                                            ? `${Math.round(tcpingResult.latency)}ms`
+                                                            : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                        </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        点击重新测试
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  )
+                                                }
+
+                                                // 测试失败显示超时
+                                                if (
+                                                  tcpingResult &&
+                                                  !tcpingResult.success &&
+                                                  !isLoading
+                                                ) {
+                                                  return (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <Button
+                                                          variant='ghost'
+                                                          size='sm'
+                                                          className='ml-1 h-6 shrink-0 border border-red-500/50 px-1.5 font-mono text-xs text-red-500 hover:border-red-500'
+                                                          onClick={() =>
+                                                            handleTcping(node)
+                                                          }
+                                                        >
+                                                          超时
+                                                        </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        {tcpingResult.error ||
+                                                          '连接失败，点击重试'}
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  )
+                                                }
+
+                                                // 默认状态或加载中
+                                                return (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='border-primary/50 hover:border-primary ml-1 size-6 shrink-0 border p-0'
+                                                        disabled={isLoading}
+                                                        onClick={() =>
+                                                          handleTcping(node)
+                                                        }
+                                                      >
+                                                        {isLoading ? (
+                                                          <Loader2 className='text-primary size-3.5 animate-spin' />
+                                                        ) : (
+                                                          <Zap className='size-3.5 text-[#d97757]' />
+                                                        )}
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      {isLoading
+                                                        ? '测试中...'
+                                                        : 'TCPing 测试'}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )
+                                              })()}
+                                          </div>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className='text-center'>
+                                      {node.clash ? (
+                                        <div className='flex justify-center gap-1'>
+                                          <Dialog
+                                            open={
+                                              clashDialogOpen &&
+                                              ((node.isSaved &&
+                                                editingClashConfig?.nodeId ===
+                                                  node.dbNode?.id) ||
+                                                (!node.isSaved &&
+                                                  editingClashConfig?.nodeId ===
+                                                    -1))
+                                            }
+                                            onOpenChange={(open) => {
+                                              setClashDialogOpen(open)
+                                              if (!open) {
+                                                // Dialog关闭后清理状态
+                                                setTimeout(() => {
+                                                  setEditingClashConfig(null)
+                                                  setClashConfigError('')
+                                                  setJsonErrorLines([])
+                                                }, 150) // 等待关闭动画完成
+                                              }
+                                            }}
+                                          >
+                                            <DialogTrigger asChild>
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='h-8 w-8'
+                                                onClick={() => {
+                                                  if (
+                                                    node.isSaved &&
+                                                    node.dbNode
+                                                  ) {
+                                                    handleEditClashConfig(
+                                                      node.dbNode
+                                                    )
+                                                  } else if (!node.isSaved) {
+                                                    handleEditClashConfig(node)
+                                                  }
+                                                }}
+                                              >
+                                                <Eye className='h-4 w-4' />
+                                              </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className='flex max-h-[80vh] max-w-4xl flex-col sm:max-w-4xl'>
+                                              <DialogHeader>
+                                                <DialogTitle>
+                                                  Clash 配置详情
+                                                  {editingClashConfig?.nodeId ===
+                                                  -1
+                                                    ? '（仅查看）'
+                                                    : ''}
+                                                </DialogTitle>
+                                                <DialogDescription>
+                                                  <Twemoji>
+                                                    {node.name || '未知'}
+                                                  </Twemoji>
+                                                  {editingClashConfig?.nodeId ===
+                                                    -1 &&
+                                                    ' - 保存节点后可编辑配置'}
+                                                </DialogDescription>
+                                              </DialogHeader>
+                                              <div className='mt-4 flex min-h-0 flex-1 flex-col gap-3'>
+                                                <div className='flex gap-1'>
+                                                  <Button
+                                                    variant={
+                                                      configFormat === 'json'
+                                                        ? 'default'
+                                                        : 'outline'
+                                                    }
+                                                    size='sm'
+                                                    className='h-7 px-3 text-xs'
+                                                    onClick={() =>
+                                                      handleConfigFormatChange(
+                                                        'json'
+                                                      )
+                                                    }
+                                                  >
+                                                    JSON
+                                                  </Button>
+                                                  <Button
+                                                    variant={
+                                                      configFormat === 'yaml'
+                                                        ? 'default'
+                                                        : 'outline'
+                                                    }
+                                                    size='sm'
+                                                    className='h-7 px-3 text-xs'
+                                                    onClick={() =>
+                                                      handleConfigFormatChange(
+                                                        'yaml'
+                                                      )
+                                                    }
+                                                  >
+                                                    YAML
+                                                  </Button>
+                                                </div>
+                                                <div className='bg-muted flex flex-1 overflow-auto rounded border'>
+                                                  {/* 行号列 */}
+                                                  <div className='bg-muted-foreground/10 text-muted-foreground flex flex-col px-2 py-3 text-right font-mono text-xs select-none'>
+                                                    {editingClashConfig?.config
+                                                      .split('\n')
+                                                      .map((_, i) => {
+                                                        const lineNum = i + 1
+                                                        const isErrorLine =
+                                                          jsonErrorLines.includes(
+                                                            lineNum
+                                                          )
+                                                        return (
+                                                          <div
+                                                            key={i}
+                                                            className={`h-5 leading-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
+                                                          >
+                                                            {lineNum}
+                                                          </div>
+                                                        )
+                                                      })}
+                                                  </div>
+                                                  {/* 文本编辑区 */}
+                                                  <Textarea
+                                                    value={
+                                                      editingClashConfig?.config ||
+                                                      ''
+                                                    }
+                                                    onChange={(e) =>
+                                                      handleClashConfigChange(
+                                                        e.target.value
+                                                      )
+                                                    }
+                                                    className='min-h-[400px] flex-1 resize-none rounded-none border-0 font-mono text-xs leading-5 focus-visible:ring-0'
+                                                    placeholder={
+                                                      configFormat === 'yaml'
+                                                        ? '输入 YAML 配置...'
+                                                        : '输入 JSON 配置...'
+                                                    }
+                                                    readOnly={
+                                                      editingClashConfig?.nodeId ===
+                                                      -1
+                                                    }
+                                                  />
+                                                </div>
+                                                {clashConfigError && (
+                                                  <div className='text-destructive bg-destructive/10 rounded p-2 text-xs'>
+                                                    {clashConfigError}
+                                                  </div>
+                                                )}
+                                                <div className='flex justify-end gap-2'>
+                                                  <Button
+                                                    variant='outline'
+                                                    size='sm'
+                                                    onClick={() =>
+                                                      setClashDialogOpen(false)
+                                                    }
+                                                  >
+                                                    {editingClashConfig?.nodeId ===
+                                                    -1
+                                                      ? '关闭'
+                                                      : '取消'}
+                                                  </Button>
+                                                  {editingClashConfig?.nodeId !==
+                                                    -1 && (
+                                                    <Button
+                                                      size='sm'
+                                                      onClick={
+                                                        handleSaveClashConfig
+                                                      }
+                                                      disabled={
+                                                        !!clashConfigError ||
+                                                        updateClashConfigMutation.isPending
+                                                      }
+                                                    >
+                                                      {updateClashConfigMutation.isPending
+                                                        ? '保存中...'
+                                                        : '保存'}
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </DialogContent>
+                                          </Dialog>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='h-8 w-8'
+                                            title='复制 URI'
+                                            onClick={() =>
+                                              node.isSaved &&
+                                              handleCopyUri(node.dbNode!)
+                                            }
+                                          >
+                                            <Copy className='h-4 w-4' />
+                                          </Button>
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='h-8 w-8'
+                                            title='生成临时订阅'
+                                            onClick={() => {
+                                              if (node.isSaved && node.dbId) {
+                                                setTempSubSingleNodeId(
+                                                  node.dbId
+                                                )
+                                                setTempSubUrl('')
+                                                setTempSubDialogOpen(true)
+                                              }
+                                            }}
+                                          >
+                                            <Link2 className='h-4 w-4' />
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <span className='text-muted-foreground text-xs'>
+                                          -
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className='text-center'>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            variant='ghost'
+                                            size='sm'
+                                            disabled={
+                                              node.isSaved && isDeletingNode
+                                            }
+                                          >
+                                            删除
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              确认删除
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              确定要删除节点 "
+                                              {node.name || '未知'}" 吗？
+                                              {node.isSaved &&
+                                                '此操作不可撤销。'}
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              取消
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                node.isSaved
+                                                  ? handleDelete(node.dbId)
+                                                  : handleDeleteTemp(node.id)
+                                              }
+                                            >
+                                              删除
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </TableCell>
+                                  </SortableTableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </SortableContext>
+                      </div>
+                    )}
+
+                    {/* 桌面端表格视图 - 虚拟滚动模式 (>=1024px) */}
+                    {isDesktop && renderMode === 'virtual' && (
+                      <div className='rounded-md border'>
+                        <Table className='w-full'>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead style={{ width: '36px' }}></TableHead>
+                              <TableHead style={{ width: '90px' }}>
+                                协议
+                              </TableHead>
+                              <TableHead>节点名称</TableHead>
+                              <TableHead style={{ width: '120px' }}>
+                                标签
+                              </TableHead>
+                              <TableHead
+                                style={{ width: '280px', maxWidth: '280px' }}
+                              >
+                                服务器地址
+                              </TableHead>
+                              <TableHead
+                                style={{ width: '80px' }}
+                                className='text-center'
+                              >
+                                配置
+                              </TableHead>
+                              <TableHead
+                                style={{ width: '80px' }}
+                                className='text-center'
+                              >
+                                操作
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                        </Table>
+                        <div
+                          ref={tableVirtualListRef}
+                          className='overflow-auto'
+                          style={{
+                            height: 'calc(100vh - 420px)',
+                            minHeight: '400px',
+                            contain: 'strict',
+                            willChange: 'transform',
+                          }}
+                        >
+                          {deferredFilteredNodes.length === 0 ? (
+                            <div className='text-muted-foreground py-8 text-center'>
+                              没有找到匹配的节点
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                height: `${tableVirtualizer.getTotalSize()}px`,
+                                position: 'relative',
+                                contain: 'content',
+                              }}
+                            >
+                              {tableVirtualizer
+                                .getVirtualItems()
+                                .map((virtualRow) => {
+                                  const node = paginatedNodes[virtualRow.index]
+                                  if (!node) return null
+                                  return (
+                                    <div
+                                      key={node.id}
+                                      data-index={virtualRow.index}
+                                      ref={tableVirtualizer.measureElement}
+                                      style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        transform: `translateY(${virtualRow.start}px)`,
+                                      }}
+                                      className={cn(
+                                        'hover:bg-muted/50 flex cursor-pointer items-center border-b px-2 py-2',
+                                        node.isSaved &&
+                                          node.dbId &&
+                                          selectedNodeIds.has(node.dbId) &&
+                                          'bg-primary/5'
+                                      )}
+                                      onClick={
+                                        node.isSaved && node.dbId
+                                          ? () => handleNodeSelect(node.dbId!)
+                                          : undefined
+                                      }
+                                    >
+                                      {/* 占位列 */}
+                                      <div
+                                        style={{ width: '36px' }}
+                                        className='shrink-0'
+                                      >
+                                        {node.isSaved && node.dbId && (
+                                          <Checkbox
+                                            checked={selectedNodeIds.has(
+                                              node.dbId
+                                            )}
+                                            onCheckedChange={(checked) => {
+                                              const newSet = new Set(
+                                                selectedNodeIds
+                                              )
+                                              if (checked) {
+                                                newSet.add(node.dbId!)
+                                              } else {
+                                                newSet.delete(node.dbId!)
+                                              }
+                                              setSelectedNodeIds(newSet)
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        )}
+                                      </div>
+                                      {/* 协议 */}
+                                      <div
+                                        style={{ width: '90px' }}
+                                        className='shrink-0'
+                                      >
+                                        {node.parsed ? (
+                                          <Badge
+                                            variant='outline'
+                                            className={
+                                              node.dbNode?.protocol?.includes(
+                                                '⇋'
+                                              )
+                                                ? 'border-pink-200 bg-pink-500/10 text-pink-700 dark:border-pink-800 dark:text-pink-300'
+                                                : PROTOCOL_COLORS[
+                                                    node.parsed.type
+                                                  ] || 'bg-gray-500/10'
+                                            }
+                                          >
+                                            {node.dbNode?.protocol?.includes(
+                                              '⇋'
+                                            )
+                                              ? node.dbNode.protocol.toUpperCase()
+                                              : node.parsed.type.toUpperCase()}
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant='destructive'>
+                                            解析失败
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {/* 节点名称 */}
+                                      <div className='min-w-0 flex-1 px-2'>
+                                        {(() => {
+                                          const chainName = node.dbNode
+                                            ?.chain_proxy_node_id
+                                            ? nodeIdToName.get(
+                                                node.dbNode.chain_proxy_node_id
+                                              )
+                                            : undefined
+                                          const relayName =
+                                            node.dbNode?.relay_group_name
+                                          const label = relayName || chainName
+                                          if (!label) return null
+                                          const tip =
+                                            relayName &&
+                                            node.dbNode?.relay_group_node_ids
+                                              ? node.dbNode.relay_group_node_ids
+                                                  .map((id) =>
+                                                    nodeIdToName.get(id)
+                                                  )
+                                                  .filter(Boolean)
+                                                  .join('\n')
+                                              : (chainName ?? '')
+                                          return (
+                                            <div
+                                              className='text-muted-foreground flex max-w-full min-w-0 items-center gap-0.5 overflow-hidden text-[10px] leading-tight'
+                                              title={tip}
+                                            >
+                                              <span className='min-w-0 truncate'>
+                                                ⬐ {label}
+                                                {relayName
+                                                  ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})`
+                                                  : ''}
+                                              </span>
+                                              {relayName && (
+                                                <button
+                                                  type='button'
+                                                  className='hover:text-destructive shrink-0'
+                                                  title='解除中转组'
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    unbindRelayGroupMutation.mutate(
+                                                      node.dbNode!.id
+                                                    )
+                                                  }}
+                                                >
+                                                  <X className='size-3' />
+                                                </button>
+                                              )}
+                                            </div>
+                                          )
+                                        })()}
+                                        <div className='flex min-w-0 items-center gap-2'>
+                                          <span
+                                            className='min-w-0 flex-1 truncate text-sm font-medium'
+                                            title={node.name || '未知'}
+                                          >
+                                            <Twemoji>
+                                              {node.name || '未知'}
+                                            </Twemoji>
+                                          </span>
+                                          {node.isSaved && (
+                                            <Check className='size-4 shrink-0 text-green-600' />
+                                          )}
+                                          <Button
+                                            variant='ghost'
+                                            size='icon'
+                                            className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleNameEditStart(node)
+                                            }}
+                                          >
+                                            <Pencil className='size-4' />
+                                          </Button>
+                                          {node.isSaved &&
+                                            node.dbNode &&
+                                            !node.dbNode.protocol.includes(
+                                              '⇋'
+                                            ) && (
+                                              <Button
+                                                variant='ghost'
+                                                size='icon'
+                                                className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  setSourceNodeForExchange(
+                                                    node.dbNode
+                                                  )
+                                                  setExchangeDialogOpen(true)
+                                                }}
+                                              >
+                                                <img
+                                                  src={ExchangeIcon}
+                                                  alt='交换'
+                                                  className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                />
+                                              </Button>
+                                            )}
+                                          {node.isSaved && node.dbNode && (
+                                            <FlagEmojiPicker
+                                              onSelect={(flag) =>
+                                                handleSetNodeFlag(
+                                                  node.dbNode!.id,
+                                                  flag
+                                                )
+                                              }
+                                              onAutoDetect={() =>
+                                                handleAddSingleNodeEmoji(
+                                                  node.dbNode!.id
+                                                )
+                                              }
+                                              disabled={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              loading={
+                                                addingEmojiForNode ===
+                                                node.dbNode!.id
+                                              }
+                                              className='size-7 shrink-0 text-[#d97757] hover:text-[#c66647]'
+                                              stopPropagation
+                                            />
+                                          )}
+                                        </div>
+                                      </div>
+                                      {/* 标签 */}
+                                      <div
+                                        style={{ width: '120px' }}
+                                        className='flex shrink-0 flex-wrap gap-0.5 px-2'
+                                      >
+                                        {(node.isSaved &&
+                                        node.dbNode?.tags?.length
+                                          ? node.dbNode.tags
+                                          : [
+                                              node.dbNode?.tag ||
+                                                node.tag ||
+                                                '手动输入',
+                                            ]
+                                        ).map((t) => (
+                                          <Badge
+                                            key={t}
+                                            variant='secondary'
+                                            className='hover:bg-primary/20 max-w-full cursor-pointer truncate text-xs transition-colors'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              if (node.isSaved && node.dbNode) {
+                                                setTagManageNodeId(
+                                                  node.dbNode.id
+                                                )
+                                                setTagManageSelectedTag(t)
+                                                setTagManageInput(t)
+                                                setTagManageDialogOpen(true)
+                                              }
+                                            }}
+                                          >
+                                            {t}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                      {/* 服务器地址 */}
+                                      <div
+                                        style={{
+                                          width: '280px',
+                                          maxWidth: '280px',
+                                        }}
+                                        className='shrink-0 px-2'
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {node.parsed ? (
+                                          <div className='flex items-center gap-1'>
+                                            <span className='min-w-0 flex-1 truncate font-mono text-xs'>
+                                              {node.parsed.server}:
+                                              {node.parsed.port}
+                                            </span>
+                                            {/* IP解析按钮 */}
+                                            {node.parsed?.server &&
+                                              (() => {
+                                                const nodeKey = node.isSaved
+                                                  ? String(node.dbId)
+                                                  : node.id
+                                                const serverIsIp = isIpAddress(
+                                                  node.parsed.server
+                                                )
+                                                const hasOriginalServer =
+                                                  !node.isSaved &&
+                                                  node.originalServer
+                                                if (node.isSaved && serverIsIp)
+                                                  return null
+                                                if (hasOriginalServer) {
+                                                  return (
+                                                    <Button
+                                                      variant='ghost'
+                                                      size='sm'
+                                                      className='size-6 shrink-0 border border-orange-500/50 p-0 hover:border-orange-500'
+                                                      title='恢复原始域名'
+                                                      onClick={() =>
+                                                        restoreTempNodeServer(
+                                                          node.id
+                                                        )
+                                                      }
+                                                    >
+                                                      <Undo2 className='size-3 text-orange-500' />
+                                                    </Button>
+                                                  )
+                                                }
+                                                return ipMenuState?.nodeId ===
+                                                  nodeKey ? (
+                                                  <DropdownMenu
+                                                    open={true}
+                                                    onOpenChange={(open) =>
+                                                      !open &&
+                                                      setIpMenuState(null)
+                                                    }
+                                                  >
+                                                    <DropdownMenuTrigger
+                                                      asChild
+                                                    >
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                        title='选择IP地址'
+                                                      >
+                                                        <img
+                                                          src={IpIcon}
+                                                          alt='IP'
+                                                          className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
+                                                        />
+                                                      </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align='start'>
+                                                      {ipMenuState.ips.map(
+                                                        (ip) => (
+                                                          <DropdownMenuItem
+                                                            key={ip}
+                                                            onClick={() => {
+                                                              if (
+                                                                node.isSaved &&
+                                                                node.dbId
+                                                              ) {
+                                                                updateNodeServerMutation.mutate(
+                                                                  {
+                                                                    nodeId:
+                                                                      node.dbId,
+                                                                    server: ip,
+                                                                  }
+                                                                )
+                                                              } else {
+                                                                updateTempNodeServer(
+                                                                  node.id,
+                                                                  ip
+                                                                )
+                                                                setIpMenuState(
+                                                                  null
+                                                                )
+                                                              }
+                                                            }}
+                                                          >
+                                                            <span className='font-mono'>
+                                                              {ip}
+                                                            </span>
+                                                          </DropdownMenuItem>
+                                                        )
+                                                      )}
+                                                    </DropdownMenuContent>
+                                                  </DropdownMenu>
+                                                ) : (
+                                                  <Button
+                                                    variant='ghost'
+                                                    size='sm'
+                                                    className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                    title='解析IP地址'
+                                                    disabled={
+                                                      resolvingIpFor === nodeKey
+                                                    }
+                                                    onClick={() =>
+                                                      handleResolveIp(node)
+                                                    }
                                                   >
                                                     <img
                                                       src={IpIcon}
@@ -4532,1442 +8089,288 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                                       className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
                                                     />
                                                   </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align='start'>
-                                                  {ipMenuState.ips.map((ip) => (
-                                                    <DropdownMenuItem
-                                                      key={ip}
-                                                      onClick={() => {
-                                                        if (node.isSaved && node.dbId) {
-                                                          updateNodeServerMutation.mutate({
-                                                            nodeId: node.dbId,
-                                                            server: ip,
-                                                          })
-                                                        } else {
-                                                          updateTempNodeServer(node.id, ip)
-                                                          setIpMenuState(null)
+                                                )
+                                              })()}
+                                            {/* 恢复原始域名 */}
+                                            {node.isSaved &&
+                                              node.dbNode?.original_server && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                  title='恢复原始域名'
+                                                  disabled={
+                                                    restoreNodeServerMutation.isPending
+                                                  }
+                                                  onClick={() =>
+                                                    restoreNodeServerMutation.mutate(
+                                                      node.dbId
+                                                    )
+                                                  }
+                                                >
+                                                  <Undo2 className='size-3' />
+                                                </Button>
+                                              )}
+                                            {/* 探针绑定 */}
+                                            {userConfig?.enable_probe_binding &&
+                                              node.isSaved &&
+                                              node.dbNode && (
+                                                <Button
+                                                  variant='ghost'
+                                                  size='sm'
+                                                  className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                  title={
+                                                    node.dbNode.probe_server
+                                                      ? `当前绑定: ${node.dbNode.probe_server}`
+                                                      : '绑定探针服务器'
+                                                  }
+                                                  onClick={() => {
+                                                    setSelectedNodeForProbe(
+                                                      node.dbNode!
+                                                    )
+                                                    setProbeBindingDialogOpen(
+                                                      true
+                                                    )
+                                                    refetchProbeConfig()
+                                                  }}
+                                                >
+                                                  <Activity
+                                                    className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`}
+                                                  />
+                                                </Button>
+                                              )}
+                                            {/* TCPing */}
+                                            {node.parsed &&
+                                              (() => {
+                                                const nodeKey = node.isSaved
+                                                  ? String(node.dbId)
+                                                  : node.id
+                                                const tcpingResult =
+                                                  tcpingResults[nodeKey]
+                                                const isLoading =
+                                                  tcpingNodeId === nodeKey ||
+                                                  tcpingResult?.loading
+                                                if (
+                                                  tcpingResult?.success &&
+                                                  !isLoading
+                                                ) {
+                                                  const latencyColor =
+                                                    tcpingResult.latency < 100
+                                                      ? 'border-green-500/50 text-green-600'
+                                                      : tcpingResult.latency <
+                                                          200
+                                                        ? 'border-yellow-500/50 text-yellow-500'
+                                                        : 'border-red-500/50 text-red-500'
+                                                  return (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <Button
+                                                          variant='ghost'
+                                                          size='sm'
+                                                          className={`h-5 shrink-0 border px-1 font-mono text-xs ${latencyColor}`}
+                                                          onClick={() =>
+                                                            handleTcping(node)
+                                                          }
+                                                        >
+                                                          {tcpingResult.latency <
+                                                          1000
+                                                            ? `${Math.round(tcpingResult.latency)}ms`
+                                                            : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
+                                                        </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        点击重新测试
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  )
+                                                }
+                                                if (
+                                                  tcpingResult &&
+                                                  !tcpingResult.success &&
+                                                  !isLoading
+                                                ) {
+                                                  return (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <Button
+                                                          variant='ghost'
+                                                          size='sm'
+                                                          className='h-5 shrink-0 border border-red-500/50 px-1 font-mono text-xs text-red-500'
+                                                          onClick={() =>
+                                                            handleTcping(node)
+                                                          }
+                                                        >
+                                                          超时
+                                                        </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        {tcpingResult.error ||
+                                                          '连接失败，点击重试'}
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  )
+                                                }
+                                                return (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        variant='ghost'
+                                                        size='sm'
+                                                        className='border-primary/50 hover:border-primary size-6 shrink-0 border p-0'
+                                                        disabled={isLoading}
+                                                        onClick={() =>
+                                                          handleTcping(node)
                                                         }
-                                                      }}
-                                                    >
-                                                      <span className='font-mono'>{ip}</span>
-                                                    </DropdownMenuItem>
-                                                  ))}
-                                                </DropdownMenuContent>
-                                              </DropdownMenu>
-                                            ) : (
-                                              <Button
-                                                variant='ghost'
-                                                size='sm'
-                                                className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                                title='解析IP地址'
-                                                disabled={resolvingIpFor === nodeKey}
-                                                onClick={() => handleResolveIp(node)}
-                                              >
-                                                <img
-                                                  src={IpIcon}
-                                                  alt='IP'
-                                                  className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                                />
-                                              </Button>
-                                            )
-                                          })()
-                                        )}
-                                        {node.isSaved && node.dbNode?.original_server && (
-                                          <Button
-                                            variant='ghost'
-                                            size='sm'
-                                            className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                            title='恢复原始域名'
-                                            disabled={restoreNodeServerMutation.isPending}
-                                            onClick={() => restoreNodeServerMutation.mutate(node.dbId)}
-                                          >
-                                            <Undo2 className='size-3' />
-                                          </Button>
-                                        )}
-                                        {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                          <Button
-                                            variant='ghost'
-                                            size='sm'
-                                            className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                            title={node.dbNode.probe_server ? `当前绑定: ${node.dbNode.probe_server}` : '绑定探针服务器'}
-                                            onClick={() => {
-                                              setSelectedNodeForProbe(node.dbNode!)
-                                              setProbeBindingDialogOpen(true)
-                                              refetchProbeConfig()
-                                            }}
-                                          >
-                                            <Activity className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
-                                          </Button>
-                                        )}
-                                        {/* TCPing 测试按钮 */}
-                                        {node.parsed && (
-                                          (() => {
-                                            const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                            const tcpingResult = tcpingResults[nodeKey]
-                                            const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-
-                                            // 测试成功后显示延迟数字
-                                            if (tcpingResult?.success && !isLoading) {
-                                              const latencyColor = tcpingResult.latency < 100
-                                                ? 'border-green-500/50 hover:border-green-500 text-green-600'
-                                                : tcpingResult.latency < 200
-                                                  ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
-                                                  : 'border-red-500/50 hover:border-red-500 text-red-500'
-                                              return (
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Button
-                                                      variant='ghost'
-                                                      size='sm'
-                                                      className={`h-5 px-1 text-xs font-mono border shrink-0 ${latencyColor}`}
-                                                      onClick={() => handleTcping(node)}
-                                                    >
-                                                      {tcpingResult.latency < 1000
-                                                        ? `${Math.round(tcpingResult.latency)}ms`
-                                                        : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
-                                                    </Button>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>点击重新测试</TooltipContent>
-                                                </Tooltip>
-                                              )
-                                            }
-
-                                            // 测试失败显示超时
-                                            if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                              return (
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Button
-                                                      variant='ghost'
-                                                      size='sm'
-                                                      className='h-5 px-1 text-xs font-mono border border-red-500/50 hover:border-red-500 shrink-0 text-red-500'
-                                                      onClick={() => handleTcping(node)}
-                                                    >
-                                                      超时
-                                                    </Button>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
-                                                </Tooltip>
-                                              )
-                                            }
-
-                                            // 默认状态或加载中
-                                            return (
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <Button
-                                                    variant='ghost'
-                                                    size='sm'
-                                                    className='size-5 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                                    disabled={isLoading}
-                                                    onClick={() => handleTcping(node)}
-                                                  >
-                                                    {isLoading ? (
-                                                      <Loader2 className='size-3 animate-spin text-primary' />
-                                                    ) : (
-                                                      <Zap className='size-3 text-[#d97757]' />
-                                                    )}
-                                                  </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
-                                              </Tooltip>
-                                            )
-                                          })()
+                                                      >
+                                                        {isLoading ? (
+                                                          <Loader2 className='text-primary size-3 animate-spin' />
+                                                        ) : (
+                                                          <Zap className='size-3 text-[#d97757]' />
+                                                        )}
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      {isLoading
+                                                        ? '测试中...'
+                                                        : 'TCPing 测试'}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )
+                                              })()}
+                                          </div>
+                                        ) : (
+                                          '-'
                                         )}
                                       </div>
-                                    )}
-                                  </div>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                    onClick={() => handleNameEditStart(node)}
-                                    disabled={node.isSaved ? isUpdatingNodeName : false}
-                                  >
-                                    <Pencil className='size-4' />
-                                  </Button>
-                                  {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                      onClick={() => {
-                                        setSourceNodeForExchange(node.dbNode)
-                                        setExchangeDialogOpen(true)
-                                      }}
-                                    >
-                                      <img
-                                        src={ExchangeIcon}
-                                        alt='交换'
-                                        className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                      />
-                                    </Button>
-                                  )}
-                                  {node.isSaved && node.dbNode && (
-                                    <FlagEmojiPicker
-                                      onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                      onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                      disabled={addingEmojiForNode === node.dbNode!.id}
-                                      loading={addingEmojiForNode === node.dbNode!.id}
-                                      className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                    />
-                                  )}
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className='flex flex-wrap gap-1'>
-                                {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                  <Badge key={t} variant='secondary' className='text-xs max-w-[90px] truncate cursor-pointer hover:bg-primary/20 transition-colors' onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (node.isSaved && node.dbNode) {
-                                      setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                    }
-                                  }}>{t}</Badge>
-                                ))}
-                                {node.isSaved && node.dbNode?.probe_server && (
-                                  <Badge variant='secondary' className='text-xs flex items-center gap-1'>
-                                    <Activity className='size-3' />
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              {node.clash ? (
-                                <div className='flex gap-1 justify-center'>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='h-7 w-7'
-                                    onClick={() => {
-                                      if (node.isSaved && node.dbNode) {
-                                        handleEditClashConfig(node.dbNode)
-                                      } else if (!node.isSaved) {
-                                        handleEditClashConfig(node)
-                                      }
-                                    }}
-                                  >
-                                    <Eye className='h-4 w-4' />
-                                  </Button>
-                                  {node.isSaved && (
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='h-7 w-7'
-                                      title='复制 URI'
-                                      onClick={() => handleCopyUri(node.dbNode!)}
-                                    >
-                                      <Copy className='h-4 w-4' />
-                                    </Button>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className='text-xs text-muted-foreground'>-</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant='ghost'
-                                    size='sm'
-                                    className='h-7 text-xs'
-                                    disabled={node.isSaved && isDeletingNode}
-                                  >
-                                    删除
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      确定要删除节点 "{node.name || '未知'}" 吗？
-                                      {node.isSaved && '此操作不可撤销。'}
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>取消</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                    >
-                                      删除
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </TableCell>
-                          </SortableTableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                  </SortableContext>
-                </div>
-                  )}
-
-                  {/* 平板端表格视图 - 虚拟滚动模式 (768-1024px) */}
-                  {isTablet && !isDesktop && renderMode === 'virtual' && (
-                    <div className='rounded-md border'>
-                      <Table className='w-full'>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead style={{ width: '36px' }}></TableHead>
-                            <TableHead style={{ width: '60px' }}>协议</TableHead>
-                            <TableHead>节点名称</TableHead>
-                            <TableHead style={{ width: '100px' }}>标签</TableHead>
-                            <TableHead style={{ width: '70px' }} className='text-center'>配置</TableHead>
-                            <TableHead style={{ width: '70px' }} className='text-center'>操作</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                      </Table>
-                      <div
-                        ref={tableVirtualListRef}
-                        className='overflow-auto'
-                        style={{ height: 'calc(100vh - 420px)', minHeight: '400px', contain: 'strict', willChange: 'transform' }}
-                      >
-                        {deferredFilteredNodes.length === 0 ? (
-                          <div className='text-center text-muted-foreground py-8'>
-                            没有找到匹配的节点
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              height: `${tableVirtualizer.getTotalSize()}px`,
-                              position: 'relative',
-                              contain: 'content',
-                            }}
-                          >
-                            {tableVirtualizer.getVirtualItems().map((virtualRow) => {
-                              const node = paginatedNodes[virtualRow.index]
-                              if (!node) return null
-                              return (
-                                <div
-                                  key={node.id}
-                                  data-index={virtualRow.index}
-                                  ref={tableVirtualizer.measureElement}
-                                  style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    transform: `translateY(${virtualRow.start}px)`,
-                                  }}
-                                  className={cn(
-                                    'flex items-center border-b px-2 py-2 hover:bg-muted/50 cursor-pointer',
-                                    node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) && 'bg-primary/5'
-                                  )}
-                                  onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
-                                >
-                                  {/* Checkbox */}
-                                  <div style={{ width: '36px' }} className='shrink-0'>
-                                    {node.isSaved && node.dbId && (
-                                      <Checkbox
-                                        checked={selectedNodeIds.has(node.dbId)}
-                                        onCheckedChange={(checked) => {
-                                          const newSet = new Set(selectedNodeIds)
-                                          if (checked) {
-                                            newSet.add(node.dbId!)
-                                          } else {
-                                            newSet.delete(node.dbId!)
-                                          }
-                                          setSelectedNodeIds(newSet)
-                                        }}
+                                      {/* 配置按钮 */}
+                                      <div
+                                        style={{ width: '80px' }}
+                                        className='shrink-0 text-center'
                                         onClick={(e) => e.stopPropagation()}
-                                      />
-                                    )}
-                                  </div>
-                                  {/* 协议 */}
-                                  <div style={{ width: '60px' }} className='shrink-0'>
-                                    {node.parsed ? (
-                                      <Badge
-                                        variant='outline'
-                                        className={
-                                          node.dbNode?.protocol?.includes('⇋')
-                                            ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                            : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                        }
                                       >
-                                        {node.dbNode?.protocol?.includes('⇋')
-                                          ? node.dbNode.protocol.toUpperCase()
-                                          : node.parsed.type.toUpperCase()}
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant='destructive'>解析失败</Badge>
-                                    )}
-                                  </div>
-                                  {/* 节点名称 + 服务器地址 */}
-                                  <div className='flex-1 min-w-0 px-2' onClick={(e) => e.stopPropagation()}>
-                                    {(() => {
-                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                      const relayName = node.dbNode?.relay_group_name
-                                      const label = relayName || chainName
-                                      if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                    })()}
-                                    <div className='flex items-center gap-2 min-w-0'>
-                                      <span className='truncate flex-1 min-w-0 font-medium text-sm' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                      {node.isSaved && <Check className='size-4 text-green-600 shrink-0' />}
-                                      <Button variant='ghost' size='icon' className='size-7 text-[#d97757] shrink-0' onClick={() => handleNameEditStart(node)}>
-                                        <Pencil className='size-4' />
-                                      </Button>
-                                      {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                        <Button variant='ghost' size='icon' className='size-7 text-[#d97757] shrink-0' onClick={() => { setSourceNodeForExchange(node.dbNode); setExchangeDialogOpen(true) }}>
-                                          <img src={ExchangeIcon} alt='交换' className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' />
-                                        </Button>
-                                      )}
-                                      {node.isSaved && node.dbNode && (
-                                        <FlagEmojiPicker
-                                          onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                          onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                          disabled={addingEmojiForNode === node.dbNode!.id}
-                                          loading={addingEmojiForNode === node.dbNode!.id}
-                                          className='size-7 text-[#d97757] shrink-0'
-                                        />
-                                      )}
-                                    </div>
-                                    {node.parsed && (
-                                      <div className='flex items-center gap-1 mt-0.5'>
-                                        <span className='text-xs text-muted-foreground font-mono truncate'>
-                                          {node.parsed.server}:{node.parsed.port}
-                                        </span>
-                                        {/* IP解析 */}
-                                        {(() => {
-                                          const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                          const serverIsIp = isIpAddress(node.parsed.server)
-                                          if (node.isSaved && serverIsIp) return null
-                                          if (!node.isSaved && node.originalServer) {
-                                            return <Button variant='ghost' size='sm' className='size-5 p-0 border border-orange-500/50 shrink-0' onClick={() => restoreTempNodeServer(node.id)}><Undo2 className='size-3 text-orange-500' /></Button>
-                                          }
-                                          return <Button variant='ghost' size='sm' className='size-5 p-0 border border-primary/50 shrink-0' disabled={resolvingIpFor === nodeKey} onClick={() => handleResolveIp(node)}><img src={IpIcon} alt='IP' className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' /></Button>
-                                        })()}
-                                        {/* 探针 */}
-                                        {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                          <Button variant='ghost' size='sm' className='size-5 p-0 border border-primary/50 shrink-0' onClick={() => { setSelectedNodeForProbe(node.dbNode!); setProbeBindingDialogOpen(true); refetchProbeConfig() }}>
-                                            <Activity className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
-                                          </Button>
-                                        )}
-                                        {/* TCPing */}
-                                        {(() => {
-                                          const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                          const tcpingResult = tcpingResults[nodeKey]
-                                          const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-                                          if (tcpingResult?.success && !isLoading) {
-                                            const c = tcpingResult.latency < 100 ? 'text-green-600' : tcpingResult.latency < 200 ? 'text-yellow-500' : 'text-red-500'
-                                            return <Button variant='ghost' size='sm' className={`h-5 px-1 text-xs font-mono border shrink-0 ${c}`} onClick={() => handleTcping(node)}>{Math.round(tcpingResult.latency)}ms</Button>
-                                          }
-                                          if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                            return <Button variant='ghost' size='sm' className='h-5 px-1 text-xs border border-red-500/50 text-red-500 shrink-0' onClick={() => handleTcping(node)}>超时</Button>
-                                          }
-                                          return <Button variant='ghost' size='sm' className='size-5 p-0 border border-primary/50 shrink-0' disabled={isLoading} onClick={() => handleTcping(node)}>{isLoading ? <Loader2 className='size-3 animate-spin' /> : <Zap className='size-3 text-[#d97757]' />}</Button>
-                                        })()}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {/* 标签 */}
-                                  <div style={{ width: '100px' }} className='shrink-0 px-2 flex flex-wrap gap-0.5'>
-                                    {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                      <Badge key={t} variant='secondary' className='text-xs truncate max-w-full cursor-pointer hover:bg-primary/20 transition-colors' onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (node.isSaved && node.dbNode) {
-                                          setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                        }
-                                      }}>{t}</Badge>
-                                    ))}
-                                  </div>
-                                  {/* 配置按钮 */}
-                                  <div style={{ width: '70px' }} className='shrink-0 text-center' onClick={(e) => e.stopPropagation()}>
-                                    {node.clash && (
-                                      <div className='flex gap-1 justify-center'>
-                                        <Button
-                                          variant='ghost'
-                                          size='icon'
-                                          className='h-7 w-7'
-                                          onClick={() => {
-                                            if (node.isSaved && node.dbNode) {
-                                              handleEditClashConfig(node.dbNode)
-                                            } else if (!node.isSaved) {
-                                              handleEditClashConfig(node)
-                                            }
-                                            setClashDialogOpen(true)
-                                          }}
-                                        >
-                                          <Eye className='h-3.5 w-3.5' />
-                                        </Button>
-                                        {node.isSaved && (
-                                          <>
+                                        {node.clash && (
+                                          <div className='flex justify-center gap-1'>
                                             <Button
                                               variant='ghost'
                                               size='icon'
                                               className='h-7 w-7'
-                                              onClick={() => handleCopyUri(node.dbNode!)}
-                                            >
-                                              <Copy className='h-3.5 w-3.5' />
-                                            </Button>
-                                            <Button
-                                              variant='ghost'
-                                              size='icon'
-                                              className='h-7 w-7'
-                                              title='生成临时订阅'
                                               onClick={() => {
-                                                setTempSubSingleNodeId(node.dbId!)
-                                                setTempSubUrl('')
-                                                setTempSubDialogOpen(true)
+                                                if (
+                                                  node.isSaved &&
+                                                  node.dbNode
+                                                ) {
+                                                  handleEditClashConfig(
+                                                    node.dbNode
+                                                  )
+                                                } else if (!node.isSaved) {
+                                                  handleEditClashConfig(node)
+                                                }
+                                                setClashDialogOpen(true)
                                               }}
                                             >
-                                              <Link2 className='h-3.5 w-3.5' />
+                                              <Eye className='h-3.5 w-3.5' />
                                             </Button>
-                                          </>
+                                            {node.isSaved && (
+                                              <>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='h-7 w-7'
+                                                  onClick={() =>
+                                                    handleCopyUri(node.dbNode!)
+                                                  }
+                                                >
+                                                  <Copy className='h-3.5 w-3.5' />
+                                                </Button>
+                                                <Button
+                                                  variant='ghost'
+                                                  size='icon'
+                                                  className='h-7 w-7'
+                                                  title='生成临时订阅'
+                                                  onClick={() => {
+                                                    setTempSubSingleNodeId(
+                                                      node.dbId!
+                                                    )
+                                                    setTempSubUrl('')
+                                                    setTempSubDialogOpen(true)
+                                                  }}
+                                                >
+                                                  <Link2 className='h-3.5 w-3.5' />
+                                                </Button>
+                                              </>
+                                            )}
+                                          </div>
                                         )}
                                       </div>
-                                    )}
-                                  </div>
-                                  {/* 操作按钮 */}
-                                  <div style={{ width: '70px' }} className='shrink-0 text-center' onClick={(e) => e.stopPropagation()}>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant='ghost'
-                                          size='sm'
-                                          className='h-7 text-xs'
-                                          disabled={node.isSaved && isDeletingNode}
-                                        >
-                                          删除
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            确定要删除节点 "{node.name || '未知'}" 吗？
-                                            {node.isSaved && '此操作不可撤销。'}
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>取消</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                          >
-                                            删除
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 桌面端表格视图 - 展开模式 (>=1024px) */}
-                  {isDesktop && renderMode === 'expanded' && (
-                  <div className='rounded-md border'>
-                    <SortableContext
-                      items={paginatedNodes.map(n => n.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <Table className='w-full'>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead style={{ width: '36px' }}></TableHead>
-                            <TableHead style={{ width: '90px' }}>协议</TableHead>
-                            <TableHead>节点名称</TableHead>
-                            <TableHead style={{ width: '120px' }}>标签</TableHead>
-                            <TableHead style={{ width: '280px', maxWidth: '280px' }}>服务器地址</TableHead>
-                            <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
-                            <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {deferredFilteredNodes.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={7} className='text-center text-muted-foreground py-8'>
-                                没有找到匹配的节点
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            paginatedNodes.map(node => (
-                          <SortableTableRow
-                            key={node.id}
-                            id={node.id}
-                            isSaved={node.isSaved}
-                            isBatchDragging={Boolean(node.dbId && batchDraggingIds.has(node.dbId))}
-                            isSelected={node.isSaved && node.dbId ? selectedNodeIds.has(node.dbId) : false}
-                            onClick={node.isSaved && node.dbId ? (e) => handleRowClick(e, node.dbId) : undefined}
-                          >
-                                <TableCell className='w-9 px-2'>
-                                  {node.isSaved && (
-                                    <DragHandle id={node.id} />
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                              {node.parsed ? (
-                                <Badge
-                                  variant='outline'
-                                  className={
-                                    node.dbNode?.protocol?.includes('⇋')
-                                      ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                      : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                  }
-                                >
-                                  {node.dbNode?.protocol?.includes('⇋')
-                                    ? node.dbNode.protocol.toUpperCase()
-                                    : node.parsed.type.toUpperCase()}
-                                </Badge>
-                              ) : (
-                                <Badge variant='destructive'>解析失败</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className='font-medium min-w-[200px] max-w-[300px]'>
-                              {editingNode?.id === node.id ? (
-                                <div className='flex items-center gap-1'>
-                                  <Input
-                                    value={editingNode.value}
-                                    onChange={(event) => handleNameEditChange(event.target.value)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault()
-                                        handleNameEditSubmit(node)
-                                      } else if (event.key === 'Escape') {
-                                        event.preventDefault()
-                                        handleNameEditCancel()
-                                      }
-                                    }}
-                                    className='h-7 flex-1 min-w-0'
-                                    autoFocus
-                                  />
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-emerald-600 shrink-0'
-                                    onClick={() => handleNameEditSubmit(node)}
-                                    disabled={node.isSaved ? isUpdatingNodeName : false}
-                                  >
-                                    <Check className='size-3.5' />
-                                  </Button>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='size-7 text-muted-foreground shrink-0'
-                                    onClick={handleNameEditCancel}
-                                  >
-                                    <X className='size-3.5' />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className='min-w-0'>
-                                  {(() => {
-                                    const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                    const relayName = node.dbNode?.relay_group_name
-                                    const label = relayName || chainName
-                                    if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                  })()}
-                                  <div className='flex items-center gap-2 min-w-0'>
-                                    <span className='truncate flex-1 min-w-0' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                    {node.isSaved && (
-                                      <Check className='size-4 text-green-600 shrink-0' />
-                                    )}
-                                    <Button
-                                      variant='ghost'
-                                      size='icon'
-                                      className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                      onClick={() => handleNameEditStart(node)}
-                                      disabled={node.isSaved ? isUpdatingNodeName : false}
-                                    >
-                                      <Pencil className='size-4' />
-                                    </Button>
-                                    {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                      <Button
-                                        variant='ghost'
-                                        size='icon'
-                                        className='size-7 text-muted-foreground hover:text-foreground shrink-0'
-                                        onClick={() => {
-                                          setSourceNodeForExchange(node.dbNode)
-                                          setExchangeDialogOpen(true)
-                                        }}
+                                      {/* 操作按钮 */}
+                                      <div
+                                        style={{ width: '80px' }}
+                                        className='shrink-0 text-center'
+                                        onClick={(e) => e.stopPropagation()}
                                       >
-                                        <img
-                                          src={ExchangeIcon}
-                                          alt='交换'
-                                          className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                        />
-                                      </Button>
-                                    )}
-                                    {node.isSaved && node.dbNode && (
-                                      <FlagEmojiPicker
-                                        onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                        onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                        disabled={addingEmojiForNode === node.dbNode!.id}
-                                        loading={addingEmojiForNode === node.dbNode!.id}
-                                        className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                      />
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className='flex flex-wrap gap-1'>
-                                {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                  <Badge key={t} variant='secondary' className='text-xs max-w-[120px] truncate cursor-pointer hover:bg-primary/20 transition-colors' title={t} onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (node.isSaved && node.dbNode) {
-                                      setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                    }
-                                  }}>{t}</Badge>
-                                ))}
-                                {node.isSaved && node.dbNode?.probe_server && (
-                                  <Badge variant='secondary' className='text-xs flex items-center gap-1'>
-                                    <Activity className='size-3' />
-                                    {node.dbNode.probe_server}
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell style={{ maxWidth: '280px' }}>
-                              <div className='text-sm text-muted-foreground'>
-                                {node.parsed ? (
-                                  <div className='flex items-center gap-2 min-w-0'>
-                                    <div className='min-w-0 flex-1'>
-                                      <div className='font-mono truncate' title={`${node.parsed.server}:${node.parsed.port}`}>{node.parsed.server}:{node.parsed.port}</div>
-                                      {node.parsed.network && node.parsed.network !== 'tcp' && (
-                                        <div className='text-xs mt-1 flex items-center gap-1'>
-                                          <Badge variant='outline' className='text-xs'>
-                                            {node.parsed.network}
-                                          </Badge>
-                                          {node.parsed.network === 'xhttp' && node.parsed.mode && (
-                                            <Badge variant='outline' className='text-xs'>
-                                              {node.parsed.mode}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {node.parsed?.server && (
-                                      (() => {
-                                        const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                        const serverIsIp = isIpAddress(node.parsed.server)
-                                        const hasOriginalServer = !node.isSaved && node.originalServer
-
-                                        // 已保存的节点且服务器地址已经是IP，不显示按钮
-                                        if (node.isSaved && serverIsIp) {
-                                          return null
-                                        }
-
-                                        // 未保存的节点且有原始服务器地址，显示回退按钮
-                                        if (hasOriginalServer) {
-                                          return (
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
                                             <Button
                                               variant='ghost'
                                               size='sm'
-                                              className='size-6 p-0 border border-orange-500/50 hover:border-orange-500 shrink-0'
-                                              title='恢复原始域名'
-                                              onClick={() => restoreTempNodeServer(node.id)}
+                                              className='h-7 text-xs'
+                                              disabled={
+                                                node.isSaved && isDeletingNode
+                                              }
                                             >
-                                              <Undo2 className='size-4 text-orange-500' />
+                                              删除
                                             </Button>
-                                          )
-                                        }
-
-                                        // 显示IP解析菜单或按钮
-                                        return ipMenuState?.nodeId === nodeKey ? (
-                                          <DropdownMenu open={true} onOpenChange={(open) => !open && setIpMenuState(null)}>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button
-                                                variant='ghost'
-                                                size='sm'
-                                                className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                                title='选择IP地址'
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>
+                                                确认删除
+                                              </AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                确定要删除节点 "
+                                                {node.name || '未知'}" 吗？
+                                                {node.isSaved &&
+                                                  '此操作不可撤销。'}
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>
+                                                取消
+                                              </AlertDialogCancel>
+                                              <AlertDialogAction
+                                                onClick={() =>
+                                                  node.isSaved
+                                                    ? handleDelete(node.dbId)
+                                                    : handleDeleteTemp(node.id)
+                                                }
                                               >
-                                                <img
-                                                  src={IpIcon}
-                                                  alt='IP'
-                                                  className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                                />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align='start'>
-                                              {ipMenuState.ips.map((ip) => (
-                                                <DropdownMenuItem
-                                                  key={ip}
-                                                  onClick={() => {
-                                                    if (node.isSaved && node.dbId) {
-                                                      updateNodeServerMutation.mutate({
-                                                        nodeId: node.dbId,
-                                                        server: ip,
-                                                      })
-                                                    } else {
-                                                      updateTempNodeServer(node.id, ip)
-                                                      setIpMenuState(null)
-                                                    }
-                                                  }}
-                                                >
-                                                  <span className='font-mono'>{ip}</span>
-                                                </DropdownMenuItem>
-                                              ))}
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        ) : (
-                                          <Button
-                                            variant='ghost'
-                                            size='sm'
-                                            className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0'
-                                            title='解析IP地址'
-                                            disabled={resolvingIpFor === nodeKey}
-                                            onClick={() => handleResolveIp(node)}
-                                          >
-                                            <img
-                                              src={IpIcon}
-                                              alt='IP'
-                                              className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                            />
-                                          </Button>
-                                        )
-                                      })()
-                                    )}
-                                    {node.isSaved && node.dbNode?.original_server && (
-                                      <Button
-                                        variant='ghost'
-                                        size='sm'
-                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
-                                        title='恢复原始域名'
-                                        disabled={restoreNodeServerMutation.isPending}
-                                        onClick={() => restoreNodeServerMutation.mutate(node.dbId)}
-                                      >
-                                        <Undo2 className='size-3' />
-                                      </Button>
-                                    )}
-                                    {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                      <Button
-                                        variant='ghost'
-                                        size='sm'
-                                        className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
-                                        title={node.dbNode.probe_server ? `当前绑定: ${node.dbNode.probe_server}` : '绑定探针服务器'}
-                                        onClick={() => {
-                                          setSelectedNodeForProbe(node.dbNode!)
-                                          setProbeBindingDialogOpen(true)
-                                          refetchProbeConfig() // 打开对话框时查询探针配置
-                                        }}
-                                      >
-                                        <Activity className={`size-4 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
-                                      </Button>
-                                    )}
-                                    {/* TCPing 测试按钮 */}
-                                    {node.parsed && (
-                                      (() => {
-                                        const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                        const tcpingResult = tcpingResults[nodeKey]
-                                        const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-
-                                        // 测试成功后显示延迟数字
-                                        if (tcpingResult?.success && !isLoading) {
-                                          const latencyColor = tcpingResult.latency < 100
-                                            ? 'border-green-500/50 hover:border-green-500 text-green-600'
-                                            : tcpingResult.latency < 200
-                                              ? 'border-orange-500/50 hover:border-orange-500 text-orange-500'
-                                              : 'border-red-500/50 hover:border-red-500 text-red-500'
-                                          return (
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant='ghost'
-                                                  size='sm'
-                                                  className={`h-6 px-1.5 text-xs font-mono border ml-1 shrink-0 ${latencyColor}`}
-                                                  onClick={() => handleTcping(node)}
-                                                >
-                                                  {tcpingResult.latency < 1000
-                                                    ? `${Math.round(tcpingResult.latency)}ms`
-                                                    : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>点击重新测试</TooltipContent>
-                                            </Tooltip>
-                                          )
-                                        }
-
-                                        // 测试失败显示超时
-                                        if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                          return (
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  variant='ghost'
-                                                  size='sm'
-                                                  className='h-6 px-1.5 text-xs font-mono border border-red-500/50 hover:border-red-500 ml-1 shrink-0 text-red-500'
-                                                  onClick={() => handleTcping(node)}
-                                                >
-                                                  超时
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent>
-                                            </Tooltip>
-                                          )
-                                        }
-
-                                        // 默认状态或加载中
-                                        return (
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                variant='ghost'
-                                                size='sm'
-                                                className='size-6 p-0 border border-primary/50 hover:border-primary ml-1 shrink-0'
-                                                disabled={isLoading}
-                                                onClick={() => handleTcping(node)}
-                                              >
-                                                {isLoading ? (
-                                                  <Loader2 className='size-3.5 animate-spin text-primary' />
-                                                ) : (
-                                                  <Zap className='size-3.5 text-[#d97757]' />
-                                                )}
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent>
-                                          </Tooltip>
-                                        )
-                                      })()
-                                    )}
-                                  </div>
-                                ) : (
-                                  '-'
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              {node.clash ? (
-                                <div className='flex gap-1 justify-center'>
-                                  <Dialog
-                                    open={clashDialogOpen && (
-                                      (node.isSaved && editingClashConfig?.nodeId === node.dbNode?.id) ||
-                                      (!node.isSaved && editingClashConfig?.nodeId === -1)
-                                    )}
-                                    onOpenChange={(open) => {
-                                      setClashDialogOpen(open)
-                                      if (!open) {
-                                        // Dialog关闭后清理状态
-                                        setTimeout(() => {
-                                          setEditingClashConfig(null)
-                                          setClashConfigError('')
-                                          setJsonErrorLines([])
-                                        }, 150) // 等待关闭动画完成
-                                      }
-                                    }}
-                                  >
-                                    <DialogTrigger asChild>
-                                      <Button
-                                        variant='ghost'
-                                        size='icon'
-                                        className='h-8 w-8'
-                                        onClick={() => {
-                                          if (node.isSaved && node.dbNode) {
-                                            handleEditClashConfig(node.dbNode)
-                                          } else if (!node.isSaved) {
-                                            handleEditClashConfig(node)
-                                          }
-                                        }}
-                                      >
-                                        <Eye className='h-4 w-4' />
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className='max-w-4xl sm:max-w-4xl max-h-[80vh] flex flex-col'>
-                                    <DialogHeader>
-                                      <DialogTitle>
-                                        Clash 配置详情{editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
-                                      </DialogTitle>
-                                      <DialogDescription>
-                                        <Twemoji>{node.name || '未知'}</Twemoji>
-                                        {editingClashConfig?.nodeId === -1 && ' - 保存节点后可编辑配置'}
-                                      </DialogDescription>
-                                    </DialogHeader>
-                                    <div className='mt-4 flex-1 flex flex-col gap-3 min-h-0'>
-                                      <div className='flex gap-1'>
-                                        <Button
-                                          variant={configFormat === 'json' ? 'default' : 'outline'}
-                                          size='sm'
-                                          className='h-7 px-3 text-xs'
-                                          onClick={() => handleConfigFormatChange('json')}
-                                        >
-                                          JSON
-                                        </Button>
-                                        <Button
-                                          variant={configFormat === 'yaml' ? 'default' : 'outline'}
-                                          size='sm'
-                                          className='h-7 px-3 text-xs'
-                                          onClick={() => handleConfigFormatChange('yaml')}
-                                        >
-                                          YAML
-                                        </Button>
-                                      </div>
-                                      <div className='flex-1 flex border rounded overflow-auto bg-muted'>
-                                        {/* 行号列 */}
-                                        <div className='flex flex-col bg-muted-foreground/10 text-muted-foreground text-xs font-mono select-none py-3 px-2 text-right'>
-                                          {editingClashConfig?.config.split('\n').map((_, i) => {
-                                            const lineNum = i + 1
-                                            const isErrorLine = jsonErrorLines.includes(lineNum)
-                                            return (
-                                              <div
-                                                key={i}
-                                                className={`leading-5 h-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
-                                              >
-                                                {lineNum}
-                                              </div>
-                                            )
-                                          })}
-                                        </div>
-                                        {/* 文本编辑区 */}
-                                        <Textarea
-                                          value={editingClashConfig?.config || ''}
-                                          onChange={(e) => handleClashConfigChange(e.target.value)}
-                                          className='font-mono text-xs flex-1 min-h-[400px] resize-none border-0 rounded-none focus-visible:ring-0 leading-5'
-                                          placeholder={configFormat === 'yaml' ? '输入 YAML 配置...' : '输入 JSON 配置...'}
-                                          readOnly={editingClashConfig?.nodeId === -1}
-                                        />
-                                      </div>
-                                      {clashConfigError && (
-                                        <div className='text-xs text-destructive bg-destructive/10 p-2 rounded'>
-                                          {clashConfigError}
-                                        </div>
-                                      )}
-                                      <div className='flex gap-2 justify-end'>
-                                        <Button
-                                          variant='outline'
-                                          size='sm'
-                                          onClick={() => setClashDialogOpen(false)}
-                                        >
-                                          {editingClashConfig?.nodeId === -1 ? '关闭' : '取消'}
-                                        </Button>
-                                        {editingClashConfig?.nodeId !== -1 && (
-                                          <Button
-                                            size='sm'
-                                            onClick={handleSaveClashConfig}
-                                            disabled={!!clashConfigError || updateClashConfigMutation.isPending}
-                                          >
-                                            {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
-                                          </Button>
-                                        )}
+                                                删除
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
                                       </div>
                                     </div>
-                                  </DialogContent>
-                                </Dialog>
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  className='h-8 w-8'
-                                  title='复制 URI'
-                                  onClick={() => node.isSaved && handleCopyUri(node.dbNode!)}
-                                >
-                                  <Copy className='h-4 w-4' />
-                                </Button>
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  className='h-8 w-8'
-                                  title='生成临时订阅'
-                                  onClick={() => {
-                                    if (node.isSaved && node.dbId) {
-                                      setTempSubSingleNodeId(node.dbId)
-                                      setTempSubUrl('')
-                                      setTempSubDialogOpen(true)
-                                    }
-                                  }}
-                                >
-                                  <Link2 className='h-4 w-4' />
-                                </Button>
-                              </div>
-                              ) : (
-                                <span className='text-xs text-muted-foreground'>-</span>
-                              )}
-                            </TableCell>
-                            <TableCell className='text-center'>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant='ghost'
-                                    size='sm'
-                                    disabled={node.isSaved && isDeletingNode}
-                                  >
-                                    删除
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      确定要删除节点 "{node.name || '未知'}" 吗？
-                                      {node.isSaved && '此操作不可撤销。'}
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>取消</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                    >
-                                      删除
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                                </TableCell>
-                              </SortableTableRow>
-                            ))
+                                  )
+                                })}
+                            </div>
                           )}
-                        </TableBody>
-                      </Table>
-                    </SortableContext>
-                  </div>
-                  )}
-
-                  {/* 桌面端表格视图 - 虚拟滚动模式 (>=1024px) */}
-                  {isDesktop && renderMode === 'virtual' && (
-                    <div className='rounded-md border'>
-                      <Table className='w-full'>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead style={{ width: '36px' }}></TableHead>
-                            <TableHead style={{ width: '90px' }}>协议</TableHead>
-                            <TableHead>节点名称</TableHead>
-                            <TableHead style={{ width: '120px' }}>标签</TableHead>
-                            <TableHead style={{ width: '280px', maxWidth: '280px' }}>服务器地址</TableHead>
-                            <TableHead style={{ width: '80px' }} className='text-center'>配置</TableHead>
-                            <TableHead style={{ width: '80px' }} className='text-center'>操作</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                      </Table>
-                      <div
-                        ref={tableVirtualListRef}
-                        className='overflow-auto'
-                        style={{ height: 'calc(100vh - 420px)', minHeight: '400px', contain: 'strict', willChange: 'transform' }}
-                      >
-                        {deferredFilteredNodes.length === 0 ? (
-                          <div className='text-center text-muted-foreground py-8'>
-                            没有找到匹配的节点
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              height: `${tableVirtualizer.getTotalSize()}px`,
-                              position: 'relative',
-                              contain: 'content',
-                            }}
-                          >
-                            {tableVirtualizer.getVirtualItems().map((virtualRow) => {
-                              const node = paginatedNodes[virtualRow.index]
-                              if (!node) return null
-                              return (
-                                <div
-                                  key={node.id}
-                                  data-index={virtualRow.index}
-                                  ref={tableVirtualizer.measureElement}
-                                  style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    transform: `translateY(${virtualRow.start}px)`,
-                                  }}
-                                  className={cn(
-                                    'flex items-center border-b px-2 py-2 hover:bg-muted/50 cursor-pointer',
-                                    node.isSaved && node.dbId && selectedNodeIds.has(node.dbId) && 'bg-primary/5'
-                                  )}
-                                  onClick={node.isSaved && node.dbId ? () => handleNodeSelect(node.dbId!) : undefined}
-                                >
-                                  {/* 占位列 */}
-                                  <div style={{ width: '36px' }} className='shrink-0'>
-                                    {node.isSaved && node.dbId && (
-                                      <Checkbox
-                                        checked={selectedNodeIds.has(node.dbId)}
-                                        onCheckedChange={(checked) => {
-                                          const newSet = new Set(selectedNodeIds)
-                                          if (checked) {
-                                            newSet.add(node.dbId!)
-                                          } else {
-                                            newSet.delete(node.dbId!)
-                                          }
-                                          setSelectedNodeIds(newSet)
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                    )}
-                                  </div>
-                                  {/* 协议 */}
-                                  <div style={{ width: '90px' }} className='shrink-0'>
-                                    {node.parsed ? (
-                                      <Badge
-                                        variant='outline'
-                                        className={
-                                          node.dbNode?.protocol?.includes('⇋')
-                                            ? 'bg-pink-500/10 text-pink-700 border-pink-200 dark:text-pink-300 dark:border-pink-800'
-                                            : PROTOCOL_COLORS[node.parsed.type] || 'bg-gray-500/10'
-                                        }
-                                      >
-                                        {node.dbNode?.protocol?.includes('⇋')
-                                          ? node.dbNode.protocol.toUpperCase()
-                                          : node.parsed.type.toUpperCase()}
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant='destructive'>解析失败</Badge>
-                                    )}
-                                  </div>
-                                  {/* 节点名称 */}
-                                  <div className='flex-1 min-w-0 px-2'>
-                                    {(() => {
-                                      const chainName = node.dbNode?.chain_proxy_node_id ? nodeIdToName.get(node.dbNode.chain_proxy_node_id) : undefined
-                                      const relayName = node.dbNode?.relay_group_name
-                                      const label = relayName || chainName
-                                      if (!label) return null
-                                      const tip = relayName && node.dbNode?.relay_group_node_ids
-                                        ? node.dbNode.relay_group_node_ids.map(id => nodeIdToName.get(id)).filter(Boolean).join('\n')
-                                        : chainName ?? ''
-                                      return <div className='text-[10px] text-muted-foreground leading-tight flex items-center gap-0.5 min-w-0 max-w-full overflow-hidden' title={tip}><span className='truncate min-w-0'>⬐ {label}{relayName ? ` (${node.dbNode?.relay_group_node_ids?.length ?? 0})` : ''}</span>{relayName && <button type='button' className='shrink-0 hover:text-destructive' title='解除中转组' onClick={(e) => { e.stopPropagation(); unbindRelayGroupMutation.mutate(node.dbNode!.id) }}><X className='size-3' /></button>}</div>
-                                    })()}
-                                    <div className='flex items-center gap-2 min-w-0'>
-                                      <span className='truncate flex-1 min-w-0 font-medium text-sm' title={node.name || '未知'}><Twemoji>{node.name || '未知'}</Twemoji></span>
-                                      {node.isSaved && <Check className='size-4 text-green-600 shrink-0' />}
-                                      <Button
-                                        variant='ghost'
-                                        size='icon'
-                                        className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleNameEditStart(node)
-                                        }}
-                                      >
-                                        <Pencil className='size-4' />
-                                      </Button>
-                                      {node.isSaved && node.dbNode && !node.dbNode.protocol.includes('⇋') && (
-                                        <Button
-                                          variant='ghost'
-                                          size='icon'
-                                          className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setSourceNodeForExchange(node.dbNode)
-                                            setExchangeDialogOpen(true)
-                                          }}
-                                        >
-                                          <img
-                                            src={ExchangeIcon}
-                                            alt='交换'
-                                            className='size-4 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]'
-                                          />
-                                        </Button>
-                                      )}
-                                      {node.isSaved && node.dbNode && (
-                                        <FlagEmojiPicker
-                                          onSelect={(flag) => handleSetNodeFlag(node.dbNode!.id, flag)}
-                                          onAutoDetect={() => handleAddSingleNodeEmoji(node.dbNode!.id)}
-                                          disabled={addingEmojiForNode === node.dbNode!.id}
-                                          loading={addingEmojiForNode === node.dbNode!.id}
-                                          className='size-7 text-[#d97757] hover:text-[#c66647] shrink-0'
-                                          stopPropagation
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                  {/* 标签 */}
-                                  <div style={{ width: '120px' }} className='shrink-0 px-2 flex flex-wrap gap-0.5'>
-                                    {(node.isSaved && node.dbNode?.tags?.length ? node.dbNode.tags : [node.dbNode?.tag || node.tag || '手动输入']).map(t => (
-                                      <Badge key={t} variant='secondary' className='text-xs truncate max-w-full cursor-pointer hover:bg-primary/20 transition-colors' onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (node.isSaved && node.dbNode) {
-                                          setTagManageNodeId(node.dbNode.id); setTagManageSelectedTag(t); setTagManageInput(t); setTagManageDialogOpen(true)
-                                        }
-                                      }}>{t}</Badge>
-                                    ))}
-                                  </div>
-                                  {/* 服务器地址 */}
-                                  <div style={{ width: '280px', maxWidth: '280px' }} className='shrink-0 px-2' onClick={(e) => e.stopPropagation()}>
-                                    {node.parsed ? (
-                                      <div className='flex items-center gap-1'>
-                                        <span className='text-xs font-mono truncate flex-1 min-w-0'>
-                                          {node.parsed.server}:{node.parsed.port}
-                                        </span>
-                                        {/* IP解析按钮 */}
-                                        {node.parsed?.server && (() => {
-                                          const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                          const serverIsIp = isIpAddress(node.parsed.server)
-                                          const hasOriginalServer = !node.isSaved && node.originalServer
-                                          if (node.isSaved && serverIsIp) return null
-                                          if (hasOriginalServer) {
-                                            return (
-                                              <Button variant='ghost' size='sm' className='size-6 p-0 border border-orange-500/50 hover:border-orange-500 shrink-0' title='恢复原始域名' onClick={() => restoreTempNodeServer(node.id)}>
-                                                <Undo2 className='size-3 text-orange-500' />
-                                              </Button>
-                                            )
-                                          }
-                                          return ipMenuState?.nodeId === nodeKey ? (
-                                            <DropdownMenu open={true} onOpenChange={(open) => !open && setIpMenuState(null)}>
-                                              <DropdownMenuTrigger asChild>
-                                                <Button variant='ghost' size='sm' className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0' title='选择IP地址'>
-                                                  <img src={IpIcon} alt='IP' className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' />
-                                                </Button>
-                                              </DropdownMenuTrigger>
-                                              <DropdownMenuContent align='start'>
-                                                {ipMenuState.ips.map((ip) => (
-                                                  <DropdownMenuItem key={ip} onClick={() => { if (node.isSaved && node.dbId) { updateNodeServerMutation.mutate({ nodeId: node.dbId, server: ip }) } else { updateTempNodeServer(node.id, ip); setIpMenuState(null) } }}>
-                                                    <span className='font-mono'>{ip}</span>
-                                                  </DropdownMenuItem>
-                                                ))}
-                                              </DropdownMenuContent>
-                                            </DropdownMenu>
-                                          ) : (
-                                            <Button variant='ghost' size='sm' className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0' title='解析IP地址' disabled={resolvingIpFor === nodeKey} onClick={() => handleResolveIp(node)}>
-                                              <img src={IpIcon} alt='IP' className='size-3 [filter:invert(63%)_sepia(45%)_saturate(1068%)_hue-rotate(327deg)_brightness(95%)_contrast(88%)]' />
-                                            </Button>
-                                          )
-                                        })()}
-                                        {/* 恢复原始域名 */}
-                                        {node.isSaved && node.dbNode?.original_server && (
-                                          <Button variant='ghost' size='sm' className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0' title='恢复原始域名' disabled={restoreNodeServerMutation.isPending} onClick={() => restoreNodeServerMutation.mutate(node.dbId)}>
-                                            <Undo2 className='size-3' />
-                                          </Button>
-                                        )}
-                                        {/* 探针绑定 */}
-                                        {userConfig?.enable_probe_binding && node.isSaved && node.dbNode && (
-                                          <Button variant='ghost' size='sm' className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0' title={node.dbNode.probe_server ? `当前绑定: ${node.dbNode.probe_server}` : '绑定探针服务器'} onClick={() => { setSelectedNodeForProbe(node.dbNode!); setProbeBindingDialogOpen(true); refetchProbeConfig() }}>
-                                            <Activity className={`size-3 ${node.dbNode.probe_server ? 'text-green-600' : 'text-[#d97757]'}`} />
-                                          </Button>
-                                        )}
-                                        {/* TCPing */}
-                                        {node.parsed && (() => {
-                                          const nodeKey = node.isSaved ? String(node.dbId) : node.id
-                                          const tcpingResult = tcpingResults[nodeKey]
-                                          const isLoading = tcpingNodeId === nodeKey || tcpingResult?.loading
-                                          if (tcpingResult?.success && !isLoading) {
-                                            const latencyColor = tcpingResult.latency < 100 ? 'border-green-500/50 text-green-600' : tcpingResult.latency < 200 ? 'border-yellow-500/50 text-yellow-500' : 'border-red-500/50 text-red-500'
-                                            return (
-                                              <Tooltip><TooltipTrigger asChild>
-                                                <Button variant='ghost' size='sm' className={`h-5 px-1 text-xs font-mono border shrink-0 ${latencyColor}`} onClick={() => handleTcping(node)}>
-                                                  {tcpingResult.latency < 1000 ? `${Math.round(tcpingResult.latency)}ms` : `${(tcpingResult.latency / 1000).toFixed(1)}s`}
-                                                </Button>
-                                              </TooltipTrigger><TooltipContent>点击重新测试</TooltipContent></Tooltip>
-                                            )
-                                          }
-                                          if (tcpingResult && !tcpingResult.success && !isLoading) {
-                                            return (
-                                              <Tooltip><TooltipTrigger asChild>
-                                                <Button variant='ghost' size='sm' className='h-5 px-1 text-xs font-mono border border-red-500/50 text-red-500 shrink-0' onClick={() => handleTcping(node)}>超时</Button>
-                                              </TooltipTrigger><TooltipContent>{tcpingResult.error || '连接失败，点击重试'}</TooltipContent></Tooltip>
-                                            )
-                                          }
-                                          return (
-                                            <Tooltip><TooltipTrigger asChild>
-                                              <Button variant='ghost' size='sm' className='size-6 p-0 border border-primary/50 hover:border-primary shrink-0' disabled={isLoading} onClick={() => handleTcping(node)}>
-                                                {isLoading ? <Loader2 className='size-3 animate-spin text-primary' /> : <Zap className='size-3 text-[#d97757]' />}
-                                              </Button>
-                                            </TooltipTrigger><TooltipContent>{isLoading ? '测试中...' : 'TCPing 测试'}</TooltipContent></Tooltip>
-                                          )
-                                        })()}
-                                      </div>
-                                    ) : '-'}
-                                  </div>
-                                  {/* 配置按钮 */}
-                                  <div style={{ width: '80px' }} className='shrink-0 text-center' onClick={(e) => e.stopPropagation()}>
-                                    {node.clash && (
-                                      <div className='flex gap-1 justify-center'>
-                                        <Button
-                                          variant='ghost'
-                                          size='icon'
-                                          className='h-7 w-7'
-                                          onClick={() => {
-                                            if (node.isSaved && node.dbNode) {
-                                              handleEditClashConfig(node.dbNode)
-                                            } else if (!node.isSaved) {
-                                              handleEditClashConfig(node)
-                                            }
-                                            setClashDialogOpen(true)
-                                          }}
-                                        >
-                                          <Eye className='h-3.5 w-3.5' />
-                                        </Button>
-                                        {node.isSaved && (
-                                          <>
-                                            <Button
-                                              variant='ghost'
-                                              size='icon'
-                                              className='h-7 w-7'
-                                              onClick={() => handleCopyUri(node.dbNode!)}
-                                            >
-                                              <Copy className='h-3.5 w-3.5' />
-                                            </Button>
-                                            <Button
-                                              variant='ghost'
-                                              size='icon'
-                                              className='h-7 w-7'
-                                              title='生成临时订阅'
-                                              onClick={() => {
-                                                setTempSubSingleNodeId(node.dbId!)
-                                                setTempSubUrl('')
-                                                setTempSubDialogOpen(true)
-                                              }}
-                                            >
-                                              <Link2 className='h-3.5 w-3.5' />
-                                            </Button>
-                                          </>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {/* 操作按钮 */}
-                                  <div style={{ width: '80px' }} className='shrink-0 text-center' onClick={(e) => e.stopPropagation()}>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant='ghost'
-                                          size='sm'
-                                          className='h-7 text-xs'
-                                          disabled={node.isSaved && isDeletingNode}
-                                        >
-                                          删除
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            确定要删除节点 "{node.name || '未知'}" 吗？
-                                            {node.isSaved && '此操作不可撤销。'}
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>取消</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() => node.isSaved ? handleDelete(node.dbId) : handleDeleteTemp(node.id)}
-                                          >
-                                            删除
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {createPortal(
-                    <DragOverlay dropAnimation={null}>
-                      {activeId && (
-                        <DragOverlayContent nodes={dragOverlayNodes} protocolColors={PROTOCOL_COLORS} />
-                      )}
-                    </DragOverlay>,
-                    document.body
-                  )}
-                </DndContext>
+                    {createPortal(
+                      <DragOverlay dropAnimation={null}>
+                        {activeId && (
+                          <DragOverlayContent
+                            nodes={dragOverlayNodes}
+                            protocolColors={PROTOCOL_COLORS}
+                          />
+                        )}
+                      </DragOverlay>,
+                      document.body
+                    )}
+                  </DndContext>
 
                   <NodeListPagination
                     position='bottom'
@@ -6002,16 +8405,17 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
           }
         }}
       >
-        <DialogContent className='max-w-4xl sm:max-w-4xl max-h-[80vh] flex flex-col'>
+        <DialogContent className='flex max-h-[80vh] max-w-4xl flex-col sm:max-w-4xl'>
           <DialogHeader>
             <DialogTitle>
-              Clash 配置详情{editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
+              Clash 配置详情
+              {editingClashConfig?.nodeId === -1 ? '（仅查看）' : ''}
             </DialogTitle>
             <DialogDescription>
               {editingClashConfig?.nodeId === -1 && '保存节点后可编辑配置'}
             </DialogDescription>
           </DialogHeader>
-          <div className='mt-4 flex-1 flex flex-col gap-3 min-h-0'>
+          <div className='mt-4 flex min-h-0 flex-1 flex-col gap-3'>
             <div className='flex gap-1'>
               <Button
                 variant={configFormat === 'json' ? 'default' : 'outline'}
@@ -6030,16 +8434,16 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 YAML
               </Button>
             </div>
-            <div className='flex-1 flex border rounded overflow-hidden bg-muted'>
+            <div className='bg-muted flex flex-1 overflow-hidden rounded border'>
               {/* 行号列 */}
-              <div className='flex flex-col bg-muted-foreground/10 text-muted-foreground text-xs font-mono select-none py-3 px-2 text-right'>
+              <div className='bg-muted-foreground/10 text-muted-foreground flex flex-col px-2 py-3 text-right font-mono text-xs select-none'>
                 {editingClashConfig?.config.split('\n').map((_, i) => {
                   const lineNum = i + 1
                   const isErrorLine = jsonErrorLines.includes(lineNum)
                   return (
                     <div
                       key={i}
-                      className={`leading-5 h-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
+                      className={`h-5 leading-5 ${isErrorLine ? 'bg-destructive/20 text-destructive font-bold' : ''}`}
                     >
                       {lineNum}
                     </div>
@@ -6050,17 +8454,21 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               <Textarea
                 value={editingClashConfig?.config || ''}
                 onChange={(e) => handleClashConfigChange(e.target.value)}
-                className='font-mono text-xs flex-1 min-h-[400px] resize-none border-0 rounded-none focus-visible:ring-0 leading-5'
-                placeholder={configFormat === 'yaml' ? '输入 YAML 配置...' : '输入 JSON 配置...'}
+                className='min-h-[400px] flex-1 resize-none rounded-none border-0 font-mono text-xs leading-5 focus-visible:ring-0'
+                placeholder={
+                  configFormat === 'yaml'
+                    ? '输入 YAML 配置...'
+                    : '输入 JSON 配置...'
+                }
                 readOnly={editingClashConfig?.nodeId === -1}
               />
             </div>
             {clashConfigError && (
-              <div className='text-xs text-destructive bg-destructive/10 p-2 rounded'>
+              <div className='text-destructive bg-destructive/10 rounded p-2 text-xs'>
                 {clashConfigError}
               </div>
             )}
-            <div className='flex gap-2 justify-end'>
+            <div className='flex justify-end gap-2'>
               <Button
                 variant='outline'
                 size='sm'
@@ -6072,7 +8480,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 <Button
                   size='sm'
                   onClick={handleSaveClashConfig}
-                  disabled={!!clashConfigError || updateClashConfigMutation.isPending}
+                  disabled={
+                    !!clashConfigError || updateClashConfigMutation.isPending
+                  }
                 >
                   {updateClashConfigMutation.isPending ? '保存中...' : '保存'}
                 </Button>
@@ -6083,7 +8493,10 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* Clash 配置草稿恢复对话框 */}
-      <AlertDialog open={isClashDraftRecoveryOpen} onOpenChange={setIsClashDraftRecoveryOpen}>
+      <AlertDialog
+        open={isClashDraftRecoveryOpen}
+        onOpenChange={setIsClashDraftRecoveryOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>恢复本地缓存</AlertDialogTitle>
@@ -6092,17 +8505,24 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleDiscardClashDraft}>放弃</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRecoverClashDraft}>恢复</AlertDialogAction>
+            <AlertDialogCancel onClick={handleDiscardClashDraft}>
+              放弃
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleRecoverClashDraft}>
+              恢复
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* 探针绑定对话框 */}
-      <Dialog open={probeBindingDialogOpen} onOpenChange={(open) => {
-        setProbeBindingDialogOpen(open)
-        if (!open) setProbeSearchQuery('')
-      }}>
+      <Dialog
+        open={probeBindingDialogOpen}
+        onOpenChange={(open) => {
+          setProbeBindingDialogOpen(open)
+          if (!open) setProbeSearchQuery('')
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>绑定探针服务器</DialogTitle>
@@ -6119,33 +8539,48 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   onChange={(e) => setProbeSearchQuery(e.target.value)}
                   className='text-sm'
                 />
-                <div className='max-h-[300px] overflow-y-auto space-y-2 pr-1'>
-                {probeConfig.servers
-                  .filter((s) => !probeSearchQuery || s.name.toLowerCase().includes(probeSearchQuery.toLowerCase()) || s.server_id.toLowerCase().includes(probeSearchQuery.toLowerCase()))
-                  .map((server) => (
-                  <Button
-                    key={server.id}
-                    variant={selectedNodeForProbe?.probe_server === server.name ? 'default' : 'outline'}
-                    className='w-full justify-start'
-                    onClick={() => {
-                      if (selectedNodeForProbe) {
-                        updateProbeBindingMutation.mutate({
-                          nodeId: selectedNodeForProbe.id,
-                          probeServer: server.name
-                        })
-                      }
-                    }}
-                    disabled={updateProbeBindingMutation.isPending}
-                  >
-                    <div className='flex items-center gap-2'>
-                      <Activity className='size-4' />
-                      <div className='text-left'>
-                        <div className='font-medium'>{server.name}</div>
-                        <div className='text-xs text-muted-foreground'>ID: {server.server_id}</div>
-                      </div>
-                    </div>
-                  </Button>
-                ))}
+                <div className='max-h-[300px] space-y-2 overflow-y-auto pr-1'>
+                  {probeConfig.servers
+                    .filter(
+                      (s) =>
+                        !probeSearchQuery ||
+                        s.name
+                          .toLowerCase()
+                          .includes(probeSearchQuery.toLowerCase()) ||
+                        s.server_id
+                          .toLowerCase()
+                          .includes(probeSearchQuery.toLowerCase())
+                    )
+                    .map((server) => (
+                      <Button
+                        key={server.id}
+                        variant={
+                          selectedNodeForProbe?.probe_server === server.name
+                            ? 'default'
+                            : 'outline'
+                        }
+                        className='w-full justify-start'
+                        onClick={() => {
+                          if (selectedNodeForProbe) {
+                            updateProbeBindingMutation.mutate({
+                              nodeId: selectedNodeForProbe.id,
+                              probeServer: server.name,
+                            })
+                          }
+                        }}
+                        disabled={updateProbeBindingMutation.isPending}
+                      >
+                        <div className='flex items-center gap-2'>
+                          <Activity className='size-4' />
+                          <div className='text-left'>
+                            <div className='font-medium'>{server.name}</div>
+                            <div className='text-muted-foreground text-xs'>
+                              ID: {server.server_id}
+                            </div>
+                          </div>
+                        </div>
+                      </Button>
+                    ))}
                 </div>
                 {selectedNodeForProbe?.probe_server && (
                   <Button
@@ -6155,19 +8590,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                       if (selectedNodeForProbe) {
                         updateProbeBindingMutation.mutate({
                           nodeId: selectedNodeForProbe.id,
-                          probeServer: ''
+                          probeServer: '',
                         })
                       }
                     }}
                     disabled={updateProbeBindingMutation.isPending}
                   >
-                    <X className='size-4 mr-2' />
+                    <X className='mr-2 size-4' />
                     取消绑定
                   </Button>
                 )}
               </div>
             ) : (
-              <div className='text-center text-sm text-muted-foreground py-8'>
+              <div className='text-muted-foreground py-8 text-center text-sm'>
                 暂无可用的探针服务器
               </div>
             )}
@@ -6185,24 +8620,24 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
-            <div className='p-3 bg-muted rounded-md'>
+            <div className='bg-muted rounded-md p-3'>
               <code className='text-xs break-all'>{uriContent}</code>
             </div>
             <div className='flex justify-end gap-2'>
-              <Button
-                variant='outline'
-                onClick={() => setUriDialogOpen(false)}
-              >
+              <Button variant='outline' onClick={() => setUriDialogOpen(false)}>
                 关闭
               </Button>
               <Button
                 onClick={() => {
-                  navigator.clipboard.writeText(uriContent).then(() => {
-                    toast.success('URI 已复制到剪贴板')
-                    setUriDialogOpen(false)
-                  }).catch(() => {
-                    toast.error('复制失败，请手动选择文本复制')
-                  })
+                  navigator.clipboard
+                    .writeText(uriContent)
+                    .then(() => {
+                      toast.success('URI 已复制到剪贴板')
+                      setUriDialogOpen(false)
+                    })
+                    .catch(() => {
+                      toast.error('复制失败，请手动选择文本复制')
+                    })
                 }}
               >
                 再试一次
@@ -6213,31 +8648,41 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* 节点交换对话框 */}
-      <Dialog open={exchangeDialogOpen} onOpenChange={(open) => {
-        setExchangeDialogOpen(open)
-        if (!open) {
-          setExchangeFilterText('')
-          setRelayGroupMode(false)
-          setRelayGroupName('')
-          setRelayGroupSelectedIds(new Set())
-        } else if (sourceNodeForExchange?.relay_group_name && sourceNodeForExchange?.relay_group_node_ids?.length) {
-          setRelayGroupMode(true)
-          setRelayGroupName(sourceNodeForExchange.relay_group_name)
-          setRelayGroupSelectedIds(new Set(sourceNodeForExchange.relay_group_node_ids))
-        }
-      }}>
-        <DialogContent className='max-w-2xl flex flex-col max-h-[80vh]'>
+      <Dialog
+        open={exchangeDialogOpen}
+        onOpenChange={(open) => {
+          setExchangeDialogOpen(open)
+          if (!open) {
+            setExchangeFilterText('')
+            setRelayGroupMode(false)
+            setRelayGroupName('')
+            setRelayGroupSelectedIds(new Set())
+          } else if (
+            sourceNodeForExchange?.relay_group_name &&
+            sourceNodeForExchange?.relay_group_node_ids?.length
+          ) {
+            setRelayGroupMode(true)
+            setRelayGroupName(sourceNodeForExchange.relay_group_name)
+            setRelayGroupSelectedIds(
+              new Set(sourceNodeForExchange.relay_group_node_ids)
+            )
+          }
+        }}
+      >
+        <DialogContent className='flex max-h-[80vh] max-w-2xl flex-col'>
           <DialogHeader>
             <DialogTitle>
               <Twemoji>{sourceNodeForExchange?.node_name ?? ''}</Twemoji>
             </DialogTitle>
             <DialogDescription>
-              {relayGroupMode ? '多选节点组成中转代理组' : '选择目标节点创建链式代理'}
+              {relayGroupMode
+                ? '多选节点组成中转代理组'
+                : '选择目标节点创建链式代理'}
             </DialogDescription>
           </DialogHeader>
-          <div className='flex border-b shrink-0'>
+          <div className='flex shrink-0 border-b'>
             <button
-              className={`flex-1 py-1.5 text-sm font-medium text-center transition-colors ${!relayGroupMode ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex-1 py-1.5 text-center text-sm font-medium transition-colors ${!relayGroupMode ? 'border-primary text-primary border-b-2' : 'text-muted-foreground hover:text-foreground'}`}
               onClick={() => {
                 if (relayGroupMode) {
                   setRelayGroupMode(false)
@@ -6248,12 +8693,14 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               链式代理
             </button>
             <button
-              className={`flex-1 py-1.5 text-sm font-medium text-center transition-colors ${relayGroupMode ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`flex-1 py-1.5 text-center text-sm font-medium transition-colors ${relayGroupMode ? 'border-primary text-primary border-b-2' : 'text-muted-foreground hover:text-foreground'}`}
               onClick={() => {
                 if (!relayGroupMode) {
                   setRelayGroupMode(true)
                   if (!relayGroupName) {
-                    setRelayGroupName(`${sourceNodeForExchange?.node_name ?? ''}中转`)
+                    setRelayGroupName(
+                      `${sourceNodeForExchange?.node_name ?? ''}中转`
+                    )
                   }
                 }
               }}
@@ -6266,21 +8713,32 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               {(() => {
                 const existingGroups = new Map<string, number[]>()
                 for (const n of savedNodes) {
-                  if (n.relay_group_name && n.relay_group_node_ids?.length && n.id !== sourceNodeForExchange?.id) {
+                  if (
+                    n.relay_group_name &&
+                    n.relay_group_node_ids?.length &&
+                    n.id !== sourceNodeForExchange?.id
+                  ) {
                     if (!existingGroups.has(n.relay_group_name)) {
-                      existingGroups.set(n.relay_group_name, n.relay_group_node_ids)
+                      existingGroups.set(
+                        n.relay_group_name,
+                        n.relay_group_node_ids
+                      )
                     }
                   }
                 }
                 return existingGroups.size > 0 ? (
                   <div className='flex flex-wrap gap-1'>
-                    <span className='text-xs text-muted-foreground leading-6'>已有中转组:</span>
+                    <span className='text-muted-foreground text-xs leading-6'>
+                      已有中转组:
+                    </span>
                     {Array.from(existingGroups.entries()).map(([name, ids]) => (
                       <Button
                         key={name}
-                        variant={relayGroupName === name ? 'default' : 'outline'}
+                        variant={
+                          relayGroupName === name ? 'default' : 'outline'
+                        }
                         size='sm'
-                        className='h-6 text-xs px-2'
+                        className='h-6 px-2 text-xs'
                         onClick={() => {
                           setRelayGroupName(name)
                           setRelayGroupSelectedIds(new Set(ids))
@@ -6300,29 +8758,32 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               />
             </div>
           )}
-          <div className='space-y-2 shrink-0'>
+          <div className='shrink-0 space-y-2'>
             <Input
               placeholder='搜索节点名称、协议或标签...'
               value={exchangeFilterText}
               onChange={(e) => setExchangeFilterText(e.target.value)}
               className='text-sm'
             />
-            <p className='text-xs text-muted-foreground'>
+            <p className='text-muted-foreground text-xs'>
               自动排除链式代理节点
             </p>
           </div>
-          <div className='overflow-y-auto min-h-0 py-2'>
+          <div className='min-h-0 overflow-y-auto py-2'>
             {(() => {
               const filteredNodes = savedNodes
-                .filter(node => node.id !== sourceNodeForExchange?.id)
-                .filter(node => !node.protocol.includes('⇋'))
-                .filter(node => {
+                .filter((node) => node.id !== sourceNodeForExchange?.id)
+                .filter((node) => !node.protocol.includes('⇋'))
+                .filter((node) => {
                   if (!exchangeFilterText.trim()) return true
                   const searchText = exchangeFilterText.toLowerCase()
                   return (
                     node.node_name.toLowerCase().includes(searchText) ||
                     node.protocol.toLowerCase().includes(searchText) ||
-                    (node.tags?.some(t => t.toLowerCase().includes(searchText)) || (node.tag && node.tag.toLowerCase().includes(searchText)))
+                    node.tags?.some((t) =>
+                      t.toLowerCase().includes(searchText)
+                    ) ||
+                    (node.tag && node.tag.toLowerCase().includes(searchText))
                   )
                 })
 
@@ -6331,11 +8792,15 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   {filteredNodes.map((node) => (
                     <Button
                       key={node.id}
-                      variant={relayGroupMode && relayGroupSelectedIds.has(node.id) ? 'default' : 'outline'}
-                      className='w-full justify-start text-left h-auto py-3'
+                      variant={
+                        relayGroupMode && relayGroupSelectedIds.has(node.id)
+                          ? 'default'
+                          : 'outline'
+                      }
+                      className='h-auto w-full justify-start py-3 text-left'
                       onClick={() => {
                         if (relayGroupMode) {
-                          setRelayGroupSelectedIds(prev => {
+                          setRelayGroupSelectedIds((prev) => {
                             const next = new Set(prev)
                             if (next.has(node.id)) {
                               next.delete(node.id)
@@ -6347,26 +8812,41 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         } else if (sourceNodeForExchange) {
                           createRelayNodeMutation.mutate({
                             sourceNode: sourceNodeForExchange,
-                            targetNode: node
+                            targetNode: node,
                           })
                         }
                       }}
-                      disabled={!relayGroupMode && createRelayNodeMutation.isPending}
+                      disabled={
+                        !relayGroupMode && createRelayNodeMutation.isPending
+                      }
                     >
-                      <div className='flex flex-col gap-2 w-full items-start'>
-                        <div className='flex items-center gap-2 w-full flex-wrap'>
+                      <div className='flex w-full flex-col items-start gap-2'>
+                        <div className='flex w-full flex-wrap items-center gap-2'>
                           {relayGroupMode && (
-                            <span className={`size-4 border rounded-sm flex items-center justify-center shrink-0 ${relayGroupSelectedIds.has(node.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'}`}>
+                            <span
+                              className={`flex size-4 shrink-0 items-center justify-center rounded-sm border ${relayGroupSelectedIds.has(node.id) ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground'}`}
+                            >
                               {relayGroupSelectedIds.has(node.id) && '✓'}
                             </span>
                           )}
-                          <span className='font-medium'><Twemoji>{node.node_name}</Twemoji></span>
-                          <span className='text-xs text-muted-foreground'>
+                          <span className='font-medium'>
+                            <Twemoji>{node.node_name}</Twemoji>
+                          </span>
+                          <span className='text-muted-foreground text-xs'>
                             {node.protocol} - {node.original_server}
                           </span>
                         </div>
-                        {(node.tags?.length ? node.tags : node.tag ? [node.tag] : []).map(t => (
-                          <Badge key={t} variant='secondary' className='text-xs'>
+                        {(node.tags?.length
+                          ? node.tags
+                          : node.tag
+                            ? [node.tag]
+                            : []
+                        ).map((t) => (
+                          <Badge
+                            key={t}
+                            variant='secondary'
+                            className='text-xs'
+                          >
                             {t}
                           </Badge>
                         ))}
@@ -6375,17 +8855,23 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   ))}
                 </div>
               ) : (
-                <div className='text-center text-sm text-muted-foreground py-8'>
-                  {exchangeFilterText.trim() ? '未找到匹配的节点' : '暂无可用的节点'}
+                <div className='text-muted-foreground py-8 text-center text-sm'>
+                  {exchangeFilterText.trim()
+                    ? '未找到匹配的节点'
+                    : '暂无可用的节点'}
                 </div>
               )
             })()}
           </div>
           {relayGroupMode && (
-            <div className='shrink-0 pt-2 border-t'>
+            <div className='shrink-0 border-t pt-2'>
               <Button
                 className='w-full'
-                disabled={relayGroupSelectedIds.size === 0 || !relayGroupName.trim() || createRelayGroupMutation.isPending}
+                disabled={
+                  relayGroupSelectedIds.size === 0 ||
+                  !relayGroupName.trim() ||
+                  createRelayGroupMutation.isPending
+                }
                 onClick={() => {
                   if (sourceNodeForExchange) {
                     createRelayGroupMutation.mutate({
@@ -6396,7 +8882,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   }
                 }}
               >
-                {createRelayGroupMutation.isPending ? '创建中...' : `确认创建中转组 (${relayGroupSelectedIds.size})`}
+                {createRelayGroupMutation.isPending
+                  ? '创建中...'
+                  : `确认创建中转组 (${relayGroupSelectedIds.size})`}
               </Button>
             </div>
           )}
@@ -6404,10 +8892,17 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* 单节点标签管理对话框 */}
-      <Dialog open={tagManageDialogOpen} onOpenChange={(open) => {
-        setTagManageDialogOpen(open)
-        if (!open) { setTagManageInput(''); setTagManageSelectedTag(null); setTagManageNodeId(null) }
-      }}>
+      <Dialog
+        open={tagManageDialogOpen}
+        onOpenChange={(open) => {
+          setTagManageDialogOpen(open)
+          if (!open) {
+            setTagManageInput('')
+            setTagManageSelectedTag(null)
+            setTagManageNodeId(null)
+          }
+        }}
+      >
         <DialogContent className='max-w-sm'>
           <DialogHeader>
             <DialogTitle>管理标签</DialogTitle>
@@ -6415,22 +8910,37 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
           </DialogHeader>
           <div className='space-y-4 py-4'>
             {(() => {
-              const node = tagManageNodeId ? savedNodes.find(n => n.id === tagManageNodeId) : null
-              const nodeTags = node?.tags?.length ? node.tags : (node?.tag ? [node.tag] : [])
+              const node = tagManageNodeId
+                ? savedNodes.find((n) => n.id === tagManageNodeId)
+                : null
+              const nodeTags = node?.tags?.length
+                ? node.tags
+                : node?.tag
+                  ? [node.tag]
+                  : []
               return (
                 <>
                   <div className='flex flex-wrap gap-2'>
-                    {nodeTags.map(tag => (
+                    {nodeTags.map((tag) => (
                       <Badge
                         key={tag}
-                        variant={tagManageSelectedTag === tag ? 'default' : 'outline'}
+                        variant={
+                          tagManageSelectedTag === tag ? 'default' : 'outline'
+                        }
                         className='cursor-pointer transition-colors'
-                        onClick={() => { setTagManageSelectedTag(tag); setTagManageInput(tag) }}
+                        onClick={() => {
+                          setTagManageSelectedTag(tag)
+                          setTagManageInput(tag)
+                        }}
                       >
                         {tag}
                       </Badge>
                     ))}
-                    {nodeTags.length === 0 && <span className='text-sm text-muted-foreground'>暂无标签</span>}
+                    {nodeTags.length === 0 && (
+                      <span className='text-muted-foreground text-sm'>
+                        暂无标签
+                      </span>
+                    )}
                   </div>
                   <Input
                     placeholder='输入标签名称'
@@ -6440,22 +8950,65 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   <div className='flex justify-end gap-2'>
                     {tagManageSelectedTag && (
                       <>
-                        <Button variant='destructive' size='sm' disabled={updateNodeTagsMutation.isPending} onClick={() => {
-                          if (!tagManageNodeId) return
-                          const newTags = nodeTags.filter(t => t !== tagManageSelectedTag)
-                          updateNodeTagsMutation.mutate({ nodeId: tagManageNodeId, tags: newTags.length > 0 ? newTags : ['手动输入'] })
-                        }}>删除</Button>
-                        <Button size='sm' disabled={updateNodeTagsMutation.isPending || !tagManageInput.trim() || tagManageInput.trim() === tagManageSelectedTag} onClick={() => {
-                          if (!tagManageNodeId) return
-                          const newTags = nodeTags.map(t => t === tagManageSelectedTag ? tagManageInput.trim() : t)
-                          updateNodeTagsMutation.mutate({ nodeId: tagManageNodeId, tags: newTags })
-                        }}>保存</Button>
+                        <Button
+                          variant='destructive'
+                          size='sm'
+                          disabled={updateNodeTagsMutation.isPending}
+                          onClick={() => {
+                            if (!tagManageNodeId) return
+                            const newTags = nodeTags.filter(
+                              (t) => t !== tagManageSelectedTag
+                            )
+                            updateNodeTagsMutation.mutate({
+                              nodeId: tagManageNodeId,
+                              tags: newTags.length > 0 ? newTags : ['手动输入'],
+                            })
+                          }}
+                        >
+                          删除
+                        </Button>
+                        <Button
+                          size='sm'
+                          disabled={
+                            updateNodeTagsMutation.isPending ||
+                            !tagManageInput.trim() ||
+                            tagManageInput.trim() === tagManageSelectedTag
+                          }
+                          onClick={() => {
+                            if (!tagManageNodeId) return
+                            const newTags = nodeTags.map((t) =>
+                              t === tagManageSelectedTag
+                                ? tagManageInput.trim()
+                                : t
+                            )
+                            updateNodeTagsMutation.mutate({
+                              nodeId: tagManageNodeId,
+                              tags: newTags,
+                            })
+                          }}
+                        >
+                          保存
+                        </Button>
                       </>
                     )}
-                    <Button size='sm' variant='outline' disabled={updateNodeTagsMutation.isPending || !tagManageInput.trim() || nodeTags.includes(tagManageInput.trim())} onClick={() => {
-                      if (!tagManageNodeId) return
-                      updateNodeTagsMutation.mutate({ nodeId: tagManageNodeId, tags: [...nodeTags, tagManageInput.trim()] })
-                    }}>添加</Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={
+                        updateNodeTagsMutation.isPending ||
+                        !tagManageInput.trim() ||
+                        nodeTags.includes(tagManageInput.trim())
+                      }
+                      onClick={() => {
+                        if (!tagManageNodeId) return
+                        updateNodeTagsMutation.mutate({
+                          nodeId: tagManageNodeId,
+                          tags: [...nodeTags, tagManageInput.trim()],
+                        })
+                      }}
+                    >
+                      添加
+                    </Button>
                   </div>
                 </>
               )
@@ -6465,59 +9018,102 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* 批量管理标签对话框 */}
-      <Dialog open={batchTagDialogOpen} onOpenChange={(open) => {
-        setBatchTagDialogOpen(open)
-        if (!open) { setBatchTagInput(''); setBatchTagSelectedTag(null); setBatchTagMode('add') }
-      }}>
+      <Dialog
+        open={batchTagDialogOpen}
+        onOpenChange={(open) => {
+          setBatchTagDialogOpen(open)
+          if (!open) {
+            setBatchTagInput('')
+            setBatchTagSelectedTag(null)
+            setBatchTagMode('add')
+          }
+        }}
+      >
         <DialogContent className='max-w-md'>
           <DialogHeader>
             <DialogTitle>批量管理标签</DialogTitle>
-            <DialogDescription>为选中的 {selectedNodeIds.size} 个节点管理标签</DialogDescription>
+            <DialogDescription>
+              为选中的 {selectedNodeIds.size} 个节点管理标签
+            </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
             {/* 操作模式选择 */}
             <div className='flex gap-2'>
-              {(['add', 'rename', 'delete'] as const).map(mode => (
-                <Button key={mode} variant={batchTagMode === mode ? 'default' : 'outline'} size='sm' onClick={() => {
-                  setBatchTagMode(mode); setBatchTagSelectedTag(null); setBatchTagInput('')
-                }}>
-                  {mode === 'add' ? '添加标签' : mode === 'rename' ? '修改标签' : '删除标签'}
+              {(['add', 'rename', 'delete'] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  variant={batchTagMode === mode ? 'default' : 'outline'}
+                  size='sm'
+                  onClick={() => {
+                    setBatchTagMode(mode)
+                    setBatchTagSelectedTag(null)
+                    setBatchTagInput('')
+                  }}
+                >
+                  {mode === 'add'
+                    ? '添加标签'
+                    : mode === 'rename'
+                      ? '修改标签'
+                      : '删除标签'}
                 </Button>
               ))}
             </div>
 
             {/* 修改/删除模式：显示选中节点的已有标签 */}
-            {batchTagMode !== 'add' && (() => {
-              const tags = new Set<string>()
-              for (const id of selectedNodeIds) {
-                const node = savedNodes.find(n => n.id === id)
-                ;(node?.tags?.length ? node.tags : (node?.tag ? [node.tag] : [])).forEach(t => tags.add(t))
-              }
-              const batchTags = [...tags].sort()
-              return batchTags.length > 0 ? (
-                <div className='space-y-2'>
-                  <Label className='text-sm font-medium'>选择要{batchTagMode === 'rename' ? '修改' : '删除'}的标签</Label>
-                  <div className='flex flex-wrap gap-2'>
-                    {batchTags.map(tag => (
-                      <Badge key={tag} variant={batchTagSelectedTag === tag ? 'default' : 'outline'} className='cursor-pointer transition-colors' onClick={() => {
-                        setBatchTagSelectedTag(tag)
-                        if (batchTagMode === 'rename') setBatchTagInput(tag)
-                        if (batchTagMode === 'delete') setBatchTagInput(tag)
-                      }}>
-                        {tag}
-                      </Badge>
-                    ))}
+            {batchTagMode !== 'add' &&
+              (() => {
+                const tags = new Set<string>()
+                for (const id of selectedNodeIds) {
+                  const node = savedNodes.find((n) => n.id === id)
+                  ;(node?.tags?.length
+                    ? node.tags
+                    : node?.tag
+                      ? [node.tag]
+                      : []
+                  ).forEach((t) => tags.add(t))
+                }
+                const batchTags = [...tags].sort()
+                return batchTags.length > 0 ? (
+                  <div className='space-y-2'>
+                    <Label className='text-sm font-medium'>
+                      选择要{batchTagMode === 'rename' ? '修改' : '删除'}的标签
+                    </Label>
+                    <div className='flex flex-wrap gap-2'>
+                      {batchTags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant={
+                            batchTagSelectedTag === tag ? 'default' : 'outline'
+                          }
+                          className='cursor-pointer transition-colors'
+                          onClick={() => {
+                            setBatchTagSelectedTag(tag)
+                            if (batchTagMode === 'rename') setBatchTagInput(tag)
+                            if (batchTagMode === 'delete') setBatchTagInput(tag)
+                          }}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : <p className='text-sm text-muted-foreground'>选中节点暂无标签</p>
-            })()}
+                ) : (
+                  <p className='text-muted-foreground text-sm'>
+                    选中节点暂无标签
+                  </p>
+                )
+              })()}
 
             {/* 添加/修改模式：输入框 */}
             {batchTagMode !== 'delete' && (
               <div className='space-y-2'>
-                <Label className='text-sm font-medium'>{batchTagMode === 'add' ? '新标签名称' : '新标签名称'}</Label>
+                <Label className='text-sm font-medium'>
+                  {batchTagMode === 'add' ? '新标签名称' : '新标签名称'}
+                </Label>
                 <Input
-                  placeholder={batchTagMode === 'add' ? '输入新标签' : '输入新标签名'}
+                  placeholder={
+                    batchTagMode === 'add' ? '输入新标签' : '输入新标签名'
+                  }
                   value={batchTagInput}
                   onChange={(e) => setBatchTagInput(e.target.value)}
                 />
@@ -6529,8 +9125,13 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               <div className='space-y-2'>
                 <Label className='text-sm font-medium'>快速选择</Label>
                 <div className='flex flex-wrap gap-2'>
-                  {allUniqueTags.map(tag => (
-                    <Badge key={tag} variant='outline' className='cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors' onClick={() => setBatchTagInput(tag)}>
+                  {allUniqueTags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant='outline'
+                      className='hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors'
+                      onClick={() => setBatchTagInput(tag)}
+                    >
                       {tag}
                     </Badge>
                   ))}
@@ -6540,28 +9141,56 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
             {/* 操作按钮 */}
             <div className='flex justify-end gap-2 pt-2'>
-              <Button variant='outline' onClick={() => setBatchTagDialogOpen(false)} disabled={batchUpdateTagMutation.isPending}>
+              <Button
+                variant='outline'
+                onClick={() => setBatchTagDialogOpen(false)}
+                disabled={batchUpdateTagMutation.isPending}
+              >
                 取消
               </Button>
               <Button
                 variant={batchTagMode === 'delete' ? 'destructive' : 'default'}
-                disabled={batchUpdateTagMutation.isPending || (
-                  batchTagMode === 'add' ? !batchTagInput.trim() :
-                  batchTagMode === 'rename' ? (!batchTagSelectedTag || !batchTagInput.trim() || batchTagInput.trim() === batchTagSelectedTag) :
-                  !batchTagSelectedTag
-                )}
+                disabled={
+                  batchUpdateTagMutation.isPending ||
+                  (batchTagMode === 'add'
+                    ? !batchTagInput.trim()
+                    : batchTagMode === 'rename'
+                      ? !batchTagSelectedTag ||
+                        !batchTagInput.trim() ||
+                        batchTagInput.trim() === batchTagSelectedTag
+                      : !batchTagSelectedTag)
+                }
                 onClick={() => {
                   const nodeIds = Array.from(selectedNodeIds)
                   if (batchTagMode === 'add') {
-                    batchUpdateTagMutation.mutate({ nodeIds, action: 'add', tag: batchTagInput.trim() })
+                    batchUpdateTagMutation.mutate({
+                      nodeIds,
+                      action: 'add',
+                      tag: batchTagInput.trim(),
+                    })
                   } else if (batchTagMode === 'rename' && batchTagSelectedTag) {
-                    batchUpdateTagMutation.mutate({ nodeIds, action: 'rename', tag: batchTagInput.trim(), oldTag: batchTagSelectedTag })
+                    batchUpdateTagMutation.mutate({
+                      nodeIds,
+                      action: 'rename',
+                      tag: batchTagInput.trim(),
+                      oldTag: batchTagSelectedTag,
+                    })
                   } else if (batchTagMode === 'delete' && batchTagSelectedTag) {
-                    batchUpdateTagMutation.mutate({ nodeIds, action: 'delete', tag: batchTagSelectedTag })
+                    batchUpdateTagMutation.mutate({
+                      nodeIds,
+                      action: 'delete',
+                      tag: batchTagSelectedTag,
+                    })
                   }
                 }}
               >
-                {batchUpdateTagMutation.isPending ? '处理中...' : batchTagMode === 'add' ? '添加' : batchTagMode === 'rename' ? '保存' : '删除'}
+                {batchUpdateTagMutation.isPending
+                  ? '处理中...'
+                  : batchTagMode === 'add'
+                    ? '添加'
+                    : batchTagMode === 'rename'
+                      ? '保存'
+                      : '删除'}
               </Button>
             </div>
           </div>
@@ -6569,17 +9198,20 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       {/* 批量修改名称对话框 */}
-      <Dialog open={batchRenameDialogOpen} onOpenChange={setBatchRenameDialogOpen}>
-        <DialogContent className='max-w-3xl max-h-[80vh] flex flex-col'>
+      <Dialog
+        open={batchRenameDialogOpen}
+        onOpenChange={setBatchRenameDialogOpen}
+      >
+        <DialogContent className='flex max-h-[80vh] max-w-3xl flex-col'>
           <DialogHeader>
             <DialogTitle>批量修改节点名称</DialogTitle>
             <DialogDescription>
               修改选中的 {selectedNodeIds.size} 个节点名称
             </DialogDescription>
           </DialogHeader>
-          <div className='flex-1 space-y-4 py-4 min-h-0 flex flex-col'>
+          <div className='flex min-h-0 flex-1 flex-col space-y-4 py-4'>
             {/* 搜索替换工具 */}
-            <div className='grid grid-cols-3 gap-2 grid-cols-[1fr_1fr_auto] items-end'>
+            <div className='grid grid-cols-3 grid-cols-[1fr_1fr_auto] items-end gap-2'>
               <div className='space-y-2'>
                 <Label htmlFor='find-text' className='text-sm font-medium'>
                   查找内容
@@ -6614,19 +9246,28 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     toast.error('请输入要查找的内容')
                     return
                   }
-                  const replaced = batchRenameText.split('\n').map(line =>
-                    line.replace(new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replaceText)
-                  ).join('\n')
+                  const replaced = batchRenameText
+                    .split('\n')
+                    .map((line) =>
+                      line.replace(
+                        new RegExp(
+                          findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+                          'g'
+                        ),
+                        replaceText
+                      )
+                    )
+                    .join('\n')
                   setBatchRenameText(replaced)
                   toast.success('替换完成')
                 }}
-                >
+              >
                 替换
               </Button>
             </div>
 
             {/* 前缀后缀工具 */}
-            <div className='grid grid-cols-3 gap-2 grid-cols-[1fr_1fr_auto] items-end'>
+            <div className='grid grid-cols-3 grid-cols-[1fr_1fr_auto] items-end gap-2'>
               <div className='space-y-2'>
                 <Label htmlFor='prefix-text' className='text-sm font-medium'>
                   前缀
@@ -6659,9 +9300,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                     toast.error('请输入前缀或后缀')
                     return
                   }
-                  const updated = batchRenameText.split('\n').map(line =>
-                    line ? `${prefixText}${line}${suffixText}` : line
-                  ).join('\n')
+                  const updated = batchRenameText
+                    .split('\n')
+                    .map((line) =>
+                      line ? `${prefixText}${line}${suffixText}` : line
+                    )
+                    .join('\n')
                   setBatchRenameText(updated)
                   setPrefixText('')
                   setSuffixText('')
@@ -6673,15 +9317,18 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </div>
 
             {/* 名称编辑区 */}
-            <div className='flex-1 space-y-2 min-h-0 flex flex-col'>
-              <Label htmlFor='batch-rename-text' className='text-sm font-medium'>
+            <div className='flex min-h-0 flex-1 flex-col space-y-2'>
+              <Label
+                htmlFor='batch-rename-text'
+                className='text-sm font-medium'
+              >
                 节点名称 (每行一个，共 {batchRenameText.split('\n').length} 行)
               </Label>
               <Textarea
                 id='batch-rename-text'
                 value={batchRenameText}
                 onChange={(e) => setBatchRenameText(e.target.value)}
-                className='font-mono text-sm flex-1 min-h-[300px] resize-none'
+                className='min-h-[300px] flex-1 resize-none font-mono text-sm'
                 placeholder='每行一个节点名称'
               />
               {/* <p className='text-xs text-muted-foreground'>
@@ -6707,9 +9354,16 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               </Button>
               <Button
                 onClick={() => {
-                  const newNames = batchRenameText.split('\n').map(line => line.trim()).filter(line => line)
+                  const newNames = batchRenameText
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter((line) => line)
                   // 按 displayNodes 顺序获取选中节点 ID，与打开时一致
-                  const nodeIds = displayNodes.filter(n => n.isSaved && n.dbId && selectedNodeIds.has(n.dbId)).map(n => n.dbId!)
+                  const nodeIds = displayNodes
+                    .filter(
+                      (n) => n.isSaved && n.dbId && selectedNodeIds.has(n.dbId)
+                    )
+                    .map((n) => n.dbId!)
 
                   if (newNames.length === 0) {
                     toast.error('请输入节点名称')
@@ -6717,19 +9371,23 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   }
 
                   if (newNames.length !== nodeIds.length) {
-                    toast.error(`名称数量 (${newNames.length}) 与选中节点数量 (${nodeIds.length}) 不匹配`)
+                    toast.error(
+                      `名称数量 (${newNames.length}) 与选中节点数量 (${nodeIds.length}) 不匹配`
+                    )
                     return
                   }
 
                   // 构建更新请求
                   const updates = nodeIds.map((nodeId, index) => ({
                     node_id: nodeId,
-                    new_name: newNames[index]
+                    new_name: newNames[index],
                   }))
 
                   batchRenameMutation.mutate(updates)
                 }}
-                disabled={batchRenameMutation.isPending || !batchRenameText.trim()}
+                disabled={
+                  batchRenameMutation.isPending || !batchRenameText.trim()
+                }
               >
                 {batchRenameMutation.isPending ? '保存中...' : '确认修改'}
               </Button>
@@ -6740,16 +9398,18 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
       {/* 删除重复节点对话框 */}
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
-        <DialogContent className='max-w-2xl max-h-[80vh] flex flex-col'>
+        <DialogContent className='flex max-h-[80vh] max-w-2xl flex-col'>
           <DialogHeader>
             <DialogTitle>删除重复节点</DialogTitle>
             <DialogDescription>
-              发现 {duplicateGroups.length} 组重复节点，共 {duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)} 个重复节点将被删除（每组保留最早创建的节点）
+              发现 {duplicateGroups.length} 组重复节点，共{' '}
+              {duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)}{' '}
+              个重复节点将被删除（每组保留最早创建的节点）
             </DialogDescription>
           </DialogHeader>
-          <div className='flex-1 overflow-y-auto space-y-4 py-4'>
+          <div className='flex-1 space-y-4 overflow-y-auto py-4'>
             {duplicateGroups.map((group, groupIndex) => (
-              <div key={groupIndex} className='border rounded-lg p-3 space-y-2'>
+              <div key={groupIndex} className='space-y-2 rounded-lg border p-3'>
                 <div className='flex items-center justify-between'>
                   <span className='text-sm font-medium'>
                     重复组 {groupIndex + 1}（{group.nodes.length} 个节点）
@@ -6760,28 +9420,43 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 </div>
                 <div className='space-y-1'>
                   {[...group.nodes]
-                    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                    .sort(
+                      (a, b) =>
+                        new Date(a.created_at).getTime() -
+                        new Date(b.created_at).getTime()
+                    )
                     .map((node, nodeIndex) => (
                       <div
                         key={node.id}
-                        className={`flex items-center justify-between text-sm p-2 rounded ${
+                        className={`flex items-center justify-between rounded p-2 text-sm ${
                           nodeIndex === 0
-                            ? 'bg-green-500/10 border border-green-500/20'
-                            : 'bg-red-500/10 border border-red-500/20'
+                            ? 'border border-green-500/20 bg-green-500/10'
+                            : 'border border-red-500/20 bg-red-500/10'
                         }`}
                       >
-                        <div className='flex items-center gap-2 flex-1 min-w-0'>
+                        <div className='flex min-w-0 flex-1 items-center gap-2'>
                           <Badge variant='outline' className='shrink-0'>
                             {node.protocol.toUpperCase()}
                           </Badge>
                           <span className='truncate'>{node.node_name}</span>
-                          {(node.tags?.length ? node.tags : node.tag ? [node.tag] : []).map(t => (
-                            <Badge key={t} variant='secondary' className='shrink-0'>
+                          {(node.tags?.length
+                            ? node.tags
+                            : node.tag
+                              ? [node.tag]
+                              : []
+                          ).map((t) => (
+                            <Badge
+                              key={t}
+                              variant='secondary'
+                              className='shrink-0'
+                            >
                               {t}
                             </Badge>
                           ))}
                         </div>
-                        <span className={`text-xs shrink-0 ml-2 ${nodeIndex === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <span
+                          className={`ml-2 shrink-0 text-xs ${nodeIndex === 0 ? 'text-green-600' : 'text-red-600'}`}
+                        >
                           {nodeIndex === 0 ? '保留' : '删除'}
                         </span>
                       </div>
@@ -6790,7 +9465,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               </div>
             ))}
           </div>
-          <div className='flex justify-end gap-2 pt-4 border-t'>
+          <div className='flex justify-end gap-2 border-t pt-4'>
             <Button
               variant='outline'
               onClick={() => {
@@ -6806,7 +9481,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               onClick={handleDeleteDuplicates}
               disabled={deletingDuplicates}
             >
-              {deletingDuplicates ? '删除中...' : `确认删除 ${duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)} 个重复节点`}
+              {deletingDuplicates
+                ? '删除中...'
+                : `确认删除 ${duplicateGroups.reduce((sum, g) => sum + g.nodes.length - 1, 0)} 个重复节点`}
             </Button>
           </div>
         </DialogContent>
@@ -6828,15 +9505,17 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             <DialogTitle>生成临时订阅</DialogTitle>
             <DialogDescription>
               {tempSubSingleNodeId !== null
-                ? `为节点 "${savedNodes.find(n => n.id === tempSubSingleNodeId)?.node_name || '未知'}" 生成临时订阅链接`
-                : `为选中的 ${selectedNodeIds.size} 个节点生成临时订阅链接`
-              }
+                ? `为节点 "${savedNodes.find((n) => n.id === tempSubSingleNodeId)?.node_name || '未知'}" 生成临时订阅链接`
+                : `为选中的 ${selectedNodeIds.size} 个节点生成临时订阅链接`}
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
             <div className='grid grid-cols-2 gap-4'>
               <div className='space-y-2'>
-                <Label htmlFor='temp-sub-max-access' className='text-sm font-medium'>
+                <Label
+                  htmlFor='temp-sub-max-access'
+                  className='text-sm font-medium'
+                >
                   访问次数
                 </Label>
                 <Input
@@ -6845,12 +9524,17 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   min={1}
                   max={100}
                   value={tempSubMaxAccess}
-                  onChange={(e) => setTempSubMaxAccess(parseInt(e.target.value) || 1)}
+                  onChange={(e) =>
+                    setTempSubMaxAccess(parseInt(e.target.value) || 1)
+                  }
                   className='text-sm'
                 />
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='temp-sub-expire' className='text-sm font-medium'>
+                <Label
+                  htmlFor='temp-sub-expire'
+                  className='text-sm font-medium'
+                >
                   过期时间（秒）
                 </Label>
                 <Input
@@ -6859,7 +9543,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   min={10}
                   max={3600}
                   value={tempSubExpireSeconds}
-                  onChange={(e) => setTempSubExpireSeconds(parseInt(e.target.value) || 60)}
+                  onChange={(e) =>
+                    setTempSubExpireSeconds(parseInt(e.target.value) || 60)
+                  }
                   className='text-sm'
                 />
               </div>
@@ -6871,7 +9557,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                   value={tempSubGenerating ? '生成中...' : tempSubUrl}
                   readOnly
                   placeholder='自动生成中...'
-                  className='text-sm font-mono'
+                  className='font-mono text-sm'
                 />
                 {tempSubUrl && !tempSubGenerating && (
                   <Button
@@ -6894,8 +9580,9 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                 )}
               </div>
               {tempSubUrl && !tempSubGenerating && (
-                <p className='text-xs text-muted-foreground'>
-                  链接将在 {tempSubExpireSeconds} 秒后或访问 {tempSubMaxAccess} 次后失效
+                <p className='text-muted-foreground text-xs'>
+                  链接将在 {tempSubExpireSeconds} 秒后或访问 {tempSubMaxAccess}{' '}
+                  次后失效
                 </p>
               )}
             </div>
@@ -6917,12 +9604,19 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
       {/* 底部悬浮批量排序栏 */}
       {sortMode && selectedNodeIds.size > 0 && (
-        <div className='fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-background/95 backdrop-blur border shadow-lg rounded-lg px-4 py-2 flex items-center gap-3'>
-          <span className='text-sm text-muted-foreground whitespace-nowrap'>已选 {selectedNodeIds.size} 个节点</span>
-          <div className='flex items-center gap-0.5 border rounded-md px-0.5'>
+        <div className='bg-background/95 fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border px-4 py-2 shadow-lg backdrop-blur'>
+          <span className='text-muted-foreground text-sm whitespace-nowrap'>
+            已选 {selectedNodeIds.size} 个节点
+          </span>
+          <div className='flex items-center gap-0.5 rounded-md border px-0.5'>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon' className='h-8 w-8' onClick={() => handleMoveNodes('top')}>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => handleMoveNodes('top')}
+                >
                   <ArrowUpToLine className='size-4' />
                 </Button>
               </TooltipTrigger>
@@ -6930,7 +9624,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon' className='h-8 w-8' onClick={() => handleMoveNodes('up')}>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => handleMoveNodes('up')}
+                >
                   <ArrowUp className='size-4' />
                 </Button>
               </TooltipTrigger>
@@ -6938,7 +9637,12 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon' className='h-8 w-8' onClick={() => handleMoveNodes('down')}>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => handleMoveNodes('down')}
+                >
                   <ArrowDown className='size-4' />
                 </Button>
               </TooltipTrigger>
@@ -6946,14 +9650,27 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant='ghost' size='icon' className='h-8 w-8' onClick={() => handleMoveNodes('bottom')}>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='h-8 w-8'
+                  onClick={() => handleMoveNodes('bottom')}
+                >
                   <ArrowDownToLine className='size-4' />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side='top'>置底</TooltipContent>
             </Tooltip>
           </div>
-          <Button variant='ghost' size='icon' className='h-8 w-8 text-muted-foreground' onClick={() => { setSortMode(false); setSelectedNodeIds(new Set()) }}>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='text-muted-foreground h-8 w-8'
+            onClick={() => {
+              setSortMode(false)
+              setSelectedNodeIds(new Set())
+            }}
+          >
             <X className='size-4' />
           </Button>
         </div>
@@ -6961,35 +9678,51 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
 
       {/* 小笨蛋修一专属彩蛋dialog */}
       <Dialog open={easterEggOpen} onOpenChange={setEasterEggOpen}>
-        <DialogContent className='!w-screen !max-w-screen sm:!w-[700px] sm:!max-w-[700px] h-[85vh] flex flex-col p-0'>
-          <DialogHeader className='px-6 pt-6 pb-2 flex-shrink-0'>
-            <DialogTitle><img src={CaidanIcon} alt='' className='w-5 h-5 inline mr-2 dark:hidden' /><img src={CaidanWIcon} alt='' className='w-5 h-5 inline mr-2 hidden dark:inline' />彩蛋</DialogTitle>
+        <DialogContent className='flex h-[85vh] !w-screen !max-w-screen flex-col p-0 sm:!w-[700px] sm:!max-w-[700px]'>
+          <DialogHeader className='flex-shrink-0 px-6 pt-6 pb-2'>
+            <DialogTitle>
+              <img
+                src={CaidanIcon}
+                alt=''
+                className='mr-2 inline h-5 w-5 dark:hidden'
+              />
+              <img
+                src={CaidanWIcon}
+                alt=''
+                className='mr-2 hidden inline h-5 w-5 dark:inline'
+              />
+              彩蛋
+            </DialogTitle>
           </DialogHeader>
           <iframe
             src='https://103.73.220.250'
-            className='flex-1 w-full border-0'
+            className='w-full flex-1 border-0'
             sandbox='allow-scripts allow-same-origin allow-forms'
           />
         </DialogContent>
       </Dialog>
 
+      <NodeProbeDialog open={nodeProbeOpen} onOpenChange={setNodeProbeOpen} />
       {/* 节点测速 */}
-		<SpeedTestDialog
+      <SpeedTestDialog
         open={speedDialogOpen && !speedDialogMin}
         onMinimize={() => setSpeedDialogMin(true)}
-        onClose={() => { setSpeedDialogOpen(false); setSpeedDialogMin(false) }}
-		  nodes={savedNodes}
-		/>
-		<ExternalSyncNodeDialog
-		  selection={externalSyncSelection.selection}
-		  saving={externalSyncSelection.confirming}
-		  onSelectionChange={externalSyncSelection.setSelectedIds}
-		  onCancel={externalSyncSelection.cancel}
-		  onConfirm={externalSyncSelection.confirm}
-		/>
+        onClose={() => {
+          setSpeedDialogOpen(false)
+          setSpeedDialogMin(false)
+        }}
+        nodes={savedNodes}
+      />
+      <ExternalSyncNodeDialog
+        selection={externalSyncSelection.selection}
+        saving={externalSyncSelection.confirming}
+        onSelectionChange={externalSyncSelection.setSelectedIds}
+        onCancel={externalSyncSelection.cancel}
+        onConfirm={externalSyncSelection.confirm}
+      />
       {speedDialogMin && (
         <button
-          className='fixed bottom-6 right-6 z-50 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground shadow-lg hover:opacity-90 transition-opacity'
+          className='bg-primary text-primary-foreground fixed right-6 bottom-6 z-50 flex items-center gap-1.5 rounded-full px-4 py-2 text-sm shadow-lg transition-opacity hover:opacity-90'
           onClick={() => setSpeedDialogMin(false)}
         >
           <Gauge className='size-4' />

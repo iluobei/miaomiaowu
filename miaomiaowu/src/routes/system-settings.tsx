@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { CircleHelp, RefreshCw, Settings } from 'lucide-react'
 import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
+import { useAuthStore } from '@/stores/auth-store'
+import { api } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
+import { useSyncProxyGroupCategories } from '@/hooks/use-proxy-groups'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -10,19 +15,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { CircleHelp, RefreshCw, Settings } from 'lucide-react'
-import { api } from '@/lib/api'
-import { handleServerError } from '@/lib/handle-server-error'
-import { useAuthStore } from '@/stores/auth-store'
-import { useSyncProxyGroupCategories } from '@/hooks/use-proxy-groups'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Topbar } from '@/components/layout/topbar'
+import { NodeProbePanel } from '@/components/node-probe-dialog'
 
 interface NotifyConfig {
   notify_enabled: boolean
@@ -34,6 +43,8 @@ interface NotifyConfig {
   notify_silent_mode: boolean
   notify_daily_traffic: boolean
   notify_expiry: boolean
+  notify_node_probe_offline: boolean
+  notify_node_probe_online: boolean
   notify_daily_traffic_time: string
 }
 
@@ -88,27 +99,33 @@ function SystemSettingsPage() {
   const queryClient = useQueryClient()
   const { auth } = useAuthStore()
   const [forceSyncExternal, setForceSyncExternal] = useState(false)
-  const [matchRule, setMatchRule] = useState<'node_name' | 'server_port' | 'type_server_port'>('node_name')
+  const [matchRule, setMatchRule] = useState<
+    'node_name' | 'server_port' | 'type_server_port'
+  >('node_name')
   const [syncScope, setSyncScope] = useState<'saved_only' | 'all'>('saved_only')
   const [keepNodeName, setKeepNodeName] = useState(true)
   const [cacheExpireMinutes, setCacheExpireMinutes] = useState(0)
   const [syncTraffic, setSyncTraffic] = useState(false)
   const [enableProbeBinding, setEnableProbeBinding] = useState(false)
   const [enableShortLink, setEnableShortLink] = useState(false)
-  const [templateVersion, setTemplateVersion] = useState<'v1' | 'v2' | 'v3'>('v2')
+  const [templateVersion, setTemplateVersion] = useState<'v1' | 'v2' | 'v3'>(
+    'v2'
+  )
   const [enableProxyProvider, setEnableProxyProvider] = useState(false)
   const [proxyGroupsSourceUrl, setProxyGroupsSourceUrl] = useState('')
   const [clientCompatibilityMode, setClientCompatibilityMode] = useState(false)
   const [silentMode, setSilentMode] = useState(false)
   const [silentModeTimeout, setSilentModeTimeout] = useState(15)
-  const [nodeNameFilter, setNodeNameFilter] = useState('剩余|流量|到期|订阅|时间|重置')
+  const [nodeNameFilter, setNodeNameFilter] =
+    useState('剩余|流量|到期|订阅|时间|重置')
   const [appendSubInfo, setAppendSubInfo] = useState(false)
   const [enableSubInfoNodes, setEnableSubInfoNodes] = useState(false)
   const [subInfoExpirePrefix, setSubInfoExpirePrefix] = useState('📅过期时间')
   const [subInfoTrafficPrefix, setSubInfoTrafficPrefix] = useState('⌛剩余流量')
   const [enableSubTrafficHeader, setEnableSubTrafficHeader] = useState(true)
   const [enableOverrideScripts, setEnableOverrideScripts] = useState(false)
-  const [subscriptionOutputFormat, setSubscriptionOutputFormat] = useState('yaml')
+  const [subscriptionOutputFormat, setSubscriptionOutputFormat] =
+    useState('yaml')
 
   // 安全配置
   const [loginRateMaxAttempts, setLoginRateMaxAttempts] = useState(5)
@@ -135,6 +152,8 @@ function SystemSettingsPage() {
     notify_silent_mode: true,
     notify_daily_traffic: false,
     notify_expiry: true,
+    notify_node_probe_offline: false,
+    notify_node_probe_online: false,
     notify_daily_traffic_time: '08:00',
   })
 
@@ -205,27 +224,42 @@ function SystemSettingsPage() {
   useEffect(() => {
     if (userConfig) {
       setForceSyncExternal(userConfig.force_sync_external)
-      setMatchRule(userConfig.match_rule as 'node_name' | 'server_port' | 'type_server_port')
-      setSyncScope((userConfig.sync_scope as 'saved_only' | 'all') || 'saved_only')
+      setMatchRule(
+        userConfig.match_rule as
+          | 'node_name'
+          | 'server_port'
+          | 'type_server_port'
+      )
+      setSyncScope(
+        (userConfig.sync_scope as 'saved_only' | 'all') || 'saved_only'
+      )
       setKeepNodeName(userConfig.keep_node_name !== false) // 默认为 true
       setCacheExpireMinutes(userConfig.cache_expire_minutes)
       setSyncTraffic(userConfig.sync_traffic)
       setEnableProbeBinding(userConfig.enable_probe_binding || false)
       setEnableShortLink(userConfig.enable_short_link || false)
-      setTemplateVersion((userConfig.template_version as 'v1' | 'v2' | 'v3') || 'v2')
+      setTemplateVersion(
+        (userConfig.template_version as 'v1' | 'v2' | 'v3') || 'v2'
+      )
       setEnableProxyProvider(userConfig.enable_proxy_provider || false)
       setProxyGroupsSourceUrl(userConfig.proxy_groups_source_url || '')
       setClientCompatibilityMode(userConfig.client_compatibility_mode || false)
       setSilentMode(userConfig.silent_mode || false)
       setSilentModeTimeout(userConfig.silent_mode_timeout || 15)
-      setNodeNameFilter(userConfig.node_name_filter ?? '剩余|流量|到期|订阅|时间|重置')
+      setNodeNameFilter(
+        userConfig.node_name_filter ?? '剩余|流量|到期|订阅|时间|重置'
+      )
       setAppendSubInfo(userConfig.append_sub_info || false)
       setEnableSubInfoNodes(userConfig.enable_sub_info_nodes || false)
       setSubInfoExpirePrefix(userConfig.sub_info_expire_prefix || '📅过期时间')
-      setSubInfoTrafficPrefix(userConfig.sub_info_traffic_prefix || '⌛剩余流量')
+      setSubInfoTrafficPrefix(
+        userConfig.sub_info_traffic_prefix || '⌛剩余流量'
+      )
       setEnableSubTrafficHeader(userConfig.enable_sub_traffic_header !== false)
       setEnableOverrideScripts(userConfig.enable_override_scripts || false)
-      setSubscriptionOutputFormat(userConfig.subscription_output_format || 'yaml')
+      setSubscriptionOutputFormat(
+        userConfig.subscription_output_format || 'yaml'
+      )
       setLoginRateMaxAttempts(userConfig.login_rate_max_attempts || 5)
       setLoginRateWindow(userConfig.login_rate_window || 60)
       setLoginRateLockDuration(userConfig.login_rate_lock_duration || 60)
@@ -252,7 +286,9 @@ function SystemSettingsPage() {
         queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] })
       }
       setForceSyncExternal(variables.force_sync_external)
-      setMatchRule(variables.match_rule as 'node_name' | 'server_port' | 'type_server_port')
+      setMatchRule(
+        variables.match_rule as 'node_name' | 'server_port' | 'type_server_port'
+      )
       setSyncScope(variables.sync_scope as 'saved_only' | 'all')
       setKeepNodeName(variables.keep_node_name)
       setCacheExpireMinutes(variables.cache_expire_minutes)
@@ -272,7 +308,9 @@ function SystemSettingsPage() {
       setSubInfoTrafficPrefix(variables.sub_info_traffic_prefix)
       setEnableSubTrafficHeader(variables.enable_sub_traffic_header)
       setEnableOverrideScripts(variables.enable_override_scripts)
-      setSubscriptionOutputFormat(variables.subscription_output_format || 'yaml')
+      setSubscriptionOutputFormat(
+        variables.subscription_output_format || 'yaml'
+      )
       setLoginRateMaxAttempts(variables.login_rate_max_attempts)
       setLoginRateWindow(variables.login_rate_window)
       setLoginRateLockDuration(variables.login_rate_lock_duration)
@@ -335,9 +373,9 @@ function SystemSettingsPage() {
   }
 
   return (
-    <div className='min-h-svh bg-background'>
+    <div className='bg-background min-h-svh'>
       <Topbar />
-      <main className='mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 pt-24'>
+      <main className='mx-auto w-full max-w-4xl px-4 py-8 pt-24 sm:px-6'>
         <section className='space-y-2'>
           <h1 className='text-3xl font-semibold tracking-tight'>系统设置</h1>
           <p className='text-muted-foreground'>管理订阅同步和功能开关</p>
@@ -358,7 +396,7 @@ function SystemSettingsPage() {
                   </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                     </TooltipTrigger>
                     <TooltipContent side='right' className='max-w-xs'>
                       <p>开启后，流量信息数据包含外部订阅的流量信息</p>
@@ -368,7 +406,9 @@ function SystemSettingsPage() {
                 <Switch
                   id='sync-traffic'
                   checked={syncTraffic}
-                  onCheckedChange={(checked) => updateConfig({ sync_traffic: checked })}
+                  onCheckedChange={(checked) =>
+                    updateConfig({ sync_traffic: checked })
+                  }
                   disabled={loadingConfig || updateConfigMutation.isPending}
                 />
               </div>
@@ -380,30 +420,37 @@ function SystemSettingsPage() {
                   </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                     </TooltipTrigger>
                     <TooltipContent side='right' className='max-w-xs'>
-                      <p>开启后，同步外部订阅时在节点名称后追加剩余流量和剩余天数，例如：节点名 398.22GB📊 26Days⏳</p>
+                      <p>
+                        开启后，同步外部订阅时在节点名称后追加剩余流量和剩余天数，例如：节点名
+                        398.22GB📊 26Days⏳
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 <Switch
                   id='append-sub-info'
                   checked={appendSubInfo}
-                  onCheckedChange={(checked) => updateConfig({ append_sub_info: checked })}
+                  onCheckedChange={(checked) =>
+                    updateConfig({ append_sub_info: checked })
+                  }
                   disabled={loadingConfig || updateConfigMutation.isPending}
                 />
               </div>
 
-              <div className='space-y-2 pt-3 border-t'>
+              <div className='space-y-2 border-t pt-3'>
                 <div className='flex items-center gap-2'>
                   <Label htmlFor='node-name-filter'>节点名称过滤</Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                     </TooltipTrigger>
                     <TooltipContent side='right' className='max-w-xs'>
-                      <p>使用正则表达式过滤节点名称，匹配的节点将被排除。留空则不过滤。</p>
+                      <p>
+                        使用正则表达式过滤节点名称，匹配的节点将被排除。留空则不过滤。
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -411,42 +458,55 @@ function SystemSettingsPage() {
                   id='node-name-filter'
                   value={nodeNameFilter}
                   onChange={(e) => setNodeNameFilter(e.target.value)}
-                  onBlur={() => updateConfig({ node_name_filter: nodeNameFilter })}
+                  onBlur={() =>
+                    updateConfig({ node_name_filter: nodeNameFilter })
+                  }
                   disabled={loadingConfig || updateConfigMutation.isPending}
                   placeholder='剩余|流量|到期|订阅|时间|重置'
                 />
-                <p className='text-xs text-muted-foreground'>正则表达式，匹配的节点将在同步时被过滤掉</p>
+                <p className='text-muted-foreground text-xs'>
+                  正则表达式，匹配的节点将在同步时被过滤掉
+                </p>
               </div>
 
-              <div className='flex items-center justify-between pt-3 border-t'>
+              <div className='flex items-center justify-between border-t pt-3'>
                 <div className='flex items-center gap-2'>
-                  <Label htmlFor='force-sync-external' className='cursor-pointer'>
+                  <Label
+                    htmlFor='force-sync-external'
+                    className='cursor-pointer'
+                  >
                     外部订阅同步设置
                   </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                      <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                     </TooltipTrigger>
                     <TooltipContent side='right' className='max-w-xs'>
-                      <p>开启后，从订阅链接获取订阅时将重新获取外部订阅链接的最新节点</p>
+                      <p>
+                        开启后，从订阅链接获取订阅时将重新获取外部订阅链接的最新节点
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 <Switch
                   id='force-sync-external'
                   checked={forceSyncExternal}
-                  onCheckedChange={(checked) => updateConfig({ force_sync_external: checked })}
+                  onCheckedChange={(checked) =>
+                    updateConfig({ force_sync_external: checked })
+                  }
                   disabled={loadingConfig || updateConfigMutation.isPending}
                 />
               </div>
 
               {forceSyncExternal && (
-                <div className='space-y-4 pt-3 border-t bg-muted/30 -mx-6 px-6 py-4 rounded-b-lg'>
+                <div className='bg-muted/30 -mx-6 space-y-4 rounded-b-lg border-t px-6 py-4 pt-3'>
                   <div className='space-y-2'>
                     <Label>匹配规则</Label>
                     <RadioGroup
                       value={matchRule}
-                      onValueChange={(value: 'node_name' | 'server_port' | 'type_server_port') => {
+                      onValueChange={(
+                        value: 'node_name' | 'server_port' | 'type_server_port'
+                      ) => {
                         setMatchRule(value)
                         updateConfig({ match_rule: value })
                       }}
@@ -454,27 +514,45 @@ function SystemSettingsPage() {
                       className='flex flex-wrap gap-4'
                     >
                       <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='node_name' id='match-node-name' />
-                        <Label htmlFor='match-node-name' className='font-normal cursor-pointer'>
+                        <RadioGroupItem
+                          value='node_name'
+                          id='match-node-name'
+                        />
+                        <Label
+                          htmlFor='match-node-name'
+                          className='cursor-pointer font-normal'
+                        >
                           节点名称
                         </Label>
                       </div>
                       <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='server_port' id='match-server-port' />
-                        <Label htmlFor='match-server-port' className='font-normal cursor-pointer'>
+                        <RadioGroupItem
+                          value='server_port'
+                          id='match-server-port'
+                        />
+                        <Label
+                          htmlFor='match-server-port'
+                          className='cursor-pointer font-normal'
+                        >
                           服务器:端口
                         </Label>
                       </div>
                       <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='type_server_port' id='match-type-server-port' />
-                        <Label htmlFor='match-type-server-port' className='font-normal cursor-pointer'>
+                        <RadioGroupItem
+                          value='type_server_port'
+                          id='match-type-server-port'
+                        />
+                        <Label
+                          htmlFor='match-type-server-port'
+                          className='cursor-pointer font-normal'
+                        >
                           类型:服务器:端口
                         </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  <div className='space-y-2 pt-3 border-t border-border/50'>
+                  <div className='border-border/50 space-y-2 border-t pt-3'>
                     <Label>同步范围</Label>
                     <RadioGroup
                       value={syncScope}
@@ -486,31 +564,45 @@ function SystemSettingsPage() {
                       className='flex flex-wrap gap-4'
                     >
                       <div className='flex items-center space-x-2'>
-                        <RadioGroupItem value='saved_only' id='sync-saved-only' />
-                        <Label htmlFor='sync-saved-only' className='font-normal cursor-pointer'>
+                        <RadioGroupItem
+                          value='saved_only'
+                          id='sync-saved-only'
+                        />
+                        <Label
+                          htmlFor='sync-saved-only'
+                          className='cursor-pointer font-normal'
+                        >
                           仅同步已保存节点
                         </Label>
                       </div>
                       <div className='flex items-center space-x-2'>
                         <RadioGroupItem value='all' id='sync-all' />
-                        <Label htmlFor='sync-all' className='font-normal cursor-pointer'>
+                        <Label
+                          htmlFor='sync-all'
+                          className='cursor-pointer font-normal'
+                        >
                           同步所有节点
                         </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  <div className='flex items-center justify-between pt-3 border-t border-border/50'>
+                  <div className='border-border/50 flex items-center justify-between border-t pt-3'>
                     <div className='flex items-center gap-2'>
-                      <Label htmlFor='keep-node-name' className='cursor-pointer'>
+                      <Label
+                        htmlFor='keep-node-name'
+                        className='cursor-pointer'
+                      >
                         保留当前节点名称
                       </Label>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                          <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                         </TooltipTrigger>
                         <TooltipContent side='right' className='max-w-xs'>
-                          <p>开启后，同步时保留数据库中的节点名称，不使用外部订阅的节点名称</p>
+                          <p>
+                            开启后，同步时保留数据库中的节点名称，不使用外部订阅的节点名称
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -525,15 +617,19 @@ function SystemSettingsPage() {
                     />
                   </div>
 
-                  <div className='space-y-2 pt-3 border-t border-border/50'>
+                  <div className='border-border/50 space-y-2 border-t pt-3'>
                     <div className='flex items-center gap-2'>
-                      <Label htmlFor='cache-expire-minutes'>缓存过期时间（分钟）</Label>
+                      <Label htmlFor='cache-expire-minutes'>
+                        缓存过期时间（分钟）
+                      </Label>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                          <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                         </TooltipTrigger>
                         <TooltipContent side='right' className='max-w-xs'>
-                          <p>设置为0表示每次获取订阅时都重新拉取。大于0时，只有超过设置的分钟数才会重新拉取</p>
+                          <p>
+                            设置为0表示每次获取订阅时都重新拉取。大于0时，只有超过设置的分钟数才会重新拉取
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -542,13 +638,21 @@ function SystemSettingsPage() {
                       type='number'
                       min='0'
                       value={cacheExpireMinutes}
-                      onChange={(e) => setCacheExpireMinutes(parseInt(e.target.value) || 0)}
-                      onBlur={() => updateConfig({ cache_expire_minutes: cacheExpireMinutes })}
+                      onChange={(e) =>
+                        setCacheExpireMinutes(parseInt(e.target.value) || 0)
+                      }
+                      onBlur={() =>
+                        updateConfig({
+                          cache_expire_minutes: cacheExpireMinutes,
+                        })
+                      }
                       disabled={loadingConfig || updateConfigMutation.isPending}
                       placeholder='0'
                       className='w-32'
                     />
-                    <p className='text-xs text-destructive'>注意：每次都更新订阅会影响获取订阅接口的响应速度</p>
+                    <p className='text-destructive text-xs'>
+                      注意：每次都更新订阅会影响获取订阅接口的响应速度
+                    </p>
                   </div>
                 </div>
               )}
@@ -562,26 +666,33 @@ function SystemSettingsPage() {
               <CardDescription>管理系统功能的启用状态</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+              <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                 {/* 节点探针服务器绑定 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-probe-binding' className='cursor-pointer'>
+                    <Label
+                      htmlFor='enable-probe-binding'
+                      className='cursor-pointer'
+                    >
                       探针服务器绑定
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量。</p>
+                        <p>
+                          开启后，节点列表将显示探针按钮，可为节点绑定特定的探针服务器。流量统计将只汇总绑定节点的探针流量。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-probe-binding'
                     checked={enableProbeBinding}
-                    onCheckedChange={(checked) => updateConfig({ enable_probe_binding: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_probe_binding: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -589,38 +700,47 @@ function SystemSettingsPage() {
                 {/* 短链接 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-short-link' className='cursor-pointer'>
+                    <Label
+                      htmlFor='enable-short-link'
+                      className='cursor-pointer'
+                    >
                       启用短链接
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，订阅链接页面将显示6位字符的短链接。可在个人设置页面重置短链接。</p>
+                        <p>
+                          开启后，订阅链接页面将显示6位字符的短链接。可在个人设置页面重置短链接。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-short-link'
                     checked={enableShortLink}
-                    onCheckedChange={(checked) => updateConfig({ enable_short_link: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_short_link: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
 
                 {/* 模板版本选择 */}
                 <div className='rounded-lg border p-3'>
-                  <div className='flex items-center gap-2 mb-3'>
+                  <div className='mb-3 flex items-center gap-2'>
                     <Label className='font-medium'>模板版本</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
                         <p>v1：使用 rule_templates 目录下的文件模板</p>
                         <p>v2：使用数据库模板（通用后端，支持网页端管理）</p>
-                        <p>v3：使用新版模板系统（类 mihomo 配置，支持可视化编辑）</p>
+                        <p>
+                          v3：使用新版模板系统（类 mihomo 配置，支持可视化编辑）
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -633,21 +753,27 @@ function SystemSettingsPage() {
                       <button
                         key={option.value}
                         type='button'
-                        onClick={() => updateConfig({ template_version: option.value })}
-                        disabled={loadingConfig || updateConfigMutation.isPending}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                        onClick={() =>
+                          updateConfig({ template_version: option.value })
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                        className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
                           templateVersion === option.value
                             ? 'bg-primary text-primary-foreground border-primary'
                             : 'bg-background hover:bg-muted border-border'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
                       >
-                        <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                          templateVersion === option.value
-                            ? 'border-primary-foreground'
-                            : 'border-muted-foreground'
-                        }`}>
+                        <span
+                          className={`flex h-3 w-3 items-center justify-center rounded-full border-2 ${
+                            templateVersion === option.value
+                              ? 'border-primary-foreground'
+                              : 'border-muted-foreground'
+                          }`}
+                        >
                           {templateVersion === option.value && (
-                            <span className='w-1.5 h-1.5 rounded-full bg-primary-foreground' />
+                            <span className='bg-primary-foreground h-1.5 w-1.5 rounded-full' />
                           )}
                         </span>
                         {option.label}
@@ -659,22 +785,30 @@ function SystemSettingsPage() {
                 {/* 代理集合 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-proxy-provider' className='cursor-pointer'>
+                    <Label
+                      htmlFor='enable-proxy-provider'
+                      className='cursor-pointer'
+                    >
                       启用代理集合
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>代理集合（Proxy Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置代理集合，并在编辑代理组时将代理集合拖入代理组。</p>
+                        <p>
+                          代理集合（Proxy
+                          Provider）允许从外部订阅动态加载节点。开启后可在订阅文件页面配置代理集合，并在编辑代理组时将代理集合拖入代理组。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-proxy-provider'
                     checked={enableProxyProvider}
-                    onCheckedChange={(checked) => updateConfig({ enable_proxy_provider: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_proxy_provider: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -682,22 +816,30 @@ function SystemSettingsPage() {
                 {/* 客户端兼容模式 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='client-compatibility-mode' className='cursor-pointer'>
+                    <Label
+                      htmlFor='client-compatibility-mode'
+                      className='cursor-pointer'
+                    >
                       客户端兼容模式
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>自动过滤不兼容的节点（如 WireGuard），仅记录日志不报错。</p>
+                        <p>
+                          自动过滤不兼容的节点（如
+                          WireGuard），仅记录日志不报错。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='client-compatibility-mode'
                     checked={clientCompatibilityMode}
-                    onCheckedChange={(checked) => updateConfig({ client_compatibility_mode: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ client_compatibility_mode: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -705,22 +847,30 @@ function SystemSettingsPage() {
                 {/* 覆写脚本 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-override-scripts' className='cursor-pointer'>
+                    <Label
+                      htmlFor='enable-override-scripts'
+                      className='cursor-pointer'
+                    >
                       覆写脚本
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，覆写管理页面将显示覆写脚本功能，可使用 JavaScript 脚本修改订阅配置或节点属性。</p>
+                        <p>
+                          开启后，覆写管理页面将显示覆写脚本功能，可使用
+                          JavaScript 脚本修改订阅配置或节点属性。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-override-scripts'
                     checked={enableOverrideScripts}
-                    onCheckedChange={(checked) => updateConfig({ enable_override_scripts: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_override_scripts: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -730,19 +880,39 @@ function SystemSettingsPage() {
                   <div className='flex items-center gap-2'>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant='outline' size='icon' className='h-7 w-7'>
+                        <Button
+                          variant='outline'
+                          size='icon'
+                          className='h-7 w-7'
+                        >
                           <Settings className='h-3.5 w-3.5' />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className='w-80' side='bottom' align='start'>
+                      <PopoverContent
+                        className='w-80'
+                        side='bottom'
+                        align='start'
+                      >
                         <div className='space-y-4'>
                           <div className='space-y-2'>
-                            <Label htmlFor='telegram-bot-token'>Bot Token</Label>
+                            <Label htmlFor='telegram-bot-token'>
+                              Bot Token
+                            </Label>
                             <Input
                               id='telegram-bot-token'
                               value={notifyConfig.telegram_bot_token}
-                              onChange={(e) => setNotifyConfig({ ...notifyConfig, telegram_bot_token: e.target.value })}
-                              onBlur={() => saveNotifyConfig({ telegram_bot_token: notifyConfig.telegram_bot_token })}
+                              onChange={(e) =>
+                                setNotifyConfig({
+                                  ...notifyConfig,
+                                  telegram_bot_token: e.target.value,
+                                })
+                              }
+                              onBlur={() =>
+                                saveNotifyConfig({
+                                  telegram_bot_token:
+                                    notifyConfig.telegram_bot_token,
+                                })
+                              }
                               placeholder='123456:ABC-DEF...'
                             />
                           </div>
@@ -751,8 +921,18 @@ function SystemSettingsPage() {
                             <Input
                               id='telegram-chat-id'
                               value={notifyConfig.telegram_chat_id}
-                              onChange={(e) => setNotifyConfig({ ...notifyConfig, telegram_chat_id: e.target.value })}
-                              onBlur={() => saveNotifyConfig({ telegram_chat_id: notifyConfig.telegram_chat_id })}
+                              onChange={(e) =>
+                                setNotifyConfig({
+                                  ...notifyConfig,
+                                  telegram_chat_id: e.target.value,
+                                })
+                              }
+                              onBlur={() =>
+                                saveNotifyConfig({
+                                  telegram_chat_id:
+                                    notifyConfig.telegram_chat_id,
+                                })
+                              }
                               placeholder='-1001234567890'
                             />
                           </div>
@@ -761,67 +941,172 @@ function SystemSettingsPage() {
                             size='sm'
                             className='w-full'
                             onClick={() => testNotifyMutation.mutate()}
-                            disabled={testNotifyMutation.isPending || !notifyConfig.telegram_bot_token || !notifyConfig.telegram_chat_id}
+                            disabled={
+                              testNotifyMutation.isPending ||
+                              !notifyConfig.telegram_bot_token ||
+                              !notifyConfig.telegram_chat_id
+                            }
                           >
-                            {testNotifyMutation.isPending ? '发送中...' : '发送测试通知'}
+                            {testNotifyMutation.isPending
+                              ? '发送中...'
+                              : '发送测试通知'}
                           </Button>
-                          <div className='border-t pt-3 space-y-2'>
+                          <div className='space-y-2 border-t pt-3'>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-subscribe-fetch'
                                 checked={notifyConfig.notify_subscribe_fetch}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_subscribe_fetch: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_subscribe_fetch: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-subscribe-fetch' className='cursor-pointer text-sm'>订阅获取通知</Label>
+                              <Label
+                                htmlFor='notify-subscribe-fetch'
+                                className='cursor-pointer text-sm'
+                              >
+                                订阅获取通知
+                              </Label>
                             </div>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-login'
                                 checked={notifyConfig.notify_login}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_login: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_login: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-login' className='cursor-pointer text-sm'>登录通知</Label>
+                              <Label
+                                htmlFor='notify-login'
+                                className='cursor-pointer text-sm'
+                              >
+                                登录通知
+                              </Label>
                             </div>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-ip-ban'
                                 checked={notifyConfig.notify_ip_ban}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_ip_ban: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_ip_ban: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-ip-ban' className='cursor-pointer text-sm'>IP 封禁通知</Label>
+                              <Label
+                                htmlFor='notify-ip-ban'
+                                className='cursor-pointer text-sm'
+                              >
+                                IP 封禁通知
+                              </Label>
                             </div>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-silent-mode'
                                 checked={notifyConfig.notify_silent_mode}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_silent_mode: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_silent_mode: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-silent-mode' className='cursor-pointer text-sm'>静默模式通知</Label>
+                              <Label
+                                htmlFor='notify-silent-mode'
+                                className='cursor-pointer text-sm'
+                              >
+                                静默模式通知
+                              </Label>
                             </div>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-expiry'
                                 checked={notifyConfig.notify_expiry}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_expiry: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_expiry: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-expiry' className='cursor-pointer text-sm'>订阅到期通知</Label>
+                              <Label
+                                htmlFor='notify-expiry'
+                                className='cursor-pointer text-sm'
+                              >
+                                订阅到期通知
+                              </Label>
                             </div>
                             <div className='flex items-center gap-2'>
                               <Checkbox
                                 id='notify-daily-traffic'
                                 checked={notifyConfig.notify_daily_traffic}
-                                onCheckedChange={(checked) => saveNotifyConfig({ notify_daily_traffic: checked === true })}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_daily_traffic: checked === true,
+                                  })
+                                }
                               />
-                              <Label htmlFor='notify-daily-traffic' className='cursor-pointer text-sm'>每日流量通知</Label>
+                              <Label
+                                htmlFor='notify-daily-traffic'
+                                className='cursor-pointer text-sm'
+                              >
+                                每日流量通知
+                              </Label>
                               {notifyConfig.notify_daily_traffic && (
                                 <Input
                                   type='time'
                                   value={notifyConfig.notify_daily_traffic_time}
-                                  onChange={(e) => setNotifyConfig({ ...notifyConfig, notify_daily_traffic_time: e.target.value })}
-                                  onBlur={() => saveNotifyConfig({ notify_daily_traffic_time: notifyConfig.notify_daily_traffic_time })}
+                                  onChange={(e) =>
+                                    setNotifyConfig({
+                                      ...notifyConfig,
+                                      notify_daily_traffic_time: e.target.value,
+                                    })
+                                  }
+                                  onBlur={() =>
+                                    saveNotifyConfig({
+                                      notify_daily_traffic_time:
+                                        notifyConfig.notify_daily_traffic_time,
+                                    })
+                                  }
                                   className='h-7 w-24 text-xs'
                                 />
                               )}
+                            </div>
+                            {/* 节点探测上下线:探测判定节点连不上/恢复时推送 */}
+                            <div className='flex items-center gap-2'>
+                              <Checkbox
+                                id='notify-node-probe-offline'
+                                checked={notifyConfig.notify_node_probe_offline}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_node_probe_offline: checked === true,
+                                  })
+                                }
+                              />
+                              <Label
+                                htmlFor='notify-node-probe-offline'
+                                className='cursor-pointer text-sm'
+                              >
+                                节点探测离线
+                              </Label>
+                            </div>
+                            <div className='flex items-center gap-2'>
+                              <Checkbox
+                                id='notify-node-probe-online'
+                                checked={notifyConfig.notify_node_probe_online}
+                                onCheckedChange={(checked) =>
+                                  saveNotifyConfig({
+                                    notify_node_probe_online: checked === true,
+                                  })
+                                }
+                              />
+                              <Label
+                                htmlFor='notify-node-probe-online'
+                                className='cursor-pointer text-sm'
+                              >
+                                节点探测恢复
+                              </Label>
                             </div>
                           </div>
                         </div>
@@ -832,17 +1117,23 @@ function SystemSettingsPage() {
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，系统会通过 Telegram 发送关键事件通知。点击配置按钮设置 Bot Token 和通知类型。</p>
+                        <p>
+                          开启后，系统会通过 Telegram
+                          发送关键事件通知。点击配置按钮设置 Bot Token
+                          和通知类型。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='notify-enabled'
                     checked={notifyConfig.notify_enabled}
-                    onCheckedChange={(checked) => saveNotifyConfig({ notify_enabled: checked })}
+                    onCheckedChange={(checked) =>
+                      saveNotifyConfig({ notify_enabled: checked })
+                    }
                     disabled={updateNotifyMutation.isPending}
                   />
                 </div>
@@ -855,17 +1146,22 @@ function SystemSettingsPage() {
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后服务响应返回 404，获取一次订阅后恢复访问 {silentModeTimeout} 分钟。</p>
+                        <p>
+                          开启后服务响应返回 404，获取一次订阅后恢复访问{' '}
+                          {silentModeTimeout} 分钟。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='silent-mode'
                     checked={silentMode}
-                    onCheckedChange={(checked) => updateConfig({ silent_mode: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ silent_mode: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -873,22 +1169,31 @@ function SystemSettingsPage() {
                 {/* 订阅响应头流量信息 */}
                 <div className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-sub-traffic-header' className='cursor-pointer'>
+                    <Label
+                      htmlFor='enable-sub-traffic-header'
+                      className='cursor-pointer'
+                    >
                       订阅响应头流量信息
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，获取订阅时读取探针和外部订阅流量数据，并在响应头中写入 subscription-userinfo 信息。关闭后跳过流量读取，不写入流量响应头。</p>
+                        <p>
+                          开启后，获取订阅时读取探针和外部订阅流量数据，并在响应头中写入
+                          subscription-userinfo
+                          信息。关闭后跳过流量读取，不写入流量响应头。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-sub-traffic-header'
                     checked={enableSubTrafficHeader}
-                    onCheckedChange={(checked) => updateConfig({ enable_sub_traffic_header: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_sub_traffic_header: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
@@ -899,10 +1204,14 @@ function SystemSettingsPage() {
                     <Label className='cursor-default'>订阅序列化格式</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>选择 Clash 订阅的输出格式。默认 YAML，选择 JSON 后订阅将以 JSON 格式输出。仅影响 Clash 格式订阅，不影响其他客户端格式（Surge、Sing-Box 等）。</p>
+                        <p>
+                          选择 Clash 订阅的输出格式。默认 YAML，选择 JSON
+                          后订阅将以 JSON 格式输出。仅影响 Clash
+                          格式订阅，不影响其他客户端格式（Surge、Sing-Box 等）。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -914,9 +1223,15 @@ function SystemSettingsPage() {
                       <button
                         key={opt.value}
                         type='button'
-                        onClick={() => updateConfig({ subscription_output_format: opt.value })}
-                        disabled={loadingConfig || updateConfigMutation.isPending}
-                        className={`px-3 py-1 text-xs border rounded-md transition-colors ${
+                        onClick={() =>
+                          updateConfig({
+                            subscription_output_format: opt.value,
+                          })
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                        className={`rounded-md border px-3 py-1 text-xs transition-colors ${
                           subscriptionOutputFormat === opt.value
                             ? 'bg-primary text-primary-foreground border-primary'
                             : 'bg-background hover:bg-muted border-border'
@@ -933,10 +1248,12 @@ function SystemSettingsPage() {
               {silentMode && (
                 <div className='mt-4 space-y-2 rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-900 dark:bg-orange-950'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='silent-mode-timeout'>恢复访问时长（分钟）</Label>
+                    <Label htmlFor='silent-mode-timeout'>
+                      恢复访问时长（分钟）
+                    </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
                         <p>用户获取订阅后，服务器恢复访问的时长。</p>
@@ -950,8 +1267,12 @@ function SystemSettingsPage() {
                     max={1440}
                     value={silentModeTimeout}
                     disabled={loadingConfig || updateConfigMutation.isPending}
-                    onChange={(e) => setSilentModeTimeout(parseInt(e.target.value) || 15)}
-                    onBlur={() => updateConfig({ silent_mode_timeout: silentModeTimeout })}
+                    onChange={(e) =>
+                      setSilentModeTimeout(parseInt(e.target.value) || 15)
+                    }
+                    onBlur={() =>
+                      updateConfig({ silent_mode_timeout: silentModeTimeout })
+                    }
                     className='max-w-32'
                   />
                 </div>
@@ -961,46 +1282,71 @@ function SystemSettingsPage() {
               <div className='mt-4 space-y-3 rounded-lg border p-4'>
                 <div className='flex items-center justify-between'>
                   <div className='flex items-center gap-2'>
-                    <Label htmlFor='enable-sub-info-nodes' className='cursor-pointer font-medium'>
+                    <Label
+                      htmlFor='enable-sub-info-nodes'
+                      className='cursor-pointer font-medium'
+                    >
                       订阅信息节点
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <CircleHelp className='h-4 w-4 text-muted-foreground cursor-help' />
+                        <CircleHelp className='text-muted-foreground h-4 w-4 cursor-help' />
                       </TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>
-                        <p>开启后，订阅输出时在节点列表顶部添加过期时间和剩余流量信息节点。</p>
+                        <p>
+                          开启后，订阅输出时在节点列表顶部添加过期时间和剩余流量信息节点。
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
                   <Switch
                     id='enable-sub-info-nodes'
                     checked={enableSubInfoNodes}
-                    onCheckedChange={(checked) => updateConfig({ enable_sub_info_nodes: checked })}
+                    onCheckedChange={(checked) =>
+                      updateConfig({ enable_sub_info_nodes: checked })
+                    }
                     disabled={loadingConfig || updateConfigMutation.isPending}
                   />
                 </div>
                 {enableSubInfoNodes && (
-                  <div className='grid grid-cols-2 gap-3 pt-3 border-t'>
+                  <div className='grid grid-cols-2 gap-3 border-t pt-3'>
                     <div className='space-y-2'>
-                      <Label htmlFor='sub-info-expire-prefix'>过期时间前缀</Label>
+                      <Label htmlFor='sub-info-expire-prefix'>
+                        过期时间前缀
+                      </Label>
                       <Input
                         id='sub-info-expire-prefix'
                         value={subInfoExpirePrefix}
                         onChange={(e) => setSubInfoExpirePrefix(e.target.value)}
-                        onBlur={() => updateConfig({ sub_info_expire_prefix: subInfoExpirePrefix })}
-                        disabled={loadingConfig || updateConfigMutation.isPending}
+                        onBlur={() =>
+                          updateConfig({
+                            sub_info_expire_prefix: subInfoExpirePrefix,
+                          })
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
                         placeholder='📅过期时间'
                       />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='sub-info-traffic-prefix'>剩余流量前缀</Label>
+                      <Label htmlFor='sub-info-traffic-prefix'>
+                        剩余流量前缀
+                      </Label>
                       <Input
                         id='sub-info-traffic-prefix'
                         value={subInfoTrafficPrefix}
-                        onChange={(e) => setSubInfoTrafficPrefix(e.target.value)}
-                        onBlur={() => updateConfig({ sub_info_traffic_prefix: subInfoTrafficPrefix })}
-                        disabled={loadingConfig || updateConfigMutation.isPending}
+                        onChange={(e) =>
+                          setSubInfoTrafficPrefix(e.target.value)
+                        }
+                        onBlur={() =>
+                          updateConfig({
+                            sub_info_traffic_prefix: subInfoTrafficPrefix,
+                          })
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
                         placeholder='⌛剩余流量'
                       />
                     </div>
@@ -1014,18 +1360,30 @@ function SystemSettingsPage() {
           <Card>
             <CardHeader className='pb-4'>
               <CardTitle>安全配置</CardTitle>
-              <CardDescription>配置登录保护、暴力探测封禁和订阅频率限制</CardDescription>
+              <CardDescription>
+                配置登录保护、暴力探测封禁和订阅频率限制
+              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-6'>
               {/* 不封禁本地 IP */}
               <div className='flex items-start justify-between gap-4'>
                 <div className='flex-1'>
                   <h4 className='text-sm font-medium'>不封禁本地 IP</h4>
-                  <p className='text-xs text-muted-foreground mt-1'>
-                    反代/Docker 场景下，若上游未传 X-Forwarded-For，主控可能将所有用户视作同一本机 IP — 一次封禁会让所有人连不上。开启后，loopback / 内网 / 私有网段 IP 跳过封禁与频率限制（登录账户维度仍生效）。
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    反代/Docker 场景下，若上游未传
+                    X-Forwarded-For，主控可能将所有用户视作同一本机 IP —
+                    一次封禁会让所有人连不上。开启后，loopback / 内网 / 私有网段
+                    IP 跳过封禁与频率限制（登录账户维度仍生效）。
                   </p>
                 </div>
-                <Switch checked={skipLocalIP} onCheckedChange={(v) => { setSkipLocalIP(v); updateConfig({ skip_local_ip: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+                <Switch
+                  checked={skipLocalIP}
+                  onCheckedChange={(v) => {
+                    setSkipLocalIP(v)
+                    updateConfig({ skip_local_ip: v })
+                  }}
+                  disabled={loadingConfig || updateConfigMutation.isPending}
+                />
               </div>
 
               <hr className='border-border/50' />
@@ -1033,11 +1391,20 @@ function SystemSettingsPage() {
               <div className='flex items-start justify-between gap-4'>
                 <div className='flex-1'>
                   <h4 className='text-sm font-medium'>拦截未知订阅客户端</h4>
-                  <p className='text-xs text-muted-foreground mt-1'>
-                    仅允许 Clash、Stash、Loon、Quantumult X、Surge、sing-box、v2ray 等已识别客户端获取订阅，避免浏览器预览和爬虫误触。
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    仅允许 Clash、Stash、Loon、Quantumult
+                    X、Surge、sing-box、v2ray
+                    等已识别客户端获取订阅，避免浏览器预览和爬虫误触。
                   </p>
                 </div>
-                <Switch checked={blockUnknownSubUA} onCheckedChange={(v) => { setBlockUnknownSubUA(v); updateConfig({ block_unknown_subscription_ua: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+                <Switch
+                  checked={blockUnknownSubUA}
+                  onCheckedChange={(v) => {
+                    setBlockUnknownSubUA(v)
+                    updateConfig({ block_unknown_subscription_ua: v })
+                  }}
+                  disabled={loadingConfig || updateConfigMutation.isPending}
+                />
               </div>
 
               <hr className='border-border/50' />
@@ -1049,19 +1416,45 @@ function SystemSettingsPage() {
               {/* 登录保护 */}
               <div className='space-y-3'>
                 <h4 className='text-sm font-medium'>登录保护</h4>
-                <p className='text-xs text-muted-foreground'>限制登录失败次数，防止暴力破解密码</p>
-                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                <p className='text-muted-foreground text-xs'>
+                  限制登录失败次数，防止暴力破解密码
+                </p>
+                <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
                   <div className='space-y-1'>
                     <Label className='text-xs'>最大尝试次数</Label>
-                    <Input type='number' min={1} value={loginRateMaxAttempts} onChange={(e) => setLoginRateMaxAttempts(Number(e.target.value) || 5)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                    <Input
+                      type='number'
+                      min={1}
+                      value={loginRateMaxAttempts}
+                      onChange={(e) =>
+                        setLoginRateMaxAttempts(Number(e.target.value) || 5)
+                      }
+                      disabled={loadingConfig || updateConfigMutation.isPending}
+                    />
                   </div>
                   <div className='space-y-1'>
                     <Label className='text-xs'>时间窗口 (分钟)</Label>
-                    <Input type='number' min={1} value={loginRateWindow} onChange={(e) => setLoginRateWindow(Number(e.target.value) || 60)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                    <Input
+                      type='number'
+                      min={1}
+                      value={loginRateWindow}
+                      onChange={(e) =>
+                        setLoginRateWindow(Number(e.target.value) || 60)
+                      }
+                      disabled={loadingConfig || updateConfigMutation.isPending}
+                    />
                   </div>
                   <div className='space-y-1'>
                     <Label className='text-xs'>锁定时长 (分钟)</Label>
-                    <Input type='number' min={1} value={loginRateLockDuration} onChange={(e) => setLoginRateLockDuration(Number(e.target.value) || 60)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                    <Input
+                      type='number'
+                      min={1}
+                      value={loginRateLockDuration}
+                      onChange={(e) =>
+                        setLoginRateLockDuration(Number(e.target.value) || 60)
+                      }
+                      disabled={loadingConfig || updateConfigMutation.isPending}
+                    />
                   </div>
                 </div>
               </div>
@@ -1073,23 +1466,64 @@ function SystemSettingsPage() {
                 <div className='flex items-center justify-between'>
                   <div>
                     <h4 className='text-sm font-medium'>订阅暴力探测防护</h4>
-                    <p className='text-xs text-muted-foreground'>访问不存在的订阅链接多次后封禁 IP</p>
+                    <p className='text-muted-foreground text-xs'>
+                      访问不存在的订阅链接多次后封禁 IP
+                    </p>
                   </div>
-                  <Switch checked={bruteForceEnabled} onCheckedChange={(v) => { setBruteForceEnabled(v); updateConfig({ brute_force_enabled: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+                  <Switch
+                    checked={bruteForceEnabled}
+                    onCheckedChange={(v) => {
+                      setBruteForceEnabled(v)
+                      updateConfig({ brute_force_enabled: v })
+                    }}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
                 </div>
                 {bruteForceEnabled && (
-                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                  <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
                     <div className='space-y-1'>
                       <Label className='text-xs'>最大失败次数</Label>
-                      <Input type='number' min={1} value={bruteForceMaxFailures} onChange={(e) => setBruteForceMaxFailures(Number(e.target.value) || 5)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                      <Input
+                        type='number'
+                        min={1}
+                        value={bruteForceMaxFailures}
+                        onChange={(e) =>
+                          setBruteForceMaxFailures(Number(e.target.value) || 5)
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                      />
                     </div>
                     <div className='space-y-1'>
                       <Label className='text-xs'>统计窗口 (分钟)</Label>
-                      <Input type='number' min={1} value={bruteForceWindow} onChange={(e) => setBruteForceWindow(Number(e.target.value) || 1440)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                      <Input
+                        type='number'
+                        min={1}
+                        value={bruteForceWindow}
+                        onChange={(e) =>
+                          setBruteForceWindow(Number(e.target.value) || 1440)
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                      />
                     </div>
                     <div className='space-y-1'>
                       <Label className='text-xs'>封禁时长 (分钟)</Label>
-                      <Input type='number' min={1} value={bruteForceBlockDuration} onChange={(e) => setBruteForceBlockDuration(Number(e.target.value) || 1440)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                      <Input
+                        type='number'
+                        min={1}
+                        value={bruteForceBlockDuration}
+                        onChange={(e) =>
+                          setBruteForceBlockDuration(
+                            Number(e.target.value) || 1440
+                          )
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                      />
                     </div>
                   </div>
                 )}
@@ -1102,19 +1536,48 @@ function SystemSettingsPage() {
                 <div className='flex items-center justify-between'>
                   <div>
                     <h4 className='text-sm font-medium'>订阅频率限制</h4>
-                    <p className='text-xs text-muted-foreground'>限制每个 IP 获取订阅的频率，防止枚举和抓取</p>
+                    <p className='text-muted-foreground text-xs'>
+                      限制每个 IP 获取订阅的频率，防止枚举和抓取
+                    </p>
                   </div>
-                  <Switch checked={subRateLimitEnabled} onCheckedChange={(v) => { setSubRateLimitEnabled(v); updateConfig({ sub_rate_limit_enabled: v }) }} disabled={loadingConfig || updateConfigMutation.isPending} />
+                  <Switch
+                    checked={subRateLimitEnabled}
+                    onCheckedChange={(v) => {
+                      setSubRateLimitEnabled(v)
+                      updateConfig({ sub_rate_limit_enabled: v })
+                    }}
+                    disabled={loadingConfig || updateConfigMutation.isPending}
+                  />
                 </div>
                 {subRateLimitEnabled && (
-                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                  <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                     <div className='space-y-1'>
                       <Label className='text-xs'>最大请求次数</Label>
-                      <Input type='number' min={1} value={subRateLimitMax} onChange={(e) => setSubRateLimitMax(Number(e.target.value) || 30)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                      <Input
+                        type='number'
+                        min={1}
+                        value={subRateLimitMax}
+                        onChange={(e) =>
+                          setSubRateLimitMax(Number(e.target.value) || 30)
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                      />
                     </div>
                     <div className='space-y-1'>
                       <Label className='text-xs'>时间窗口 (分钟)</Label>
-                      <Input type='number' min={1} value={subRateLimitWindow} onChange={(e) => setSubRateLimitWindow(Number(e.target.value) || 120)} disabled={loadingConfig || updateConfigMutation.isPending} />
+                      <Input
+                        type='number'
+                        min={1}
+                        value={subRateLimitWindow}
+                        onChange={(e) =>
+                          setSubRateLimitWindow(Number(e.target.value) || 120)
+                        }
+                        disabled={
+                          loadingConfig || updateConfigMutation.isPending
+                        }
+                      />
                     </div>
                   </div>
                 )}
@@ -1122,20 +1585,22 @@ function SystemSettingsPage() {
 
               <Button
                 className='w-full sm:w-auto'
-                onClick={() => updateConfig({
-                  login_rate_max_attempts: loginRateMaxAttempts,
-                  login_rate_window: loginRateWindow,
-                  login_rate_lock_duration: loginRateLockDuration,
-                  brute_force_enabled: bruteForceEnabled,
-                  brute_force_max_failures: bruteForceMaxFailures,
-                  brute_force_window: bruteForceWindow,
-                  brute_force_block_duration: bruteForceBlockDuration,
-                  sub_rate_limit_enabled: subRateLimitEnabled,
-                  sub_rate_limit_max: subRateLimitMax,
-                  sub_rate_limit_window: subRateLimitWindow,
-                  skip_local_ip: skipLocalIP,
-                  block_unknown_subscription_ua: blockUnknownSubUA,
-                })}
+                onClick={() =>
+                  updateConfig({
+                    login_rate_max_attempts: loginRateMaxAttempts,
+                    login_rate_window: loginRateWindow,
+                    login_rate_lock_duration: loginRateLockDuration,
+                    brute_force_enabled: bruteForceEnabled,
+                    brute_force_max_failures: bruteForceMaxFailures,
+                    brute_force_window: bruteForceWindow,
+                    brute_force_block_duration: bruteForceBlockDuration,
+                    sub_rate_limit_enabled: subRateLimitEnabled,
+                    sub_rate_limit_max: subRateLimitMax,
+                    sub_rate_limit_window: subRateLimitWindow,
+                    skip_local_ip: skipLocalIP,
+                    block_unknown_subscription_ua: blockUnknownSubUA,
+                  })
+                }
                 disabled={loadingConfig || updateConfigMutation.isPending}
               >
                 保存安全配置
@@ -1151,8 +1616,9 @@ function SystemSettingsPage() {
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='flex flex-col gap-3'>
-                <p className='text-sm text-muted-foreground'>
-                  代理组配置包含常用规则分类和对应的 rule-providers 设置。同步后将更新生成订阅页面的规则选择器和预置代理组。
+                <p className='text-muted-foreground text-sm'>
+                  代理组配置包含常用规则分类和对应的 rule-providers
+                  设置。同步后将更新生成订阅页面的规则选择器和预置代理组。
                 </p>
                 <div className='space-y-2'>
                   <Label htmlFor='proxy-groups-source-url'>远程配置地址</Label>
@@ -1168,7 +1634,9 @@ function SystemSettingsPage() {
                       updateConfig({ proxy_groups_source_url: trimmed })
                     }}
                   />
-                  <p className='text-xs text-muted-foreground'>留空使用系统默认地址或环境变量配置</p>
+                  <p className='text-muted-foreground text-xs'>
+                    留空使用系统默认地址或环境变量配置
+                  </p>
                 </div>
                 <Button
                   onClick={() => {
@@ -1205,6 +1673,20 @@ function SystemSettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* 节点探测:开关 + 探测源 + 勾选节点 + 掉线自动重同步。
+              与节点管理页的「节点探测」弹窗是同一个组件、同一组接口,不会两处对不上。 */}
+          <Card>
+            <CardHeader className='pb-4'>
+              <CardTitle>节点探测</CardTitle>
+              <CardDescription>
+                定时真连一次节点,测连通性与真实延迟;掉线还能自动重拉外部订阅
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NodeProbePanel />
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>
@@ -1216,11 +1698,12 @@ function TurnstileSettings() {
   const [secretKey, setSecretKey] = useState('')
   const settings = useQuery({
     queryKey: ['turnstile-settings'],
-    queryFn: async () => (await api.get('/api/admin/security/turnstile')).data as {
-      site_key: string
-      secret_key: string
-      enabled: boolean
-    },
+    queryFn: async () =>
+      (await api.get('/api/admin/security/turnstile')).data as {
+        site_key: string
+        secret_key: string
+        enabled: boolean
+      },
   })
   useEffect(() => {
     if (!settings.data) return
@@ -1228,10 +1711,11 @@ function TurnstileSettings() {
     setSecretKey(settings.data.secret_key ?? '')
   }, [settings.data])
   const save = useMutation({
-    mutationFn: async () => api.put('/api/admin/security/turnstile', {
-      site_key: siteKey.trim(),
-      secret_key: secretKey.trim(),
-    }),
+    mutationFn: async () =>
+      api.put('/api/admin/security/turnstile', {
+        site_key: siteKey.trim(),
+        secret_key: secretKey.trim(),
+      }),
     onSuccess: () => {
       settings.refetch()
       toast.success('Turnstile 设置已保存')
@@ -1243,23 +1727,48 @@ function TurnstileSettings() {
       <div className='flex items-center justify-between gap-3'>
         <div>
           <h4 className='text-sm font-medium'>Cloudflare Turnstile</h4>
-          <p className='mt-1 text-xs text-muted-foreground'>Site Key 和 Secret Key 都填写后，登录页自动启用人机验证；两项留空即关闭。</p>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            Site Key 和 Secret Key
+            都填写后，登录页自动启用人机验证；两项留空即关闭。
+          </p>
         </div>
-        <span className={`text-xs ${settings.data?.enabled ? 'text-green-600' : 'text-muted-foreground'}`}>
+        <span
+          className={`text-xs ${settings.data?.enabled ? 'text-green-600' : 'text-muted-foreground'}`}
+        >
           {settings.data?.enabled ? '已启用' : '未启用'}
         </span>
       </div>
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1'>
-          <Label htmlFor='turnstile-site-key' className='text-xs'>Site Key</Label>
-          <Input id='turnstile-site-key' value={siteKey} onChange={(event) => setSiteKey(event.target.value)} placeholder='0x4AAAA...' />
+          <Label htmlFor='turnstile-site-key' className='text-xs'>
+            Site Key
+          </Label>
+          <Input
+            id='turnstile-site-key'
+            value={siteKey}
+            onChange={(event) => setSiteKey(event.target.value)}
+            placeholder='0x4AAAA...'
+          />
         </div>
         <div className='space-y-1'>
-          <Label htmlFor='turnstile-secret-key' className='text-xs'>Secret Key</Label>
-          <Input id='turnstile-secret-key' type='password' value={secretKey} onChange={(event) => setSecretKey(event.target.value)} placeholder='0x4AAAA...' />
+          <Label htmlFor='turnstile-secret-key' className='text-xs'>
+            Secret Key
+          </Label>
+          <Input
+            id='turnstile-secret-key'
+            type='password'
+            value={secretKey}
+            onChange={(event) => setSecretKey(event.target.value)}
+            placeholder='0x4AAAA...'
+          />
         </div>
       </div>
-      <Button type='button' variant='outline' onClick={() => save.mutate()} disabled={settings.isLoading || save.isPending}>
+      <Button
+        type='button'
+        variant='outline'
+        onClick={() => save.mutate()}
+        disabled={settings.isLoading || save.isPending}
+      >
         {save.isPending ? '保存中...' : '保存 Turnstile 设置'}
       </Button>
     </div>

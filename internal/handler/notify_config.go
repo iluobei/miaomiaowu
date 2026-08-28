@@ -21,6 +21,8 @@ type notifyConfigResponse struct {
 	NotifySilentMode       bool   `json:"notify_silent_mode"`
 	NotifyDailyTraffic     bool   `json:"notify_daily_traffic"`
 	NotifyExpiry           bool   `json:"notify_expiry"`
+	NotifyNodeProbeOffline bool   `json:"notify_node_probe_offline"`
+	NotifyNodeProbeOnline  bool   `json:"notify_node_probe_online"`
 	NotifyDailyTrafficTime string `json:"notify_daily_traffic_time"`
 }
 
@@ -34,6 +36,8 @@ type notifyConfigRequest struct {
 	NotifySilentMode       bool   `json:"notify_silent_mode"`
 	NotifyDailyTraffic     bool   `json:"notify_daily_traffic"`
 	NotifyExpiry           bool   `json:"notify_expiry"`
+	NotifyNodeProbeOffline bool   `json:"notify_node_probe_offline"`
+	NotifyNodeProbeOnline  bool   `json:"notify_node_probe_online"`
 	NotifyDailyTrafficTime string `json:"notify_daily_traffic_time"`
 }
 
@@ -86,6 +90,8 @@ func handleGetNotifyConfig(w http.ResponseWriter, r *http.Request, repo *storage
 		NotifySilentMode:       sysCfg.NotifySilentMode,
 		NotifyDailyTraffic:     sysCfg.NotifyDailyTraffic,
 		NotifyExpiry:           sysCfg.NotifyExpiry,
+		NotifyNodeProbeOffline: sysCfg.NotifyNodeProbeOffline,
+		NotifyNodeProbeOnline:  sysCfg.NotifyNodeProbeOnline,
 		NotifyDailyTrafficTime: sysCfg.NotifyDailyTrafficTime,
 	}
 
@@ -119,6 +125,8 @@ func handleUpdateNotifyConfig(w http.ResponseWriter, r *http.Request, repo *stor
 	sysCfg.NotifySilentMode = req.NotifySilentMode
 	sysCfg.NotifyDailyTraffic = req.NotifyDailyTraffic
 	sysCfg.NotifyExpiry = req.NotifyExpiry
+	sysCfg.NotifyNodeProbeOffline = req.NotifyNodeProbeOffline
+	sysCfg.NotifyNodeProbeOnline = req.NotifyNodeProbeOnline
 	if req.NotifyDailyTrafficTime != "" {
 		sysCfg.NotifyDailyTrafficTime = req.NotifyDailyTrafficTime
 	}
@@ -131,16 +139,18 @@ func handleUpdateNotifyConfig(w http.ResponseWriter, r *http.Request, repo *stor
 	// Hot-reload the global notifier
 	if n := GetNotifier(); n != nil {
 		n.UpdateConfig(notify.Config{
-			Enabled:              sysCfg.NotifyEnabled,
-			BotToken:             sysCfg.TelegramBotToken,
-			ChatID:               sysCfg.TelegramChatID,
-			NotifySubscribeFetch: sysCfg.NotifySubscribeFetch,
-			NotifyLogin:          sysCfg.NotifyLogin,
-			NotifyIPBan:          sysCfg.NotifyIPBan,
-			NotifySilentMode:     sysCfg.NotifySilentMode,
-			NotifyDailyTraffic:   sysCfg.NotifyDailyTraffic,
-			NotifyExpiry:         sysCfg.NotifyExpiry,
-			DailyTrafficTime:     sysCfg.NotifyDailyTrafficTime,
+			Enabled:                sysCfg.NotifyEnabled,
+			BotToken:               sysCfg.TelegramBotToken,
+			ChatID:                 sysCfg.TelegramChatID,
+			NotifySubscribeFetch:   sysCfg.NotifySubscribeFetch,
+			NotifyLogin:            sysCfg.NotifyLogin,
+			NotifyIPBan:            sysCfg.NotifyIPBan,
+			NotifySilentMode:       sysCfg.NotifySilentMode,
+			NotifyDailyTraffic:     sysCfg.NotifyDailyTraffic,
+			NotifyExpiry:           sysCfg.NotifyExpiry,
+			NotifyNodeProbeOffline: sysCfg.NotifyNodeProbeOffline,
+			NotifyNodeProbeOnline:  sysCfg.NotifyNodeProbeOnline,
+			DailyTrafficTime:       sysCfg.NotifyDailyTrafficTime,
 		})
 	}
 

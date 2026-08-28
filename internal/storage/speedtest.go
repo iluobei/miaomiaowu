@@ -173,15 +173,17 @@ func (r *TrafficRepository) GetNodeByID(ctx context.Context, id int64) (Node, er
 		return node, ErrNodeNotFound
 	}
 	var enabled int
+	var probeEnabled int
 	var tagsJSON string
 	var relayGroupNodeIDsJSON string
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, username, raw_url, node_name, protocol, parsed_config, clash_config, enabled, COALESCE(tag, 'personal'), COALESCE(original_server, ''), COALESCE(probe_server, ''), COALESCE(tags, '[]'), chain_proxy_node_id, COALESCE(relay_group_name,''), COALESCE(relay_group_node_ids,'[]'), created_at, updated_at FROM nodes WHERE id = ?`, id).
-		Scan(&node.ID, &node.Username, &node.RawURL, &node.NodeName, &node.Protocol, &node.ParsedConfig, &node.ClashConfig, &enabled, &node.Tag, &node.OriginalServer, &node.ProbeServer, &tagsJSON, &node.ChainProxyNodeID, &node.RelayGroupName, &relayGroupNodeIDsJSON, &node.CreatedAt, &node.UpdatedAt)
+		`SELECT id, username, raw_url, node_name, protocol, parsed_config, clash_config, enabled, COALESCE(tag, 'personal'), COALESCE(original_server, ''), COALESCE(probe_server, ''), COALESCE(tags, '[]'), chain_proxy_node_id, COALESCE(relay_group_name,''), COALESCE(relay_group_node_ids,'[]'), COALESCE(probe_enabled, 0), created_at, updated_at FROM nodes WHERE id = ?`, id).
+		Scan(&node.ID, &node.Username, &node.RawURL, &node.NodeName, &node.Protocol, &node.ParsedConfig, &node.ClashConfig, &enabled, &node.Tag, &node.OriginalServer, &node.ProbeServer, &tagsJSON, &node.ChainProxyNodeID, &node.RelayGroupName, &relayGroupNodeIDsJSON, &probeEnabled, &node.CreatedAt, &node.UpdatedAt)
 	if err != nil {
 		return node, ErrNodeNotFound
 	}
 	node.Enabled = enabled != 0
+	node.ProbeEnabled = probeEnabled != 0
 	scanNodeTags(&node, tagsJSON)
 	scanRelayGroupNodeIDs(&node, relayGroupNodeIDsJSON)
 	return node, nil

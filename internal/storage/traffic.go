@@ -220,8 +220,11 @@ type Node struct {
 	ChainProxyNodeID  *int64  // 链式代理目标节点 ID
 	RelayGroupName    string  // 中转组名称
 	RelayGroupNodeIDs []int64 // 中转组节点 ID 列表
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// ProbeEnabled 外部节点连通性探测开关(默认关)。
+	// 每次探测都要起一个 mihomo 进程真连一次,开销不小,所以由用户逐个勾选而不是全量跑。
+	ProbeEnabled bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // SubscribeFile represents a subscription file configuration.
@@ -288,15 +291,18 @@ type SystemConfig struct {
 	EnableOverrideScripts    bool   // 启用覆写脚本功能
 	SubscriptionOutputFormat string // 订阅输出格式: "yaml" (default) or "json"
 	// Telegram notification settings
-	NotifyEnabled          bool
-	TelegramBotToken       string
-	TelegramChatID         string
-	NotifySubscribeFetch   bool
-	NotifyLogin            bool
-	NotifyIPBan            bool
-	NotifySilentMode       bool
-	NotifyDailyTraffic     bool
-	NotifyExpiry           bool
+	NotifyEnabled        bool
+	TelegramBotToken     string
+	TelegramChatID       string
+	NotifySubscribeFetch bool
+	NotifyLogin          bool
+	NotifyIPBan          bool
+	NotifySilentMode     bool
+	NotifyDailyTraffic   bool
+	NotifyExpiry         bool
+	// NotifyNodeProbeOffline/Online 外部节点探测判定的节点不可用/恢复。
+	NotifyNodeProbeOffline bool
+	NotifyNodeProbeOnline  bool
 	NotifyDailyTrafficTime string // "HH:MM" default "08:00"
 
 	// 安全配置
@@ -763,6 +769,11 @@ CREATE INDEX IF NOT EXISTS idx_nodes_enabled ON nodes(enabled);
 		return err
 	}
 
+	// 外部节点连通性探测开关。默认 0:探测要起 mihomo 真连一次,不该对全部导入节点默认开。
+	if err := r.ensureNodeColumn("probe_enabled", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
 	// Create tag index after ensuring column exists
 	if _, err := r.db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_tag ON nodes(tag);`); err != nil {
 		return fmt.Errorf("create tag index: %w", err)
@@ -1102,6 +1113,12 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 		return err
 	}
 	if err := r.ensureSystemConfigColumn("notify_expiry", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+	if err := r.ensureSystemConfigColumn("notify_node_probe_offline", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := r.ensureSystemConfigColumn("notify_node_probe_online", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
 	if err := r.ensureSystemConfigColumn("notify_daily_traffic_time", "TEXT NOT NULL DEFAULT '08:00'"); err != nil {
@@ -4922,7 +4939,8 @@ SELECT proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_m
        COALESCE(login_rate_max_attempts, 5), COALESCE(login_rate_window, 60), COALESCE(login_rate_lock_duration, 60),
        COALESCE(brute_force_enabled, 1), COALESCE(brute_force_max_failures, 5), COALESCE(brute_force_window, 1440), COALESCE(brute_force_block_duration, 1440),
        COALESCE(sub_rate_limit_enabled, 1), COALESCE(sub_rate_limit_max, 30), COALESCE(sub_rate_limit_window, 120),
-	       COALESCE(skip_local_ip, 1), COALESCE(block_unknown_subscription_ua, 0)
+	       COALESCE(skip_local_ip, 1), COALESCE(block_unknown_subscription_ua, 0),
+	       COALESCE(notify_node_probe_offline, 0), COALESCE(notify_node_probe_online, 0)
 FROM system_config
 WHERE id = 1
 `
@@ -4932,6 +4950,7 @@ WHERE id = 1
 	var enableShortLinkInt, enableSubTrafficHeaderInt, enableOverrideScriptsInt int
 	var notifyEnabledInt, notifySubFetchInt, notifyLoginInt, notifyIPBanInt int
 	var notifySilentModeInt, notifyDailyTrafficInt, notifyExpiryInt int
+	var notifyNodeProbeOfflineInt, notifyNodeProbeOnlineInt int
 	var bruteForceEnabledInt, subRateLimitEnabledInt, skipLocalIPInt, blockUnknownSubUAInt int
 	err := r.db.QueryRowContext(ctx, query).Scan(
 		&cfg.ProxyGroupsSourceURL, &compatibilityMode, &silentMode, &silentModeTimeout,
@@ -4946,6 +4965,7 @@ WHERE id = 1
 		&bruteForceEnabledInt, &cfg.BruteForceMaxFailures, &cfg.BruteForceWindow, &cfg.BruteForceBlockDuration,
 		&subRateLimitEnabledInt, &cfg.SubRateLimitMax, &cfg.SubRateLimitWindow,
 		&skipLocalIPInt, &blockUnknownSubUAInt,
+		&notifyNodeProbeOfflineInt, &notifyNodeProbeOnlineInt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -4990,6 +5010,8 @@ WHERE id = 1
 	cfg.NotifySilentMode = notifySilentModeInt != 0
 	cfg.NotifyDailyTraffic = notifyDailyTrafficInt != 0
 	cfg.NotifyExpiry = notifyExpiryInt != 0
+	cfg.NotifyNodeProbeOffline = notifyNodeProbeOfflineInt != 0
+	cfg.NotifyNodeProbeOnline = notifyNodeProbeOnlineInt != 0
 	if cfg.SubInfoExpirePrefix == "" {
 		cfg.SubInfoExpirePrefix = "📅过期时间"
 	}
@@ -5071,6 +5093,8 @@ SET proxy_groups_source_url = ?,
     sub_rate_limit_window = ?,
 	    skip_local_ip = ?,
 	    block_unknown_subscription_ua = ?,
+    notify_node_probe_offline = ?,
+    notify_node_probe_online = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 1
 `
@@ -5117,6 +5141,7 @@ WHERE id = 1
 		boolToInt(cfg.BruteForceEnabled), cfg.BruteForceMaxFailures, cfg.BruteForceWindow, cfg.BruteForceBlockDuration,
 		boolToInt(cfg.SubRateLimitEnabled), cfg.SubRateLimitMax, cfg.SubRateLimitWindow,
 		boolToInt(cfg.SkipLocalIP), boolToInt(cfg.BlockUnknownSubUA),
+		boolToInt(cfg.NotifyNodeProbeOffline), boolToInt(cfg.NotifyNodeProbeOnline),
 	)
 	if err != nil {
 		return fmt.Errorf("update system config: %w", err)

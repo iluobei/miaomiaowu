@@ -1146,13 +1146,15 @@ func (r *nodeRequest) parseChainProxyNodeID() {
 }
 
 type nodeDTO struct {
-	ID                int64     `json:"id"`
-	RawURL            string    `json:"raw_url"`
-	NodeName          string    `json:"node_name"`
-	Protocol          string    `json:"protocol"`
-	ParsedConfig      string    `json:"parsed_config"`
-	ClashConfig       string    `json:"clash_config"`
-	Enabled           bool      `json:"enabled"`
+	ID           int64  `json:"id"`
+	RawURL       string `json:"raw_url"`
+	NodeName     string `json:"node_name"`
+	Protocol     string `json:"protocol"`
+	ParsedConfig string `json:"parsed_config"`
+	ClashConfig  string `json:"clash_config"`
+	Enabled      bool   `json:"enabled"`
+	// ProbeEnabled 节点连通性探测开关。列表页据此渲染勾选状态。
+	ProbeEnabled      bool      `json:"probe_enabled"`
 	Tag               string    `json:"tag"`
 	Tags              []string  `json:"tags"`
 	OriginalServer    string    `json:"original_server"`
@@ -1181,6 +1183,7 @@ func convertNode(node storage.Node) nodeDTO {
 		ParsedConfig:      node.ParsedConfig,
 		ClashConfig:       node.ClashConfig,
 		Enabled:           node.Enabled,
+		ProbeEnabled:      node.ProbeEnabled,
 		Tag:               node.Tag,
 		Tags:              tags,
 		OriginalServer:    node.OriginalServer,

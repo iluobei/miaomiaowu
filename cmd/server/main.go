@@ -128,16 +128,18 @@ func main() {
 	sysCfg, _ := repo.GetSystemConfig(context.Background())
 	handler.SetBlockUnknownSubscriptionUA(sysCfg.BlockUnknownSubUA)
 	handler.InitNotifier(notify.Config{
-		Enabled:              sysCfg.NotifyEnabled,
-		BotToken:             sysCfg.TelegramBotToken,
-		ChatID:               sysCfg.TelegramChatID,
-		NotifySubscribeFetch: sysCfg.NotifySubscribeFetch,
-		NotifyLogin:          sysCfg.NotifyLogin,
-		NotifyIPBan:          sysCfg.NotifyIPBan,
-		NotifySilentMode:     sysCfg.NotifySilentMode,
-		NotifyDailyTraffic:   sysCfg.NotifyDailyTraffic,
-		NotifyExpiry:         sysCfg.NotifyExpiry,
-		DailyTrafficTime:     sysCfg.NotifyDailyTrafficTime,
+		Enabled:                sysCfg.NotifyEnabled,
+		BotToken:               sysCfg.TelegramBotToken,
+		ChatID:                 sysCfg.TelegramChatID,
+		NotifySubscribeFetch:   sysCfg.NotifySubscribeFetch,
+		NotifyLogin:            sysCfg.NotifyLogin,
+		NotifyIPBan:            sysCfg.NotifyIPBan,
+		NotifySilentMode:       sysCfg.NotifySilentMode,
+		NotifyDailyTraffic:     sysCfg.NotifyDailyTraffic,
+		NotifyExpiry:           sysCfg.NotifyExpiry,
+		NotifyNodeProbeOffline: sysCfg.NotifyNodeProbeOffline,
+		NotifyNodeProbeOnline:  sysCfg.NotifyNodeProbeOnline,
+		DailyTrafficTime:       sysCfg.NotifyDailyTrafficTime,
 	})
 
 	// 启动时初始化代理集合缓存
@@ -267,6 +269,13 @@ func main() {
 	mux.Handle("/api/admin/speedtest/", auth.RequireAdmin(tokenStore, userRepo, speedTestHandler))
 	mux.Handle("/api/speedtest/tester/ws", speedTesterWS)
 
+	// 外部节点探测:定时用 mihomo 走完整协议真连一次,测连通性与真实延迟。
+	// 与 TCPing 互补 —— 那个只拨 server:port,握手失败/密码错/证书不对一概看不出来。
+	// store 必须在这里建好:路由和下面的调度器要共用同一个内存实例。
+	nodeProbeStore := handler.NewNodeProbeStore(0)
+	mux.Handle("/api/admin/node-probe", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodeProbeHandler(repo, nodeProbeStore)))
+	mux.Handle("/api/admin/node-probe/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodeProbeHandler(repo, nodeProbeStore)))
+
 	// Temporary subscription endpoints
 	mux.Handle("/api/admin/temp-subscription", auth.RequireAdmin(tokenStore, userRepo, handler.NewTempSubscriptionHandler()))
 	tempSubAccessHandler := handler.NewTempSubscriptionAccessHandler()
@@ -354,6 +363,10 @@ func main() {
 	autoUpdateCtx, stopAutoUpdate := context.WithCancel(context.Background())
 	go handler.StartExternalSubscriptionAutoUpdateScheduler(autoUpdateCtx, repo, subscribeDir)
 
+	nodeProbeCtx, stopNodeProbe := context.WithCancel(context.Background())
+	handler.NewNodeProbeScheduler(repo, nodeProbeStore, speedTesterWS,
+		filepath.Join("data", "node-probe.json"), subscribeDir).Start(nodeProbeCtx)
+
 	go func() {
 		logger.Info("HTTP服务器启动", "version", version.Version, "address", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -362,7 +375,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(srv, stopCollector, stopProxySync, stopNotify, stopAutoUpdate)
+	waitForShutdown(srv, stopCollector, stopProxySync, stopNotify, stopAutoUpdate, stopNodeProbe)
 }
 
 func startWALCheckpointTask(ctx context.Context, repo *storage.TrafficRepository) {

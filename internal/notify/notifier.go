@@ -53,6 +53,10 @@ func (n *Notifier) IsEnabled(eventType EventType) bool {
 		return n.cfg.NotifyDailyTraffic
 	case EventExpiry:
 		return n.cfg.NotifyExpiry
+	case EventNodeProbeOffline:
+		return n.cfg.NotifyNodeProbeOffline
+	case EventNodeProbeOnline:
+		return n.cfg.NotifyNodeProbeOnline
 	default:
 		return false
 	}
