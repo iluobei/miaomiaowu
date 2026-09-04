@@ -474,6 +474,10 @@ func getUpdateTargetPath() (string, error) {
 	return execPath, nil
 }
 
+// IsDockerEnvironment 是 isDocker 的导出封装,供 cmd/server 判断是否处于 Docker
+// (「仅本机访问」开关在 Docker 里要忽略:容器内 127.0.0.1 收不到宿主转发的端口)。
+func IsDockerEnvironment() bool { return isDocker() }
+
 // isDocker checks if running inside a Docker container
 func isDocker() bool {
 	// Check for /.dockerenv file

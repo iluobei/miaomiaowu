@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Eye, Upload, Save, X, Star, Globe2 } from 'lucide-react'
 
-import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -76,6 +75,9 @@ function TemplatesV3Page() {
   // Editing state
   const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null)
 	const isSurgeTemplate = editingTemplateName?.toLowerCase().endsWith('.conf') ?? false
+	const isLoonTemplate = editingTemplateName?.toLowerCase().endsWith('.lcf') ?? false
+	// Surge / Loon 模板都是纯文本段落式配置,只走文本编辑,不进可视化解析。
+	const isTextTemplate = isSurgeTemplate || isLoonTemplate
   const [templateContent, setTemplateContent] = useState('')
   const [proxyGroups, setProxyGroups] = useState<ProxyGroupFormState[]>([])
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
@@ -115,10 +117,16 @@ function TemplatesV3Page() {
 	const { data: defaultTemplates } = useQuery({ queryKey: ['user-default-template'], queryFn: async () => (await api.get('/api/user/default-template')).data })
 	const { data: profile } = useQuery({ queryKey: ['user-profile'], queryFn: async () => (await api.get('/api/user/profile')).data })
 	const defaultMutation = useMutation({
-	  mutationFn: async (name: string) => api.put('/api/user/default-template', {
-		default_template_filename: name.endsWith('.conf') ? (defaultTemplates?.default_template_filename ?? '') : name,
-		default_surge_template_filename: name.endsWith('.conf') ? name : (defaultTemplates?.default_surge_template_filename ?? ''),
-	  }),
+	  mutationFn: async (name: string) => {
+		const lower = name.toLowerCase()
+		const isConf = lower.endsWith('.conf')
+		const isLcf = lower.endsWith('.lcf')
+		return api.put('/api/user/default-template', {
+		  default_template_filename: isConf || isLcf ? (defaultTemplates?.default_template_filename ?? '') : name,
+		  default_surge_template_filename: isConf ? name : (defaultTemplates?.default_surge_template_filename ?? ''),
+		  default_loon_template_filename: isLcf ? name : (defaultTemplates?.default_loon_template_filename ?? ''),
+		})
+	  },
 	  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-default-template'] }); toast.success('默认模板已更新') },
 	  onError: (error: any) => toast.error(error.response?.data?.error || '设置默认模板失败'),
 	})
@@ -260,7 +268,7 @@ function TemplatesV3Page() {
     if (templateData && isEditorOpen) {
       isInitLoadRef.current = true
       setTemplateContent(templateData)
-	  if (isSurgeTemplate) {
+	  if (isTextTemplate) {
 		setEditorTab('yaml')
 		setTemplateVariables({})
 		setProxyGroups([])
@@ -303,7 +311,7 @@ function TemplatesV3Page() {
         }
       }, 50)
     }
-  }, [templateData, isEditorOpen, isSurgeTemplate])
+  }, [templateData, isEditorOpen, isTextTemplate])
 
   // Auto-refresh proxy-groups preview when proxyGroups changes
   useEffect(() => {
@@ -576,7 +584,7 @@ function TemplatesV3Page() {
   const columns: DataTableColumn<string>[] = [
     {
       header: '模板名称',
-		cell: (name) => <span className="flex items-center gap-2 font-medium">{name}{(name === defaultTemplates?.default_template_filename || name === defaultTemplates?.default_surge_template_filename) && <Badge>默认</Badge>}</span>,
+		cell: (name) => <span className="flex items-center gap-2 font-medium">{name}{(name === defaultTemplates?.default_template_filename || name === defaultTemplates?.default_surge_template_filename || name === defaultTemplates?.default_loon_template_filename) && <Badge>默认</Badge>}</span>,
     },
     {
       header: '操作',
@@ -600,14 +608,13 @@ function TemplatesV3Page() {
 
   return (
     <div className="min-h-svh bg-background">
-      <Topbar />
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 pt-24">
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle>模板管理</CardTitle>
             <CardDescription>
-              管理 Clash/Mihomo 与 Surge 模板，并设置个人默认模板
+              管理 Clash/Mihomo、Surge 与 Loon 模板，并设置个人默认模板
             </CardDescription>
           </div>
           <Button onClick={() => setIsUploadDialogOpen(true)} className="w-full sm:w-auto">
@@ -619,6 +626,7 @@ function TemplatesV3Page() {
           <div className="mb-4 grid gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-2">
             <div><span className="text-muted-foreground">个人默认 Clash：</span>{defaultTemplates?.default_template_filename || '未设置'}</div>
             <div><span className="text-muted-foreground">个人默认 Surge：</span>{defaultTemplates?.default_surge_template_filename || '未设置'}</div>
+            <div><span className="text-muted-foreground">个人默认 Loon：</span>{defaultTemplates?.default_loon_template_filename || '未设置'}</div>
           </div>
           <DataTable
             columns={columns}
@@ -716,12 +724,12 @@ function TemplatesV3Page() {
               isMobile ? "w-full flex-1" : isTablet ? "w-[55%]" : "w-[40%]"
             )}>
               <Tabs value={editorTab} onValueChange={handleTabChange} className="flex flex-col h-full overflow-hidden">
-				<TabsList className={cn("flex-shrink-0 w-full grid", isSurgeTemplate ? "grid-cols-1" : "grid-cols-2")}>
-				  {!isSurgeTemplate && <TabsTrigger value="visual">可视化编辑</TabsTrigger>}
-				  <TabsTrigger value="yaml">{isSurgeTemplate ? 'Surge 配置' : 'YAML 代码'}</TabsTrigger>
+				<TabsList className={cn("flex-shrink-0 w-full grid", isTextTemplate ? "grid-cols-1" : "grid-cols-2")}>
+				  {!isTextTemplate && <TabsTrigger value="visual">可视化编辑</TabsTrigger>}
+				  <TabsTrigger value="yaml">{isSurgeTemplate ? 'Surge 配置' : isLoonTemplate ? 'Loon 配置' : 'YAML 代码'}</TabsTrigger>
                 </TabsList>
 
-				{!isSurgeTemplate && <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
+				{!isTextTemplate && <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
                   <ScrollArea className="flex-1 h-full">
                     <div className="space-y-3 pb-4 pr-3">
                       {/* Region Proxy Groups Toggle */}
@@ -767,7 +775,7 @@ function TemplatesV3Page() {
                     value={templateContent}
                     onChange={(e) => handleYamlChange(e.target.value)}
                     className="flex-1 font-mono text-xs sm:text-sm resize-none p-4"
-					placeholder={isSurgeTemplate ? 'Surge .conf 配置内容...' : 'YAML 内容...'}
+					placeholder={isSurgeTemplate ? 'Surge .conf 配置内容...' : isLoonTemplate ? 'Loon .lcf 配置内容...' : 'YAML 内容...'}
                   />
                 </TabsContent>
               </Tabs>

@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"miaomiaowu/internal/auth"
 	"miaomiaowu/internal/storage"
 )
 
@@ -86,7 +87,7 @@ func NewUserListHandler(repo *storage.TrafficRepository) http.Handler {
 	})
 }
 
-func NewUserStatusHandler(repo *storage.TrafficRepository) http.Handler {
+func NewUserStatusHandler(repo *storage.TrafficRepository, store *auth.TokenStore) http.Handler {
 	if repo == nil {
 		panic("user status handler requires repository")
 	}
@@ -132,6 +133,13 @@ func NewUserStatusHandler(repo *storage.TrafficRepository) http.Handler {
 			}
 			writeError(w, http.StatusInternalServerError, err)
 			return
+		}
+
+		// [安全] 停用用户后立即吊销其全部会话 —— RequireToken 只查内存不复查用户状态,
+		// 不吊销的话被停用的用户 token 仍能一直用到过期。
+		if !payload.IsActive && store != nil {
+			store.RevokeByUsername(username)
+			_ = repo.DeleteUserSessions(r.Context(), username)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -281,7 +289,7 @@ type userDeleteRequest struct {
 	Username string `json:"username"`
 }
 
-func NewUserDeleteHandler(repo *storage.TrafficRepository) http.Handler {
+func NewUserDeleteHandler(repo *storage.TrafficRepository, store *auth.TokenStore) http.Handler {
 	if repo == nil {
 		panic("user delete handler requires repository")
 	}
@@ -327,6 +335,12 @@ func NewUserDeleteHandler(repo *storage.TrafficRepository) http.Handler {
 			}
 			writeError(w, http.StatusInternalServerError, err)
 			return
+		}
+
+		// [安全] 删除用户后立即吊销其全部会话,否则已登录的 token 仍能访问 /api/user/* 到过期。
+		if store != nil {
+			store.RevokeByUsername(username)
+			_ = repo.DeleteUserSessions(r.Context(), username)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -125,8 +125,8 @@ export function TemplateUploadDialog({
     const file = e.target.files?.[0]
     if (file) {
 		const lower = file.name.toLowerCase()
-		if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.conf')) {
-		toast.error('请选择 YAML 或 Surge .conf 文件')
+		if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.conf') && !lower.endsWith('.lcf')) {
+		toast.error('请选择 YAML、Surge .conf 或 Loon .lcf 文件')
         return
       }
       setSelectedFile(file)
@@ -150,8 +150,13 @@ export function TemplateUploadDialog({
         return
       }
 		let name = newTemplateName.trim()
-		if (!name.endsWith('.yaml') && !name.endsWith('.yml') && !name.endsWith('.conf')) {
-			name += /^\s*\[(General|Proxy|Proxy Group|Rule)\]/im.test(pasteContent) ? '.conf' : '.yaml'
+		if (!name.endsWith('.yaml') && !name.endsWith('.yml') && !name.endsWith('.conf') && !name.endsWith('.lcf')) {
+			// Loon 独有段头优先判断(Loon 与 Surge 共用 [General]/[Proxy]/[Rule],不能只看那几个)。
+			name += /\[(Remote Rule|Proxy Chain|Plugin)\]/im.test(pasteContent)
+				? '.lcf'
+				: /^\s*\[(General|Proxy|Proxy Group|Rule)\]/im.test(pasteContent)
+					? '.conf'
+					: '.yaml'
       }
       onCreate(name, pasteContent)
     } else if (tab === 'blank') {
@@ -507,10 +512,10 @@ export function TemplateUploadDialog({
 
           <TabsContent value="upload" className="space-y-4 mt-4">
             <div className="space-y-2">
-			  <Label>选择 Clash YAML 或 Surge 配置</Label>
+			  <Label>选择 Clash YAML、Surge 或 Loon 配置</Label>
               <Input
                 type="file"
-				accept=".yaml,.yml,.conf"
+				accept=".yaml,.yml,.conf,.lcf"
                 onChange={handleFileChange}
               />
               {selectedFile && (
@@ -527,11 +532,11 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-				placeholder="my_template.yaml 或 surge.conf"
+				placeholder="my_template.yaml / surge.conf / loon.lcf"
               />
             </div>
             <div className="space-y-2">
-			  <Label>YAML / Surge 配置内容</Label>
+			  <Label>YAML / Surge / Loon 配置内容</Label>
               <Textarea
                 value={pasteContent}
                 onChange={(e) => setPasteContent(e.target.value)}

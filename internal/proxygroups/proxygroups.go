@@ -19,6 +19,7 @@ var (
 	ErrDownloadFailed = errors.New("proxy groups config download failed")
 )
 
+// 注:代理组配置源为管理员配置(且默认公共 URL),允许指向 LAN/自建源,故用普通客户端。
 var httpClient = &http.Client{
 	Timeout: 30 * time.Second,
 }

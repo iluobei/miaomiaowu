@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { RefreshCw, ShieldBan, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,7 +28,6 @@ export const Route = createFileRoute('/logs')({
 function LogsPage() {
   return (
     <div className='min-h-svh bg-background'>
-      <Topbar />
       <main className='mx-auto max-w-6xl px-4 pb-10 pt-24'>
         <h1 className='text-3xl font-semibold'>日志管理</h1>
         <p className='mt-2 text-muted-foreground'>查看安全事件、当前封禁和后台任务执行结果。</p>

@@ -36,14 +36,15 @@ func main() {
 	// 启动日志清理任务（每天凌晨3点清理7天前的日志）
 	go startLogCleanup()
 
-	addr := getAddr()
-
 	repo, err := storage.NewTrafficRepository(filepath.Join("data", "traffic.db"))
 	if err != nil {
 		logger.Error("流量数据库初始化失败", "error", err)
 		os.Exit(1)
 	}
 	defer repo.Close()
+
+	// getAddr 需要 repo:「仅本机访问」开关(issue #106)存在库里,启动时读出来决定绑哪个地址。
+	addr := getAddr(repo)
 
 	authManager, err := auth.NewManager(repo)
 	if err != nil {
@@ -175,8 +176,8 @@ func main() {
 	mux.Handle("/api/admin/credentials", auth.RequireAdmin(tokenStore, userRepo, handler.NewCredentialsHandler(authManager, tokenStore)))
 	mux.Handle("/api/admin/users", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserListHandler(repo)))
 	mux.Handle("/api/admin/users/create", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserCreateHandler(repo)))
-	mux.Handle("/api/admin/users/delete", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserDeleteHandler(repo)))
-	mux.Handle("/api/admin/users/status", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserStatusHandler(repo)))
+	mux.Handle("/api/admin/users/delete", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserDeleteHandler(repo, tokenStore)))
+	mux.Handle("/api/admin/users/status", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserStatusHandler(repo, tokenStore)))
 	mux.Handle("/api/admin/users/reset-password", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserResetPasswordHandler(repo)))
 	mux.Handle("/api/admin/users/remark", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserRemarkHandler(repo)))
 	mux.Handle("/api/admin/users/custom-short-code", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserCustomShortCodeHandler(repo)))
@@ -221,6 +222,31 @@ func main() {
 	mux.Handle("/api/admin/notify-config", auth.RequireAdmin(tokenStore, userRepo, handler.NewNotifyConfigHandler(repo)))
 	mux.Handle("/api/admin/notify-config/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNotifyConfigHandler(repo)))
 
+	// 面板壁纸 / 液态玻璃外观:配置变更时把壁纸 CSS、色调、降透明度同步进首屏注入(见 internal/web/handler.go)。
+	// 壁纸落盘到 data/wallpapers/,公开可读(登录页也在同一个玻璃壳里,背景要在登录前就正确)。
+	systemSettingsHandler := handler.NewSystemSettingsHandler(repo)
+	systemSettingsHandler.SetDataDir("data")
+	syncPanelAppearance := func(cfg handler.PanelWallpaperConfig) {
+		web.SetPanelAppearance(handler.PanelWallpaperCSS(cfg), cfg.Tone, cfg.ReduceTransparency)
+	}
+	systemSettingsHandler.SetOnPanelWallpaperChanged(syncPanelAppearance)
+	syncPanelAppearance(handler.LoadPanelWallpaperConfig(ctx, repo)) // 启动预热
+	mux.Handle("/api/admin/system-settings/panel-wallpaper", auth.RequireAdmin(tokenStore, userRepo, systemSettingsHandler))
+	mux.Handle("/api/admin/system-settings/panel-wallpaper/upload", auth.RequireAdmin(tokenStore, userRepo, systemSettingsHandler))
+	mux.HandleFunc("/api/public/panel-wallpaper", systemSettingsHandler.GetPanelWallpaperPublic)
+	mux.HandleFunc("/wallpapers/", systemSettingsHandler.ServeWallpaperFile)
+
+	// 仅本机访问开关(issue #106)。改后重启生效(监听地址启动时定死,见 getAddr)。
+	mux.Handle("/api/admin/access-control", auth.RequireAdmin(tokenStore, userRepo, handler.NewAccessControlHandler(repo)))
+
+	// 规则集(clash rule-providers)托管:管理端 CRUD + 公开下载。
+	// 下载端点必须公开 —— 拉它的是 mihomo/clash 客户端,没有登录态;挂在 /rules/ 而非 /api/ 下。
+	ruleProvidersHandler := handler.NewRuleProvidersHandler(repo)
+	mux.Handle("/api/admin/rule-providers", auth.RequireAdmin(tokenStore, userRepo, ruleProvidersHandler))
+	mux.Handle("/api/admin/rule-providers/", auth.RequireAdmin(tokenStore, userRepo, ruleProvidersHandler))
+	mux.HandleFunc(handler.RuleProviderURLPrefix, ruleProvidersHandler.ServeRuleProviderFile)
+	handler.StartRuleProviderRefresher(context.Background(), repo)
+
 	// TCPing endpoint (admin only)
 	mux.Handle("/api/admin/tcping", auth.RequireAdmin(tokenStore, userRepo, handler.NewTCPingHandler()))
 	mux.Handle("/api/admin/tcping/batch", auth.RequireAdmin(tokenStore, userRepo, handler.NewTCPingBatchHandler()))
@@ -259,7 +285,10 @@ func main() {
 	mux.Handle("/api/clash/subscribe", handler.NewSubscriptionEndpoint(tokenStore, repo, subscribeDir))
 
 	// Short link reset endpoint (authenticated)
-	mux.Handle("/api/user/short-link", auth.RequireToken(tokenStore, handler.NewShortLinkResetHandler(repo)))
+	// [安全] 该接口重置的是【全部】订阅短码(subscribe_files/subscription_links 是全局资源,
+	// 无 per-user 归属),因此必须管理员才能调 —— 否则任意用户可一键作废所有人的短链(共享资源 DoS)。
+	// 普通用户设置自己短码用的是 /api/user/custom-short-code。
+	mux.Handle("/api/user/short-link", auth.RequireAdmin(tokenStore, userRepo, handler.NewShortLinkResetHandler(repo)))
 	mux.Handle("/api/user/custom-short-code", auth.RequireToken(tokenStore, handler.NewUserCustomShortCodeSelfHandler(repo)))
 
 	// Speed test endpoints
@@ -429,12 +458,29 @@ func startDatabaseLogCleanup(ctx context.Context, repo *storage.TrafficRepositor
 	}
 }
 
-func getAddr() string {
+func getAddr(repo *storage.TrafficRepository) string {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	return ":" + port
+
+	// 显式指定监听地址的 env 优先(HOST / BIND_HOST),给了就照办、不再看开关。
+	host := os.Getenv("HOST")
+	if host == "" {
+		host = os.Getenv("BIND_HOST")
+	}
+
+	// 「仅本机访问」开关(issue #106):绑到 127.0.0.1,只能本机 / 隧道访问。
+	//   - 逃生阀 FORCE_PUBLIC_ACCESS=1:被锁在外面时强制恢复公网监听。
+	//   - Docker 里忽略 —— 容器内 127.0.0.1 收不到宿主转发进来的端口,一开就自锁。
+	if host == "" && os.Getenv("FORCE_PUBLIC_ACCESS") != "1" && !handler.IsDockerEnvironment() {
+		if v, _ := repo.GetSystemSetting(context.Background(), handler.MasterLocalOnlyKey); v == "1" {
+			host = "127.0.0.1"
+			logger.Info("仅本机访问已开启,监听绑定到 127.0.0.1")
+		}
+	}
+
+	return host + ":" + port
 }
 
 // reservedFrontendRoutes 是前端 SPA 的顶层路由名（单段、纯字母数字的那些，需与

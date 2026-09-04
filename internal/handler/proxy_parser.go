@@ -7,10 +7,10 @@ import "github.com/MMWOrg/mmwX-plugins/proxyparser"
 
 // ParseProxyURL 解析单个代理 URI,返回 clash 风格字段的 map。
 func ParseProxyURL(uri string) (map[string]any, error) {
-	return proxyparser.Parse(uri)
+	return proxyparser.Parse(normalizeMieruShareURI(uri))
 }
 
 // ParseV2raySubscription 解析 v2ray 订阅内容(base64 或明文多行 URI)。
 func ParseV2raySubscription(content string) ([]map[string]any, error) {
-	return proxyparser.ParseSubscription(content)
+	return proxyparser.ParseSubscription(rewriteMierusInContent(content))
 }

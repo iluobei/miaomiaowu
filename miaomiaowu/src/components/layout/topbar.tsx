@@ -14,6 +14,7 @@ import {
   Settings,
   FileStack,
 	ScrollText,
+  ListChecks,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { profileQueryFn } from '@/lib/profile'
@@ -66,6 +67,11 @@ const adminNavLinks = [
     title: '覆写管理',
     to: '/custom-rules',
     icon: FileCode,
+  },
+  {
+    title: '规则集',
+    to: '/rule-providers',
+    icon: ListChecks,
   },
   {
     title: '探针管理',
@@ -193,8 +199,12 @@ export function Topbar() {
           </Link>
 
           {/* Desktop Navigation - Base links + Admin links */}
+          {/* data-glass-nav:液态玻璃「流动滑块」指示器的容器锚点(见 lib/glass-indicator.ts),
+              滑块对第一层子项(data-nav-item)做布局动画,选中项由 TanStack Link 自动打的
+              data-status="active" 标出。非 glass 主题下这些属性完全无副作用。 */}
           <nav
             ref={navRef}
+            data-glass-nav
             className='hidden items-center gap-2 md:flex md:gap-3'
           >
             {allNavLinks.map(({ title, to, icon: Icon }, index) => {
@@ -205,6 +215,7 @@ export function Topbar() {
                 <Link
                   key={to}
                   to={to}
+                  data-nav-item
                   aria-label={title}
                   title={title}
                   className={`pixel-button bg-background/75 text-foreground hover:bg-accent/35 hover:text-accent-foreground dark:bg-input/30 dark:hover:bg-accent/45 dark:hover:text-accent-foreground inline-flex h-9 items-center gap-2 border-[color:rgba(137,110,96,0.45)] py-2 text-sm font-semibold tracking-widest whitespace-nowrap uppercase transition-all dark:border-[color:rgba(255,255,255,0.18)] ${

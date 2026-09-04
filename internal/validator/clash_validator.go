@@ -197,10 +197,11 @@ func validateProxyGroups(groups []interface{}, proxies []interface{}) *GroupVali
 
 	seenNames := make(map[string]bool)
 	specialNodes := map[string]bool{
-		"DIRECT": true,
-		"REJECT": true,
-		"PROXY":  true,
-		"PASS":   true,
+		"DIRECT":      true,
+		"REJECT":      true,
+		"REJECT-DROP": true,
+		"PROXY":       true,
+		"PASS":        true,
 	}
 
 	// 常见拼写错误修正

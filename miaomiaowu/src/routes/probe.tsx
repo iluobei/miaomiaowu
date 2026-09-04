@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
 import { api } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { profileQueryFn } from '@/lib/profile'
@@ -451,7 +450,6 @@ function ProbeManagePage() {
   if (profileLoading || (isAdmin && configLoading)) {
     return (
       <div className='min-h-svh bg-background'>
-        <Topbar />
         <main className='mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 pt-24'>
           <Card className='border-dashed shadow-none'>
             <CardHeader>
@@ -474,7 +472,6 @@ function ProbeManagePage() {
   if (!isAdmin) {
     return (
       <div className='min-h-svh bg-background'>
-        <Topbar />
         <main className='mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-4 px-4 py-20 text-center sm:px-6 pt-24'>
           <Card className='w-full border-dashed shadow-none'>
             <CardHeader>
@@ -489,7 +486,6 @@ function ProbeManagePage() {
 
   return (
     <div className='min-h-svh bg-background'>
-      <Topbar />
       <main className='mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 pt-24'>
         <form className='space-y-8' onSubmit={handleSubmit}>
           <section className='space-y-2'>

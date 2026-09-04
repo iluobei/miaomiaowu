@@ -34,6 +34,7 @@ type userConfigRequest struct {
 	SilentMode               bool    `json:"silent_mode"`
 	SilentModeTimeout        int     `json:"silent_mode_timeout"`
 	EnableSubInfoNodes       bool    `json:"enable_sub_info_nodes"`
+	SubInfoV2RayOnly         bool    `json:"sub_info_v2ray_only"`
 	SubInfoExpirePrefix      string  `json:"sub_info_expire_prefix"`
 	SubInfoTrafficPrefix     string  `json:"sub_info_traffic_prefix"`
 	EnableSubTrafficHeader   bool    `json:"enable_sub_traffic_header"`
@@ -74,6 +75,7 @@ type userConfigResponse struct {
 	SilentMode               bool    `json:"silent_mode"`
 	SilentModeTimeout        int     `json:"silent_mode_timeout"`
 	EnableSubInfoNodes       bool    `json:"enable_sub_info_nodes"`
+	SubInfoV2RayOnly         bool    `json:"sub_info_v2ray_only"`
 	SubInfoExpirePrefix      string  `json:"sub_info_expire_prefix"`
 	SubInfoTrafficPrefix     string  `json:"sub_info_traffic_prefix"`
 	EnableSubTrafficHeader   bool    `json:"enable_sub_traffic_header"`
@@ -149,6 +151,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 				SilentMode:               systemConfig.SilentMode,
 				SilentModeTimeout:        systemConfig.SilentModeTimeout,
 				EnableSubInfoNodes:       systemConfig.EnableSubInfoNodes,
+				SubInfoV2RayOnly:         systemConfig.SubInfoV2RayOnly,
 				SubInfoExpirePrefix:      systemConfig.SubInfoExpirePrefix,
 				SubInfoTrafficPrefix:     systemConfig.SubInfoTrafficPrefix,
 				EnableSubTrafficHeader:   systemConfig.EnableSubTrafficHeader,
@@ -196,6 +199,7 @@ func handleGetUserConfig(w http.ResponseWriter, r *http.Request, repo *storage.T
 		SilentMode:               systemConfig.SilentMode,
 		SilentModeTimeout:        systemConfig.SilentModeTimeout,
 		EnableSubInfoNodes:       systemConfig.EnableSubInfoNodes,
+		SubInfoV2RayOnly:         systemConfig.SubInfoV2RayOnly,
 		SubInfoExpirePrefix:      systemConfig.SubInfoExpirePrefix,
 		SubInfoTrafficPrefix:     systemConfig.SubInfoTrafficPrefix,
 		EnableSubTrafficHeader:   systemConfig.EnableSubTrafficHeader,
@@ -232,8 +236,8 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	if matchRule == "" {
 		matchRule = "node_name"
 	}
-	if matchRule != "node_name" && matchRule != "server_port" && matchRule != "type_server_port" {
-		writeError(w, http.StatusBadRequest, errors.New("match_rule must be 'node_name', 'server_port', or 'type_server_port'"))
+	if matchRule != "node_name" && matchRule != "server_port" && matchRule != "type_server_port" && matchRule != "type_server_port_cred" {
+		writeError(w, http.StatusBadRequest, errors.New("match_rule must be 'node_name', 'server_port', 'type_server_port', or 'type_server_port_cred'"))
 		return
 	}
 
@@ -292,6 +296,43 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		return
 	}
 
+	// [安全] 全局系统配置(限流/防爆破/静默/代理组源等)只有管理员能改。
+	// 这个 /api/user/config 接口任意登录用户可达 —— 若不拦,普通用户就能关掉全站防爆破/登录限流
+	// 再爆破管理员,或把 proxy_groups_source_url 指向内网做 SSRF 跳板。
+	// 对非管理员:把 payload 里的所有系统字段回填成当前 DB 值,下面的写入即成为无副作用的原样回写。
+	callerIsAdmin := false
+	if u, uerr := repo.GetUser(r.Context(), username); uerr == nil && u.Role == storage.RoleAdmin {
+		callerIsAdmin = true
+	}
+	if !callerIsAdmin {
+		cur, _ := repo.GetSystemConfig(r.Context())
+		proxyGroupsSourceURL = cur.ProxyGroupsSourceURL
+		payload.ProxyGroupsSourceURL = cur.ProxyGroupsSourceURL
+		payload.ClientCompatibilityMode = cur.ClientCompatibilityMode
+		payload.SilentMode = cur.SilentMode
+		payload.SilentModeTimeout = cur.SilentModeTimeout
+		payload.EnableSubInfoNodes = cur.EnableSubInfoNodes
+		payload.SubInfoV2RayOnly = cur.SubInfoV2RayOnly
+		payload.SubInfoExpirePrefix = cur.SubInfoExpirePrefix
+		payload.SubInfoTrafficPrefix = cur.SubInfoTrafficPrefix
+		payload.EnableShortLink = cur.EnableShortLink
+		payload.EnableSubTrafficHeader = cur.EnableSubTrafficHeader
+		payload.EnableOverrideScripts = cur.EnableOverrideScripts
+		payload.SubscriptionOutputFormat = cur.SubscriptionOutputFormat
+		payload.LoginRateMaxAttempts = cur.LoginRateMaxAttempts
+		payload.LoginRateWindow = cur.LoginRateWindow
+		payload.LoginRateLockDuration = cur.LoginRateLockDuration
+		payload.BruteForceEnabled = cur.BruteForceEnabled
+		payload.BruteForceMaxFailures = cur.BruteForceMaxFailures
+		payload.BruteForceWindow = cur.BruteForceWindow
+		payload.BruteForceBlockDuration = cur.BruteForceBlockDuration
+		payload.SubRateLimitEnabled = cur.SubRateLimitEnabled
+		payload.SubRateLimitMax = cur.SubRateLimitMax
+		payload.SubRateLimitWindow = cur.SubRateLimitWindow
+		payload.SkipLocalIP = cur.SkipLocalIP
+		payload.BlockUnknownSubUA = cur.BlockUnknownSubUA
+	}
+
 	// Update system config with proxy groups source URL and silent mode
 	silentModeTimeout := payload.SilentModeTimeout
 	if silentModeTimeout <= 0 {
@@ -322,6 +363,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 	systemConfig.SilentMode = payload.SilentMode
 	systemConfig.SilentModeTimeout = silentModeTimeout
 	systemConfig.EnableSubInfoNodes = payload.EnableSubInfoNodes
+	systemConfig.SubInfoV2RayOnly = payload.SubInfoV2RayOnly
 	systemConfig.SubInfoExpirePrefix = subInfoExpirePrefix
 	systemConfig.SubInfoTrafficPrefix = subInfoTrafficPrefix
 	systemConfig.EnableShortLink = payload.EnableShortLink
@@ -401,6 +443,7 @@ func handleUpdateUserConfig(w http.ResponseWriter, r *http.Request, repo *storag
 		SilentMode:               payload.SilentMode,
 		SilentModeTimeout:        silentModeTimeout,
 		EnableSubInfoNodes:       payload.EnableSubInfoNodes,
+		SubInfoV2RayOnly:         payload.SubInfoV2RayOnly,
 		SubInfoExpirePrefix:      subInfoExpirePrefix,
 		SubInfoTrafficPrefix:     subInfoTrafficPrefix,
 		EnableSubTrafficHeader:   payload.EnableSubTrafficHeader,

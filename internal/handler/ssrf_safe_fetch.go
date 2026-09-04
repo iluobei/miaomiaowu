@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -87,7 +88,21 @@ func ssrfSafeDialContext(dialer *net.Dialer) func(context.Context, string, strin
 }
 
 func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
+	return newSSRFSafeHTTPClientTLS(timeout, false)
+}
+
+// newSSRFSafeHTTPClientTLS 同上,但允许可选地跳过 TLS 证书校验(仅用于拉取订阅内容的场景,
+// 由调用方显式传 true)。SSRF 拨号防护始终生效,不受 insecureSkipVerify 影响。
+func newSSRFSafeHTTPClientTLS(timeout time.Duration, insecureSkipVerify bool) *http.Client {
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		DialContext:           ssrfSafeDialContext(dialer),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 20 * time.Second,
+	}
+	if insecureSkipVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	return &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -99,10 +114,6 @@ func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
 			}
 			return nil
 		},
-		Transport: &http.Transport{
-			DialContext:           ssrfSafeDialContext(dialer),
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 20 * time.Second,
-		},
+		Transport: transport,
 	}
 }

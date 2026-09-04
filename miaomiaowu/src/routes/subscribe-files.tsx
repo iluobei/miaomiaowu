@@ -1,6 +1,5 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
-import { Topbar } from '@/components/layout/topbar'
 
 export const Route = createFileRoute('/subscribe-files')({
   beforeLoad: async () => {
@@ -15,7 +14,6 @@ export const Route = createFileRoute('/subscribe-files')({
 function SubscribeFilesLayout() {
   return (
     <div className='min-h-svh bg-background'>
-      <Topbar />
       <Outlet />
     </div>
   )

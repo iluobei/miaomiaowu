@@ -36,7 +36,8 @@ export function ExternalSyncNodeDialog({ selection, saving, onSelectionChange, o
   const toggle = (id: string, checked: boolean) => {
     if (!selection) return
     const next = new Set(selection.selectedIds)
-    checked ? next.add(id) : next.delete(id)
+    if (checked) next.add(id)
+    else next.delete(id)
     onSelectionChange(next)
   }
   return <Dialog open={Boolean(selection)} onOpenChange={(open) => !open && !saving && onCancel()}>

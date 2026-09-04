@@ -395,13 +395,13 @@ func autoAddMissingProxyGroups(docNode *yaml.Node) []string {
 					policy = lastPart
 				}
 				// Skip built-in policies
-				if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+				if policy != "DIRECT" && policy != "REJECT" && policy != "REJECT-DROP" && policy != "PROXY" && policy != "" {
 					referencedGroups[policy] = true
 				}
 			} else if len(parts) == 2 {
 				// MATCH,POLICY format
 				policy := strings.TrimSpace(parts[1])
-				if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+				if policy != "DIRECT" && policy != "REJECT" && policy != "REJECT-DROP" && policy != "PROXY" && policy != "" {
 					referencedGroups[policy] = true
 				}
 			}
@@ -507,7 +507,7 @@ func extractProxyGroupsFromRulesContent(content string) []string {
 				policy = lastPart
 			}
 			// Skip built-in policies
-			if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+			if policy != "DIRECT" && policy != "REJECT" && policy != "REJECT-DROP" && policy != "PROXY" && policy != "" {
 				if !groupSet[policy] {
 					groupSet[policy] = true
 					groups = append(groups, policy)
@@ -515,7 +515,7 @@ func extractProxyGroupsFromRulesContent(content string) []string {
 			}
 		} else if len(parts) == 2 {
 			policy := strings.TrimSpace(parts[1])
-			if policy != "DIRECT" && policy != "REJECT" && policy != "PROXY" && policy != "" {
+			if policy != "DIRECT" && policy != "REJECT" && policy != "REJECT-DROP" && policy != "PROXY" && policy != "" {
 				if !groupSet[policy] {
 					groupSet[policy] = true
 					groups = append(groups, policy)

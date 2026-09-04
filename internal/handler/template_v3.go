@@ -267,6 +267,12 @@ func (h *TemplateV3Handler) handlePreviewWithTags(w http.ResponseWriter, r *http
 
 // processV3Template processes a v3 template with the given proxies
 func (h *TemplateV3Handler) processV3Template(templateContent string, proxies []map[string]any) (string, error) {
+	// Loon 判断必须在 Surge 之前:两者段头几乎一样([General]/[Proxy]/[Proxy Group]/[Rule]
+	// 都有),looksLikeSurgeTemplate 对 Loon 模板会全部命中,于是按 Surge 的节点行格式注入,
+	// 产出一份 Loon 读不了的配置。
+	if looksLikeLoonTemplate(templateContent) {
+		return injectProxiesIntoLoonTemplate(templateContent, proxies)
+	}
 	if looksLikeSurgeTemplate(templateContent) {
 		return injectProxiesIntoSurgeTemplate(templateContent, proxies)
 	}
@@ -292,6 +298,21 @@ func looksLikeSurgeTemplate(content string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "[general]", "[proxy]", "[proxy group]", "[rule]":
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeLoonTemplate 只认 Loon 独有的段头 —— Surge 没有这几个段,用它们把 Loon 和
+// Surge 区分开(两者的 [General]/[Proxy]/[Rule] 段头是一样的,不能作数)。
+func looksLikeLoonTemplate(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.EqualFold(trimmed, "[Remote Rule]"), // Surge 用 [Rule] 里的 RULE-SET
+			strings.EqualFold(trimmed, "[Proxy Chain]"), // Surge 没有这个段
+			strings.EqualFold(trimmed, "[Plugin]"):      // Surge 用 [Script]
 			return true
 		}
 	}
@@ -759,18 +780,20 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 			continue
 		}
 		name := entry.Name()
-		isSurge := strings.HasSuffix(strings.ToLower(name), ".conf")
-		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || isSurge {
+		isSurge := isSurgeTemplateFile(name)
+		isLoon := isLoonTemplateFile(name)
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || isSurge || isLoon {
 			displayName := strings.TrimSuffix(name, ".yaml")
 			displayName = strings.TrimSuffix(displayName, ".yml")
 			displayName = strings.TrimSuffix(displayName, ".conf")
+			displayName = strings.TrimSuffix(displayName, ".lcf")
 			displayName = strings.TrimSuffix(displayName, "_v3")
 			displayName = strings.TrimSuffix(displayName, "__v3")
 			displayName = strings.ReplaceAll(displayName, "_", " ")
 
-			// 提取模板自定义变量
+			// 提取模板自定义变量(仅 clash 模板走 v3 变量系统;surge/loon 是纯文本段落)
 			var variables map[string]string
-			if !isSurge {
+			if !isSurge && !isLoon {
 				content, err := os.ReadFile(filepath.Join(templatesDir, name))
 				if err == nil {
 					variables = substore.ExtractTemplateVariables(string(content))
@@ -779,6 +802,8 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 			templateType := "clash"
 			if isSurge {
 				templateType = "surge"
+			} else if isLoon {
+				templateType = "loon"
 			}
 
 			templates = append(templates, templateInfo{

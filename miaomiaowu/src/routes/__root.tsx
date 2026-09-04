@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { type QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
+import {
+  createRootRouteWithContext,
+  Outlet,
+  useRouterState,
+} from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { useAuthStore } from '@/stores/auth-store'
@@ -8,10 +12,18 @@ import { Toaster } from '@/components/ui/sonner'
 import { AnimeStarfield } from '@/components/anime-starfield'
 import { DebugFloatingViewer } from '@/components/debug-floating-viewer'
 import { NavigationProgress } from '@/components/navigation-progress'
+import { Topbar } from '@/components/layout/topbar'
 
 function RootComponent() {
   const [isMobile, setIsMobile] = useState(false)
   const { auth } = useAuthStore()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+
+  // Topbar 挂在根组件里、只渲染一次:页面间导航时它不再卸载重建 —— 既省掉每次
+  // 重新测量溢出/重新拉 profile,也让液态玻璃的「流动滑块」能真正滑动而不是跳变
+  // (滑块靠对同一个持久 DOM 容器做布局动画,topbar 每页重建就没有「上一个位置」可动)。
+  const showTopbar =
+    Boolean(auth.accessToken) && pathname !== '/login' && pathname !== '/404'
 
   useEffect(() => {
     const checkMobile = () => {
@@ -28,6 +40,7 @@ function RootComponent() {
     <>
       <NavigationProgress />
       {auth.accessToken && <AnimeStarfield />}
+      {showTopbar && <Topbar />}
       <Outlet />
       <DebugFloatingViewer />
       <Toaster

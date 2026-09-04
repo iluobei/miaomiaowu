@@ -43,6 +43,11 @@ func NewTwoFactorLoginHandler(tokens *auth.TokenStore, repo *storage.TrafficRepo
 		}
 
 		if !auth.ValidateTOTPCode(user.TOTPSecret, strings.TrimSpace(payload.Code)) {
+			// [安全] 限制爆破:达到上限即作废该 2FA 令牌,迫使重新走(有限流的)密码登录。
+			if tfStore.RecordFailure(payload.TwoFactorToken) {
+				writeError(w, http.StatusUnauthorized, errors.New("尝试次数过多,请重新登录"))
+				return
+			}
 			writeError(w, http.StatusUnauthorized, errors.New("invalid 2FA code"))
 			return
 		}
@@ -88,6 +93,11 @@ func NewRecoveryLoginHandler(tokens *auth.TokenStore, repo *storage.TrafficRepos
 
 		valid, _ := auth.ValidateRecoveryCode(payload.RecoveryCode, hashedCodes)
 		if !valid {
+			// [安全] 同 2FA:限制爆破,达到上限作废令牌。
+			if tfStore.RecordFailure(payload.TwoFactorToken) {
+				writeError(w, http.StatusUnauthorized, errors.New("尝试次数过多,请重新登录"))
+				return
+			}
 			writeError(w, http.StatusUnauthorized, errors.New("invalid recovery code"))
 			return
 		}

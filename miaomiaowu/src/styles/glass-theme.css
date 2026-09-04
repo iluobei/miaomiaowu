@@ -1,0 +1,743 @@
+/* 液态玻璃主题 —— 半透明壳体 + 折射高光 + 可自定义壁纸背景。
+ *
+ * 与其他四套主题的区别:它依赖一个「背景层」。玻璃需要有东西可以折射,没有背景的
+ * 玻璃只是一块灰。所以壁纸不是附加功能,是主题的组成部分,默认就带一张内置极光。
+ *
+ * 材质是三层叠出来的,只加 backdrop-filter 得到的是毛玻璃,不是液态玻璃:
+ *   ① blur + saturate  —— 提饱和是必要的,模糊会把背景颜色冲淡,不拉回来玻璃后面就发灰
+ *   ② 一像素边         —— 四周均匀细环 + 顶部高光,玻璃的「厚度感」全在这一像素里
+ *   ③ 折射高光         —— 只占左上 40% 的斜向白渐变,模拟光从弧面滑过
+ *
+ * 层级不靠边框和阴影,靠材质厚度:壳(侧栏/顶栏/弹层)> 卡片 > 内嵌控件。
+ */
+
+:root.theme-glass,
+:root.theme-glass.dark {
+  color-scheme: dark;
+  /* 圆角:12px 基准。第一版给到 18/22px,实际用起来太圆、像手机 App 的胶囊卡片,
+     而这是个信息密度高的管理面板。对照:扁平 10px、高级黑金 2px。 */
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.875rem;
+
+  --brand-50: #eef8ff;
+  --brand-100: #d6efff;
+  --brand-200: #b0e1ff;
+  --brand-300: #7fceff;
+  --brand-400: #4cb8f5;
+  --brand-500: #2a9fe0;
+  --brand-600: #1a81bd;
+  --brand-700: #166594;
+  --brand-800: #154e70;
+  --brand-900: #10344a;
+  --brand: var(--brand-400);
+  --brand-light: var(--brand-200);
+  --brand-dark: var(--brand-700);
+
+  /* 底色:墨蓝而不是纯黑。玻璃在纯黑上折射不出层次,而墨蓝能托住天青的高光。
+   主色选天青而不是原先的海玻璃青:后者在实际面板上读成一抹突兀的绿(用户反馈),
+   而天青与极光里的琥珀光斑成互补,冷暖对撞才是这套主题想要的关系。 */
+  --background: #0b1220;
+  --foreground: #eef3f8;
+  /* card / popover 设为透明:实际填充由 .glass 材质给,token 只负责让不认识玻璃的
+   * 组件仍有个合理底色(见文件末尾的兜底段)。 */
+  --card: rgba(255, 255, 255, 0.085);
+  --card-foreground: #eef3f8;
+  --popover: rgba(16, 24, 38, 0.72);
+  --popover-foreground: #eef3f8;
+  --primary: #4cb8f5;
+  --primary-foreground: #04202e;
+  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary-foreground: #d3ecff;
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: rgba(238, 243, 248, 0.68);
+  --accent: rgba(76, 184, 245, 0.18);
+  --accent-foreground: #d6efff;
+  --destructive: #ff6b6b;
+  --border: rgba(255, 255, 255, 0.16);
+  --input: rgba(255, 255, 255, 0.22);
+  --ring: rgba(76, 184, 245, 0.6);
+  --chart-1: #4cb8f5;
+  --chart-2: #f0a35b;
+  --chart-3: #c9d6ff;
+  --chart-4: #4fd18b;
+  --chart-5: #ff8fa3;
+  --sidebar: rgba(16, 24, 38, 0.55);
+  --sidebar-foreground: #eef3f8;
+  --sidebar-primary: #4cb8f5;
+  --sidebar-primary-foreground: #04202e;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #d6efff;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-ring: rgba(76, 184, 245, 0.55);
+
+  /* ---- 玻璃材质:三档厚度 ---- */
+  --g-shell-fill: rgba(16, 24, 38, 0.55);
+  --g-shell-blur: 28px;
+  --g-card-fill: rgba(255, 255, 255, 0.085);
+  --g-card-blur: 22px;
+  --g-inset-fill: rgba(255, 255, 255, 0.06);
+  --g-inset-blur: 14px;
+  /* --g-edge 是顶部高光(光从上方来),--g-ring 是四周均匀的一圈细边。
+   * 第一版把两者合成 `inset 1px 1px 0` 的对角偏移,在圆角上会被拉成一道不对称的
+   * 糊边 —— 看起来就像卡片外面套了个奇怪的框(用户反馈)。拆成「环 + 顶光」之后
+   * 边界干净地跟着圆角走。 */
+  --g-edge: rgba(255, 255, 255, 0.22);
+  --g-edge-soft: rgba(255, 255, 255, 0.1);
+  --g-ring: rgba(255, 255, 255, 0.12);
+  /* 滑动指示器:主色淡染 + 稍强的环。深色下白玻璃勉强能看,浅色下完全看不出,
+   * 所以两套都用主色 —— 选中态的可辨性不该依赖明暗。 */
+  --g-indicator-fill: rgba(76, 184, 245, 0.2);
+  --g-indicator-ring: rgba(76, 184, 245, 0.55);
+  --g-sheen: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0) 42%
+  );
+  --g-shadow: 0 18px 40px rgba(2, 6, 14, 0.45);
+
+  /* ---- 背景层。--g-dim 与 --g-wallpaper 由后端注入首屏(见 PanelWallpaperCSS) ---- */
+  --g-ground: #0b1220;
+  --g-scrim: rgba(6, 10, 18, var(--g-dim, 0.22));
+  --g-tone-a: 76, 184, 245;
+  --g-tone-b: 240, 163, 91;
+  --g-tone-c: 201, 214, 255;
+  --g-tone-a-alpha: 0.55;
+  --g-tone-b-alpha: 0.42;
+  --g-tone-c-alpha: 0.3;
+}
+
+/* 浅色是一套独立配色,不是把深色反过来 —— 浅玻璃要更白更实,否则文字压不住。 */
+:root.theme-glass.light {
+  color-scheme: light;
+  --brand: #1a81bd;
+  --brand-light: #7fceff;
+  --brand-dark: #166594;
+  --background: #e8eef5;
+  --foreground: #16202b;
+  --card: rgba(255, 255, 255, 0.5);
+  --card-foreground: #16202b;
+  --popover: rgba(255, 255, 255, 0.86);
+  --popover-foreground: #16202b;
+  --primary: #0c6d92;
+  --primary-foreground: #f2fbff;
+  --secondary: rgba(255, 255, 255, 0.6);
+  --secondary-foreground: #166594;
+  --muted: rgba(255, 255, 255, 0.45);
+  --muted-foreground: rgba(22, 32, 43, 0.66);
+  --accent: rgba(12, 109, 146, 0.14);
+  --accent-foreground: #0d5878;
+  --destructive: #d64545;
+  --border: rgba(22, 32, 43, 0.14);
+  --input: rgba(22, 32, 43, 0.2);
+  --ring: rgba(12, 109, 146, 0.5);
+  --chart-1: #0c6d92;
+  --chart-2: #d9822b;
+  --chart-3: #5b7cc4;
+  --chart-4: #1f9d5c;
+  --chart-5: #c2506b;
+  --sidebar: rgba(255, 255, 255, 0.62);
+  --sidebar-foreground: #16202b;
+  --sidebar-primary: #0c6d92;
+  --sidebar-primary-foreground: #f2fbff;
+  --sidebar-accent: rgba(255, 255, 255, 0.7);
+  --sidebar-accent-foreground: #0d5878;
+  --sidebar-border: rgba(22, 32, 43, 0.1);
+  --sidebar-ring: rgba(12, 109, 146, 0.45);
+
+  --g-shell-fill: rgba(255, 255, 255, 0.62);
+  --g-card-fill: rgba(255, 255, 255, 0.5);
+  --g-inset-fill: rgba(255, 255, 255, 0.42);
+  --g-edge: rgba(255, 255, 255, 0.75);
+  --g-edge-soft: rgba(22, 32, 43, 0.1);
+  --g-ring: rgba(22, 32, 43, 0.09);
+  --g-indicator-fill: rgba(12, 109, 146, 0.16);
+  --g-indicator-ring: rgba(12, 109, 146, 0.5);
+  --g-sheen: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0) 45%
+  );
+  --g-shadow: 0 18px 40px rgba(22, 32, 43, 0.16);
+  --g-ground: #e8eef5;
+  --g-scrim: rgba(232, 238, 245, var(--g-dim, 0.22));
+  --g-tone-a-alpha: 0.42;
+  --g-tone-b-alpha: 0.36;
+  --g-tone-c-alpha: 0.22;
+}
+
+/* Tailwind 的 rounded-* 在**构建时**就被内联成了 border-radius:0(默认主题
+ * --radius 为 0),所以光改 --radius 这个 token 一点用都没有 —— 必须逐个重写工具类。
+ * flat / premium 两套主题都这么干,液态玻璃第一版漏了这步,表现为整个面板全是直角。
+ *
+ * 玻璃要圆角不是审美偏好:直角配上半透明和折射高光会像贴上去的塑料片,
+ * 弧面才有「一块玻璃」的读感。 */
+:root.theme-glass .rounded-xs {
+  border-radius: 0.3125rem;
+}
+:root.theme-glass .rounded-sm {
+  border-radius: var(--radius-sm);
+}
+:root.theme-glass .rounded-md {
+  border-radius: var(--radius-md);
+}
+:root.theme-glass .rounded-lg {
+  border-radius: var(--radius-lg);
+}
+:root.theme-glass .rounded-xl {
+  border-radius: var(--radius-xl);
+}
+:root.theme-glass .rounded-full {
+  border-radius: 9999px;
+}
+:root.theme-glass .rounded-t {
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+}
+:root.theme-glass .rounded-b {
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+:root.theme-glass .rounded-l {
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+:root.theme-glass .rounded-r {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+/* 裸 .rounded 与「单边 + 尺寸」组合。前一版只覆盖了主工具类,漏了这几个 ——
+ * 而它们恰恰用在卡片头/尾、输入框组这些最显眼的地方,表现为「大部分圆了、
+ * 还有一堆是直角」。清单是从构建产物里筛出来的(找 border-radius:0 的 .rounded-*),
+ * 不是凭印象列的:Tailwind 只会为**实际用到的**组合生成类,靠猜必然漏。 */
+:root.theme-glass .rounded {
+  border-radius: var(--radius-md);
+}
+:root.theme-glass .rounded-t-lg {
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+:root.theme-glass .rounded-b-lg {
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+:root.theme-glass .rounded-l-md {
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+:root.theme-glass .rounded-r-md {
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+/* ---- 内置极光的四个色调。只换光斑颜色,不动其余 token ---- */
+:root.theme-glass[data-glass-tone='amber'] {
+  --g-tone-a: 240, 163, 91;
+  --g-tone-b: 76, 184, 245;
+}
+:root.theme-glass[data-glass-tone='ice'] {
+  --g-tone-a: 201, 214, 255;
+  --g-tone-b: 76, 184, 245;
+}
+:root.theme-glass[data-glass-tone='graphite'] {
+  --g-tone-a: 107, 119, 133;
+  --g-tone-b: 150, 160, 172;
+  --g-tone-c: 90, 100, 112;
+}
+
+/* ============================================================
+   背景层 —— 固定在视口上,不随内容滚动
+   ============================================================ */
+:root.theme-glass body {
+  background: var(--g-ground);
+}
+
+/* 页面级容器必须透明,否则背景层白做了。
+ *
+ * page-layout 用的是 `bg-background min-h-svh` —— 一整块不透明底,直接盖住下面
+ * 固定定位的壁纸/极光层(实测:背景是一片纯墨蓝,极光完全看不见)。侧栏和顶栏同理:
+ * 它们的 bg-background/80 之类会和玻璃材质叠成两层底。
+ *
+ * 只清背景、不动其它属性 —— 材质由上面的选择器给。 */
+:root.theme-glass #root,
+:root.theme-glass .bg-background,
+:root.theme-glass [class*='bg-background/'] {
+  background-color: transparent;
+}
+
+/* 侧栏是个只带工具类的 <aside>,没有 data-slot,材质选择器抓不到它 ——
+ * 只清背景的话它会变成一块透明的框。这里按「壳」那一档补上材质。
+ * 顶栏(.app-topbar)已在材质选择器里,不用重复。 */
+:root.theme-glass aside[class*='bg-background/'] {
+  background: var(--g-shell-fill);
+  -webkit-backdrop-filter: blur(var(--g-shell-blur)) saturate(1.7);
+  backdrop-filter: blur(var(--g-shell-blur)) saturate(1.7);
+  border-color: var(--g-ring);
+  box-shadow: var(--g-shadow);
+}
+
+/* ============================================================
+   像素风组件的接管
+   ============================================================
+   默认(妙妙屋像素风)的 .pixel-* 组件样式**不在任何主题 class 下** —— 它们就是
+   index.css 里的基础样式,谁都不覆盖就一直生效。flat / anime / premium 三套主题
+   各自把这六个类整套重写了一遍,液态玻璃第一版一个都没做,表现为:顶栏导航按钮
+   仍是直角 + 像素风的橙棕描边、卡片上还压着 45° 斜纹底(用户实报)。
+
+   这也是「颜色好像没变」的来源:主色 token 确实换了(开关已经是天青),但顶栏那排
+   按钮的边框是**写死的 rgba(241,140,110,…)**,不走 token,改主色对它毫无影响。 */
+:root.theme-glass .pixel-card,
+:root.theme-glass .pixel-border {
+  border-width: 1px;
+  border-color: var(--g-ring);
+  border-radius: var(--radius);
+  background: var(--g-card-fill);
+  -webkit-backdrop-filter: blur(var(--g-card-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--g-card-blur)) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 var(--g-edge),
+    var(--g-shadow);
+}
+/* 45° 斜纹是像素风的肌理,压在玻璃上会让折射高光变脏。 */
+:root.theme-glass .pixel-card::before,
+:root.theme-glass .pixel-button::before,
+:root.theme-glass .pixel-button::after {
+  display: none;
+}
+/* 像素风的 hover 是「整块位移」,玻璃上不合适 —— 改成提亮材质。 */
+:root.theme-glass .pixel-card:hover,
+:root.theme-glass .pixel-border:hover {
+  transform: none;
+}
+
+:root.theme-glass .pixel-button {
+  border-width: 1px;
+  border-color: var(--g-ring);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+/* 底色只给「用像素风默认底(bg-background 系列)」的那些按钮。
+ *
+ * **不能无条件设 background** —— 选中态的按钮是 shadcn 的 variant="default",
+ * 靠 bg-primary + text-primary-foreground 上色。我原先在 .pixel-button 上直接写
+ * background,特异性 (0,2,0) 压过 .bg-primary (0,1,0),把选中态的深底盖成了浅玻璃,
+ * 而文字仍是浅色 —— 于是「全部(27)」这类选中按钮的字直接看不见了(用户实报)。
+ *
+ * 同理不碰 bg-destructive / bg-accent 等状态色:它们表达的是状态,不是装饰。 */
+:root.theme-glass .pixel-button[class*='bg-background'] {
+  background: var(--g-inset-fill);
+  -webkit-backdrop-filter: blur(var(--g-inset-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--g-inset-blur)) saturate(1.4);
+}
+:root.theme-glass .pixel-button:hover {
+  transform: none;
+  border-color: var(--g-edge);
+  box-shadow: 0 4px 12px rgba(2, 6, 14, 0.35);
+}
+:root.theme-glass .pixel-button:active {
+  transform: none;
+  border-color: var(--g-ring);
+}
+
+:root.theme-glass .pixel-pill,
+:root.theme-glass .pixel-badge {
+  border-width: 1px;
+  border-color: var(--g-edge-soft);
+  border-radius: 9999px;
+  box-shadow: none;
+}
+/* 像素风的文字带硬投影,在玻璃上会糊。 */
+:root.theme-glass .pixel-text {
+  text-shadow: none;
+}
+
+/* 写死的像素风描边。这些是内联在 topbar / sidebar 组件里的 Tailwind 任意值类
+ * (border-[color:rgba(241,140,110,0.22)] 之类),不走 token,只能按值点名覆盖。
+ * 不改的话主色换了它们还是橙棕的,视觉上像「颜色没生效」。
+ *
+ * 不用 !important:实测属性选择器(0,3,0)已经赢过 Tailwind 任意值类(0,1,0)。
+ * 加 !important 只会在将来挡住正当的覆盖。 */
+:root.theme-glass [class*='border-[color:rgba(241,140,110'],
+:root.theme-glass [class*='border-[color:rgba(137,110,96'] {
+  border-color: var(--g-edge-soft);
+}
+
+/* 两层伪元素:::before 是壁纸/极光,::after 是遮罩。
+ * 用 body 的伪元素而不是插 DOM,是为了不依赖 React 结构 —— 登录页、setup 页、
+ * 探针页各有自己的容器,插 DOM 就得每处都改。 */
+:root.theme-glass body::before,
+:root.theme-glass body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+:root.theme-glass body::before {
+  /* 有壁纸就用壁纸;没有就退回极光。--g-wallpaper 由后端注入,未设置时 var() 取
+   * 后面的 fallback(极光渐变),所以这里不需要 JS 判断有没有图。 */
+  background-image: var(
+    --g-wallpaper,
+    radial-gradient(
+      1100px 620px at 8% 10%,
+      rgba(var(--g-tone-a), var(--g-tone-a-alpha)),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 560px at 92% 18%,
+      rgba(var(--g-tone-b), var(--g-tone-b-alpha)),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 700px at 55% 100%,
+      rgba(var(--g-tone-c), var(--g-tone-c-alpha)),
+      transparent 62%
+    )
+  );
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+:root.theme-glass body::after {
+  z-index: -1;
+  background: var(--g-scrim);
+}
+
+/* ============================================================
+   材质
+   ============================================================ */
+:root.theme-glass .glass-surface,
+:root.theme-glass [data-slot='card'],
+:root.theme-glass [data-slot='popover-content'],
+:root.theme-glass [data-slot='dropdown-menu-content'],
+:root.theme-glass [data-slot='select-content'],
+:root.theme-glass [data-slot='dialog-content'],
+:root.theme-glass [data-slot='alert-dialog-content'],
+:root.theme-glass [data-slot='sheet-content'],
+:root.theme-glass [data-slot='sidebar-container'],
+:root.theme-glass .app-topbar,
+:root.theme-glass .app-topbar-inner {
+  background: var(--g-card-fill);
+  -webkit-backdrop-filter: blur(var(--g-card-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--g-card-blur)) saturate(1.6);
+  border-color: var(--g-ring);
+  box-shadow:
+    inset 0 1px 0 var(--g-edge),
+    var(--g-shadow);
+}
+
+/* 折射高光要 position:absolute 定位,所以载体必须是「已定位」的。
+ *
+ * **只能补给本来是 static 的那几个**。我原先图省事,把 position:relative 直接写进
+ * 上面那条材质规则里 —— 而它的选择器特异性 (0,3,0) 压过 Tailwind 的 .fixed (0,1,0),
+ * 于是凡是**靠 class 定位**的成员全被打回相对定位:
+ *   .app-topbar(fixed 顶栏)→ 掉回文档流,落进 __root 那层 md:pl-52 里,
+ *     左上角 208×64 没人画 → 侧栏顶部露出一块极光(用户实报的"空白");
+ *   sheet-content / sidebar-container(fixed)、alert-dialog-content
+ *     (fixed + top/left 50% + translate 居中)同理会错位。
+ * 这些本来就是定位元素,::after 不补 relative 也能正常工作。 */
+:root.theme-glass .glass-surface,
+:root.theme-glass [data-slot='card'],
+:root.theme-glass [data-slot='popover-content'],
+:root.theme-glass [data-slot='dropdown-menu-content'],
+:root.theme-glass [data-slot='select-content'],
+:root.theme-glass .app-topbar-inner {
+  position: relative;
+}
+
+/* 折射高光。用 ::after 而不是 ::before:很多组件已经用 ::before 画其它东西
+ * (选中态指示条、分隔线),抢它会把那些擦掉。 */
+:root.theme-glass .glass-surface::after,
+:root.theme-glass [data-slot='card']::after,
+:root.theme-glass [data-slot='popover-content']::after,
+:root.theme-glass [data-slot='dropdown-menu-content']::after,
+:root.theme-glass [data-slot='select-content']::after,
+:root.theme-glass [data-slot='dialog-content']::after,
+:root.theme-glass [data-slot='alert-dialog-content']::after,
+:root.theme-glass [data-slot='sheet-content']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--g-sheen);
+  pointer-events: none;
+  /* 高光只是装饰,绝不能吃掉点击 —— 卡片里全是按钮和链接。 */
+  z-index: 0;
+}
+/* 卡片内容要浮在高光之上,否则文字会被那层白渐变压淡。
+ *
+ * 但**绝对定位**的子元素(典型是 dialog 的关闭按钮 `absolute end-4 top-4`)必须排除:
+ * 这条规则特异性 (0,3,0) 压过 Tailwind 的 .absolute (0,1,0),会把关闭按钮打回 relative,
+ * 于是它掉进 dialog 的 grid 流里落到左下角(实报:液态玻璃下关闭按钮跑到左下)。 */
+:root.theme-glass [data-slot='card'] > *:not(.absolute),
+:root.theme-glass [data-slot='dialog-content'] > *:not(.absolute),
+:root.theme-glass [data-slot='sheet-content'] > *:not(.absolute) {
+  position: relative;
+  z-index: 1;
+}
+/* 绝对定位的关闭按钮:保持自身定位(右上角),只把它抬到折射高光层之上。 */
+:root.theme-glass [data-slot='card'] > .absolute,
+:root.theme-glass [data-slot='dialog-content'] > .absolute,
+:root.theme-glass [data-slot='sheet-content'] > .absolute {
+  z-index: 2;
+}
+
+/* 壳:最厚。侧栏、顶栏、以及浮层容器。 */
+:root.theme-glass [data-slot='sidebar-container'],
+:root.theme-glass .app-topbar,
+:root.theme-glass .app-topbar-inner,
+:root.theme-glass [data-slot='dialog-content'],
+:root.theme-glass [data-slot='alert-dialog-content'],
+:root.theme-glass [data-slot='sheet-content'] {
+  background: var(--g-shell-fill);
+  -webkit-backdrop-filter: blur(var(--g-shell-blur)) saturate(1.7);
+  backdrop-filter: blur(var(--g-shell-blur)) saturate(1.7);
+}
+
+/* 内嵌:最薄。输入框、标签页、选中态。无折射层 —— 小面积上那层渐变只会显脏。 */
+:root.theme-glass [data-slot='input'],
+:root.theme-glass [data-slot='textarea'],
+:root.theme-glass [data-slot='select-trigger'],
+:root.theme-glass [data-slot='tabs-list'],
+:root.theme-glass [data-slot='table-header'],
+:root.theme-glass .glass-inset {
+  background: var(--g-inset-fill);
+  -webkit-backdrop-filter: blur(var(--g-inset-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--g-inset-blur)) saturate(1.4);
+  border: 1px solid var(--g-ring);
+  box-shadow: none;
+}
+:root.theme-glass [data-slot='input']:focus-visible,
+:root.theme-glass [data-slot='textarea']:focus-visible,
+:root.theme-glass [data-slot='select-trigger']:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* 主按钮:实色 + 一点外发光,让它在半透明环境里仍是明确的落点。 */
+:root.theme-glass [data-slot='button'][data-variant='default'],
+:root.theme-glass .accent-action-btn {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px rgba(76, 184, 245, 0.25);
+}
+
+/* 表格:玻璃上的实色斑马纹会很脏,改用极淡的边框分行。 */
+:root.theme-glass [data-slot='table'] tbody tr {
+  background: transparent;
+  border-bottom: 1px solid var(--g-edge-soft);
+}
+:root.theme-glass [data-slot='table'] tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+:root.theme-glass.light [data-slot='table'] tbody tr:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* 侧栏选中态:内嵌材质 + 主色圆点,不用实色块(实色块在玻璃上像贴纸)。 */
+:root.theme-glass [data-slot='sidebar-menu-button'][data-active='true'] {
+  background: var(--g-inset-fill);
+  box-shadow: inset 0 0 0 1px var(--g-ring);
+  color: var(--foreground);
+}
+
+/* ============================================================
+   降低透明度 —— 可及性 + 性能
+   ============================================================
+   玻璃退化成实色着色面。两个动因:
+   ① 眩光/对比度敏感的用户(对应 iOS 的「减少透明度」)
+   ② 每张卡一层 backdrop-filter 在集显笔记本上会掉帧 —— 面板一屏几十张卡
+   同时也是不支持 backdrop-filter 的浏览器的落点(见文件末尾的 @supports)。 */
+:root.theme-glass[data-glass-reduce='true'] {
+  --g-shell-blur: 0px;
+  --g-card-blur: 0px;
+  --g-inset-blur: 0px;
+  --g-shell-fill: rgba(14, 20, 32, 0.96);
+  --g-card-fill: rgba(18, 26, 40, 0.92);
+  --g-inset-fill: rgba(28, 38, 54, 0.9);
+  --g-sheen: none;
+  /* 语义 token 也要一起变实。材质那几条选择器只覆盖挂了 data-slot 的组件,
+   * 而不少地方是直接用 bg-card / bg-popover 这些 token 上色的 —— 只改材质变量的话,
+   * 关了透明度仍会剩一批半透明的面,看起来像没生效。 */
+  --card: rgba(18, 26, 40, 0.92);
+  --popover: rgba(16, 22, 34, 0.97);
+  --sidebar: rgba(14, 20, 32, 0.96);
+  --secondary: rgba(34, 44, 62, 0.95);
+  --muted: rgba(28, 38, 54, 0.9);
+}
+:root.theme-glass.light[data-glass-reduce='true'] {
+  --g-shell-fill: rgba(255, 255, 255, 0.97);
+  --g-card-fill: rgba(255, 255, 255, 0.94);
+  --g-inset-fill: rgba(245, 248, 251, 0.96);
+  --card: rgba(255, 255, 255, 0.94);
+  --popover: rgba(255, 255, 255, 0.98);
+  --sidebar: rgba(255, 255, 255, 0.97);
+  --secondary: rgba(240, 244, 249, 0.96);
+  --muted: rgba(245, 248, 251, 0.96);
+}
+/* 关掉透明度时背景也要压住:半透明卡片没了,壁纸会直接顶到文字旁边。 */
+:root.theme-glass[data-glass-reduce='true'] {
+  --g-scrim: rgba(6, 10, 18, 0.55);
+}
+:root.theme-glass.light[data-glass-reduce='true'] {
+  --g-scrim: rgba(232, 238, 245, 0.6);
+}
+
+/* 不支持 backdrop-filter 的浏览器:自动落到实色,而不是变成一片看不清的半透明。 */
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :root.theme-glass {
+    --g-shell-fill: rgba(14, 20, 32, 0.96);
+    --g-card-fill: rgba(18, 26, 40, 0.92);
+    --g-inset-fill: rgba(28, 38, 54, 0.9);
+    --g-sheen: none;
+    --g-scrim: rgba(6, 10, 18, 0.55);
+    /* 与「降低透明度」同理:语义 token 也要变实,否则走 bg-card 上色的那批面
+     * 在不支持 backdrop-filter 的浏览器上会是没模糊的半透明 —— 直接看不清。 */
+    --card: rgba(18, 26, 40, 0.92);
+    --popover: rgba(16, 22, 34, 0.97);
+    --sidebar: rgba(14, 20, 32, 0.96);
+    --secondary: rgba(34, 44, 62, 0.95);
+    --muted: rgba(28, 38, 54, 0.9);
+  }
+  :root.theme-glass.light {
+    --g-shell-fill: rgba(255, 255, 255, 0.97);
+    --g-card-fill: rgba(255, 255, 255, 0.94);
+    --g-inset-fill: rgba(245, 248, 251, 0.96);
+    --g-scrim: rgba(232, 238, 245, 0.6);
+    --card: rgba(255, 255, 255, 0.94);
+    --popover: rgba(255, 255, 255, 0.98);
+    --sidebar: rgba(255, 255, 255, 0.97);
+    --secondary: rgba(240, 244, 249, 0.96);
+    --muted: rgba(245, 248, 251, 0.96);
+  }
+}
+
+/* ============================================================
+   滑动指示器 —— 选中项背后那块会流动的玻璃
+   ============================================================
+   由 lib/glass-indicator.ts 插入并定位。纯 CSS 做不到「滑动」:高亮在不同元素上
+   各自淡入淡出是"闪现",要真的滑过去必须测量选中项的位置。
+
+   指示器是**一块**元素在容器内移动,而不是每个选项各画一块 —— 这正是液态感的来源:
+   同一块玻璃被牵着走,而不是此消彼长。 */
+:root.theme-glass [data-slot='tabs-list'],
+:root.theme-glass [data-glass-nav] {
+  position: relative;
+}
+/* 拆成两层是为了让「位移」和「形变」互不干扰:
+ * 外层只负责走到哪(translate + 宽高),内层只负责路上被抻成什么样(scale)。
+ * 合在一个元素上就得把两者塞进同一个 transform,一个用 CSS 过渡、一个用
+ * Web Animations,后写的会整条覆盖前一个,形变一上位移就没了。 */
+:root.theme-glass .glass-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* 轻微回弹:末段冲过去一点再收回来,像被拖动的液体追上了指针。
+   * 幅度刻意很小(1.02 那档),大了就成了弹跳玩具,在管理面板里很快会腻。 */
+  transition:
+    transform 0.34s cubic-bezier(0.34, 1.25, 0.5, 1),
+    width 0.34s cubic-bezier(0.34, 1.25, 0.5, 1),
+    height 0.2s ease,
+    opacity 0.18s ease;
+}
+:root.theme-glass .glass-indicator__blob {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+  /* 形变以自身中心为轴:水滴被拉长时两头一起延展,不是从一边推出去。 */
+  transform-origin: center;
+  /* **主色淡染而不是白玻璃**:顶栏和侧栏本身就是浅色的壳,再放一块白玻璃上去
+   * 等于白底叠白底,选中态几乎看不出来(用户实报)。染上一点主色,选中项才立得住,
+   * 同时仍保有玻璃的通透 —— 不是实心色块。 */
+  background: var(--g-indicator-fill);
+  -webkit-backdrop-filter: blur(var(--g-inset-blur)) saturate(1.5);
+  backdrop-filter: blur(var(--g-inset-blur)) saturate(1.5);
+  box-shadow:
+    inset 0 0 0 1px var(--g-indicator-ring),
+    inset 0 1px 0 var(--g-edge),
+    0 2px 10px rgba(2, 6, 14, 0.22);
+}
+/* 折射高光跟着一起走,玻璃才有厚度;纯色块滑动只会像个滑动条。 */
+:root.theme-glass .glass-indicator__blob::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--g-sheen);
+}
+/* 选项本身要浮在指示器之上,否则文字会被那块玻璃盖住。 */
+:root.theme-glass [data-slot='tabs-list'] > *:not(.glass-indicator),
+:root.theme-glass [data-glass-nav] > *:not(.glass-indicator) {
+  position: relative;
+  z-index: 1;
+}
+/* 选中项自己不再画底 —— 底已经由指示器给了,再画一层会露出两块玻璃。 */
+:root.theme-glass [data-slot='tabs-trigger'][data-state='active'] {
+  background: transparent;
+  box-shadow: none;
+}
+/* 顶栏/侧栏的导航项本身是 .pixel-button + bg-background/75,上面那条材质规则会给
+ * 它们各自一块玻璃底 —— 于是滑块躲在后面,完全看不见(第一版加了标记却没效果就是这个原因)。
+ *
+ * 在滑块容器内一律取消它们自己的底与边:整组只留一块会流动的玻璃,这才是要的效果。
+ * 选中态的 bg-primary/20、发光描边也一并去掉,否则滑块之外还挂着一层旧的选中样式。
+ *
+ * 加 `.pixel-button` 那两条不是冗余,是**为了赢特异性**:上面那条材质规则是
+ * `.pixel-button[class*='bg-background']` (0,4,0),而只写 `[data-glass-nav] > a`
+ * 才 (0,3,0) —— 输了。于是导航项各自顶着一层 42% 的白玻璃,把滑块整个盖住
+ * (实测 backgroundColor = rgba(255,255,255,0.42),选中项也一样)。
+ * 这正是"标记加了却没效果""顶栏还是不行"的原因。
+ * 不用 !important:补一个本来就在元素上的类名足够翻盘,也更好读。 */
+:root.theme-glass [data-glass-nav] [data-nav-item],
+:root.theme-glass [data-glass-nav] > a,
+:root.theme-glass [data-glass-nav] [data-nav-item].pixel-button,
+:root.theme-glass [data-glass-nav] > a.pixel-button {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* 选中项的文字提亮,让「哪个是选中」不只靠背后那块玻璃传达 ——
+ * 只用底色区分的话,叠在花哨壁纸上时可辨性会掉。 */
+:root.theme-glass [data-glass-nav] [data-status='active'] {
+  color: var(--foreground);
+}
+/* 未选中项 hover:只提一点亮,不给材质 —— 否则会和滑过来的指示器抢视觉。 */
+:root.theme-glass [data-slot='tabs-trigger']:not([data-state='active']):hover,
+:root.theme-glass
+  [data-glass-nav]
+  [data-nav-item]:not([data-status='active']):hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+}
+:root.theme-glass.light
+  [data-slot='tabs-trigger']:not([data-state='active']):hover,
+:root.theme-glass.light
+  [data-glass-nav]
+  [data-nav-item]:not([data-status='active']):hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* 关掉动效时指示器直接跳过去,不滑 —— 前庭敏感的用户对大面积位移很敏感。 */
+@media (prefers-reduced-motion: reduce) {
+  :root.theme-glass .glass-indicator {
+    transition: opacity 0.18s ease;
+  }
+}
+
+/* 动效:只给材质过渡,不做入场动画 —— 一屏几十张卡各自淡入会显得很廉价。 */
+@media (prefers-reduced-motion: no-preference) {
+  :root.theme-glass [data-slot='card'],
+  :root.theme-glass [data-slot='input'],
+  :root.theme-glass [data-slot='select-trigger'] {
+    transition:
+      background 0.22s ease,
+      box-shadow 0.22s ease;
+  }
+}

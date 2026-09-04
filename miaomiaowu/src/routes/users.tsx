@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
@@ -309,7 +308,6 @@ function UsersPage() {
   if (profileLoading) {
     return (
       <div className='min-h-svh bg-background'>
-        <Topbar />
         <main className='mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 pt-24'>
           <Card className='shadow-none border-dashed'>
             <CardHeader>
@@ -332,7 +330,6 @@ function UsersPage() {
   if (!isAdmin || profileError) {
     return (
       <div className='min-h-svh bg-background'>
-        <Topbar />
         <main className='mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-4 px-4 py-20 text-center sm:px-6 pt-24'>
           <Card className='w-full shadow-none border-dashed'>
             <CardHeader>
@@ -347,7 +344,6 @@ function UsersPage() {
 
   return (
     <div className='min-h-svh bg-background'>
-      <Topbar />
       <main className='mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 pt-24'>
         <section className='space-y-3'>
           <h1 className='text-3xl font-semibold tracking-tight'>用户管理</h1>

@@ -59,7 +59,12 @@ type twoFactorPending struct {
 	username   string
 	rememberMe bool
 	expiry     time.Time
+	attempts   int
 }
+
+// maxTwoFactorAttempts 单个 2FA 待验证令牌允许的错误次数上限。超过即作废该令牌,
+// 迫使攻击者重新走密码登录(而登录接口是有限流的)—— 防止在 5 分钟窗口内无限爆破 6 位 TOTP。
+const maxTwoFactorAttempts = 5
 
 type TwoFactorPendingStore struct {
 	mu      sync.RWMutex
@@ -105,4 +110,22 @@ func (s *TwoFactorPendingStore) Consume(token string) {
 	s.mu.Lock()
 	delete(s.pending, token)
 	s.mu.Unlock()
+}
+
+// RecordFailure 记一次该令牌的验证失败。达到上限即作废该令牌并返回 true(表示已锁定,
+// 调用方应让用户重新登录)。
+func (s *TwoFactorPendingStore) RecordFailure(token string) (locked bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, exists := s.pending[token]
+	if !exists {
+		return true
+	}
+	p.attempts++
+	if p.attempts >= maxTwoFactorAttempts {
+		delete(s.pending, token)
+		return true
+	}
+	s.pending[token] = p
+	return false
 }

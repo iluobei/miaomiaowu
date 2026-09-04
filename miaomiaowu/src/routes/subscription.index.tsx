@@ -18,7 +18,6 @@ import {
   Shield
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Topbar } from '@/components/layout/topbar'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -209,7 +208,6 @@ function SubscriptionPage() {
 
   return (
     <div className='min-h-svh bg-background'>
-      <Topbar />
       <main className='mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 pt-24'>
         <section className='space-y-4 text-center sm:text-left'>
           <h1 className='text-3xl font-semibold tracking-tight'>订阅链接</h1>

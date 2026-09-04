@@ -206,6 +206,7 @@ export function UserMenu() {
                 { value: 'miaomiaowu', label: '妙妙屋' },
                 { value: 'flat', label: '扁平' },
                 { value: 'anime', label: '二次元' },
+                { value: 'glass', label: '液态玻璃' },
               ].map((opt) => (
                 <button
                   key={opt.value}

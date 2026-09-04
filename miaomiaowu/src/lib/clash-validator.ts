@@ -143,7 +143,13 @@ function validateProxyGroups(
   const groupNames = new Set(groups.map(g => g?.name).filter(Boolean))
 
   // 特殊节点名称
-  const specialNodes = new Set(['DIRECT', 'REJECT', 'PROXY', 'PASS'])
+  const specialNodes = new Set([
+    'DIRECT',
+    'REJECT',
+    'REJECT-DROP',
+    'PROXY',
+    'PASS',
+  ])
   // 常见的拼写错误
   const spellingCorrections: Record<string, string> = {
     'DIRCT': 'DIRECT',

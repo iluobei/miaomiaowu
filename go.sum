@@ -4,6 +4,8 @@ github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.5 h1:I/Uhml1Oss1slW66KP2RP2zsm6w
 github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.5/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
 github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.7 h1:748Cm8HwQwR/VSrWkznPvYI7yHfUy0HZX1cm+6E6u1I=
 github.com/MMWOrg/mmwX-plugins/proxyparser v0.1.7/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.2.0 h1:UNJ0BS/x8iHV70STIZ+hrGR4GIsDRhEYJzqV8cZer3s=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.2.0/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
 github.com/Masterminds/semver/v3 v3.2.1 h1:RN9w6+7QoMeJVGyfmbcgs28Br8cvmnucEXnY0rYXWg0=
 github.com/Masterminds/semver/v3 v3.2.1/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc h1:biVzkmvwrH8WK8raXaxBx6fRVTlJILwEwQGL1I/ByEI=

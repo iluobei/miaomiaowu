@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Layers, Activity, MapPin, Plus, Eye, Pencil, Trash2, Settings, FileText, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
-import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { getPageNumbers } from '@/lib/utils'
@@ -2246,7 +2245,6 @@ function SubscriptionGeneratorPage() {
 
   return (
     <div className='flex min-h-screen flex-col bg-background'>
-      <Topbar />
 
       <main className='mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 pt-24'>
         <div className='mx-auto space-y-6'>

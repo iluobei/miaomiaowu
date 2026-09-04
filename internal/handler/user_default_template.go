@@ -33,7 +33,7 @@ func (h *userDefaultTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		settings = storage.UserSettings{Username: username, MatchRule: "node_name", SyncScope: "saved_only", KeepNodeName: true, TemplateVersion: "v2"}
 	}
 	if r.Method == http.MethodGet {
-		respondJSON(w, 200, map[string]string{"default_template_filename": settings.DefaultTemplateFilename, "default_surge_template_filename": settings.DefaultSurgeTemplateFilename})
+		respondJSON(w, 200, map[string]string{"default_template_filename": settings.DefaultTemplateFilename, "default_surge_template_filename": settings.DefaultSurgeTemplateFilename, "default_loon_template_filename": settings.DefaultLoonTemplateFilename})
 		return
 	}
 	if r.Method != http.MethodPut {
@@ -43,12 +43,13 @@ func (h *userDefaultTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	var body struct {
 		DefaultTemplateFilename      string `json:"default_template_filename"`
 		DefaultSurgeTemplateFilename string `json:"default_surge_template_filename"`
+		DefaultLoonTemplateFilename  string `json:"default_loon_template_filename"`
 	}
 	if json.NewDecoder(r.Body).Decode(&body) != nil {
 		writeBadRequest(w, "请求格式不正确")
 		return
 	}
-	for filename, suffix := range map[string]string{strings.TrimSpace(body.DefaultTemplateFilename): ".yaml", strings.TrimSpace(body.DefaultSurgeTemplateFilename): ".conf"} {
+	for filename, suffix := range map[string]string{strings.TrimSpace(body.DefaultTemplateFilename): ".yaml", strings.TrimSpace(body.DefaultSurgeTemplateFilename): ".conf", strings.TrimSpace(body.DefaultLoonTemplateFilename): ".lcf"} {
 		if filename == "" {
 			continue
 		}
@@ -71,6 +72,7 @@ func (h *userDefaultTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	}
 	settings.DefaultTemplateFilename = strings.TrimSpace(body.DefaultTemplateFilename)
 	settings.DefaultSurgeTemplateFilename = strings.TrimSpace(body.DefaultSurgeTemplateFilename)
+	settings.DefaultLoonTemplateFilename = strings.TrimSpace(body.DefaultLoonTemplateFilename)
 	if err := h.repo.UpsertUserSettings(r.Context(), settings); err != nil {
 		writeError(w, 500, err)
 		return

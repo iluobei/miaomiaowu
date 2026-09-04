@@ -367,12 +367,17 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	var data []byte
 	fromTemplate := false
 	fromSurgeTemplate := false
+	fromLoonTemplate := false
 	effectiveTemplate := subscribeFile.TemplateFilename
 	if hasSubscribeFile && effectiveTemplate == "" && username != "" {
 		if settings, err := h.repo.GetUserSettings(r.Context(), username); err == nil {
-			if isSurgeClientType(resolveClientType(r)) {
+			// Loon 判断在 Surge 之前(客户端类型独立,这里只是保持与文件判定一致的优先级)。
+			switch ct := resolveClientType(r); {
+			case isLoonTemplateClientType(ct):
+				effectiveTemplate = settings.DefaultLoonTemplateFilename
+			case isSurgeClientType(ct):
 				effectiveTemplate = settings.DefaultSurgeTemplateFilename
-			} else {
+			default:
 				effectiveTemplate = settings.DefaultTemplateFilename
 			}
 		}
@@ -389,6 +394,7 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			data = templateData
 			fromTemplate = true
 			fromSurgeTemplate = isSurgeTemplateFile(effectiveTemplate)
+			fromLoonTemplate = isLoonTemplateFile(effectiveTemplate)
 			logger.Info("[⏱️ 耗时监测] 模板生成完成", "step", "template_generate", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
 		}
 	}
@@ -759,10 +765,41 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	data = deduplicateProxies(data, username)
 
+	// v2ray 订阅信息节点(SubInfoV2RayOnly):v2ray/base64 输出没有 proxies 结构可供事后注入,
+	// 得在转换成 base64 之前就把信息节点塞进 clash proxies,让 v2ray producer 当普通节点吐出来。
+	if h.repo != nil && isV2RayClientType(clientType) {
+		if sysConfig, cfgErr := h.repo.GetSystemConfig(r.Context()); cfgErr == nil &&
+			sysConfig.EnableSubInfoNodes && sysConfig.SubInfoV2RayOnly {
+			var remainingTraffic int64
+			if enableSubTrafficHeader {
+				if tl, _, tu, terr := h.summary.fetchTotals(r.Context(), username, usedProbeServers); terr == nil {
+					if !probeBindingEnabled || usesProbeNodes {
+						remainingTraffic = (tl + externalTrafficLimit) - (tu + externalTrafficUsed)
+					} else {
+						remainingTraffic = externalTrafficLimit - externalTrafficUsed
+					}
+				}
+			} else {
+				remainingTraffic = externalTrafficLimit - externalTrafficUsed
+			}
+			var expireAt *time.Time
+			if hasSubscribeFile {
+				expireAt = subscribeFile.ExpireAt
+			}
+			if modified, perr := prependSubInfoNodesToClash(data, sysConfig, expireAt, remainingTraffic); perr == nil {
+				data = modified
+			}
+		}
+	}
+
 	// clash/classmeta/clash-to-shadowrocket 直接输出 Clash YAML, 不需要转换
 	if fromSurgeTemplate {
 		contentType = "text/plain; charset=utf-8"
 		ext = ".conf"
+	} else if fromLoonTemplate {
+		// Loon 模板已是成品纯文本(段落式配置),直接下发,不进任何转换分支。
+		contentType = "text/plain; charset=utf-8"
+		ext = ".lcf"
 	} else if clientType == "" || clientType == "clash" || clientType == "clashmeta" {
 		data = filterSnellV6FromClashYAML(data)
 	} else if clientType != "clash-to-shadowrocket" {
@@ -837,7 +874,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 							// 注入订阅信息节点（过期时间和剩余流量）
 							if h.repo != nil {
 								sysConfig, cfgErr := h.repo.GetSystemConfig(r.Context())
-								if cfgErr == nil && sysConfig.EnableSubInfoNodes {
+								// SubInfoV2RayOnly 开启时,clash 客户端不再注入(信息节点只走上面的 v2ray 分支)。
+								if cfgErr == nil && sysConfig.EnableSubInfoNodes && !sysConfig.SubInfoV2RayOnly {
 									// 计算剩余流量
 									var remainingTraffic int64
 									if hasTrafficInfo || externalTrafficLimit > 0 {
@@ -1280,9 +1318,8 @@ func syncReferencedExternalSubscriptions(ctx context.Context, repo *storage.Traf
 
 	logger.Info("[Subscription] 用户需要同步的外部订阅", "user", username, "count", len(subsToSync), "match_rule", userSettings.MatchRule)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	// [安全] 同步的是用户创建的外部订阅 URL —— 走 SSRF 安全客户端,防内网/云元数据探测。
+	client := newSSRFSafeHTTPClient(30 * time.Second)
 
 	// Track total nodes synced
 	totalNodesSynced := 0
@@ -2517,6 +2554,16 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		}
 	}
 	logger.Info("[模板生成] 从代理集合表获取代理集合", "count", len(providerConfigs), "with_nodes", len(providers))
+	if isLoonTemplateFile(subscribeFile.TemplateFilename) {
+		rootProxies := make([]map[string]any, 0, len(proxies)+len(extraProxies))
+		rootProxies = append(rootProxies, proxies...)
+		rootProxies = append(rootProxies, extraProxies...)
+		result, err := injectProxiesIntoLoonTemplate(string(templateContent), rootProxies)
+		if err != nil {
+			return nil, fmt.Errorf("生成 Loon 配置失败: %w", err)
+		}
+		return []byte(result), nil
+	}
 	if isSurgeTemplateFile(subscribeFile.TemplateFilename) {
 		rootProxies := make([]map[string]any, 0, len(proxies)+len(extraProxies))
 		rootProxies = append(rootProxies, proxies...)
@@ -2684,6 +2731,39 @@ func createSubInfoNodes(config storage.SystemConfig, expireAt *time.Time, remain
 
 	nodes = append(nodes, createDummyNode(expireName), createDummyNode(trafficName))
 	return nodes
+}
+
+// isV2RayClientType 判断是不是 v2ray 系(base64 / URI 节点列表)客户端。这类输出没有 clash
+// 的 proxies 结构可供事后注入,信息节点得在转换成 base64 之前就塞进 clash proxies。
+func isV2RayClientType(clientType string) bool {
+	return clientType == "v2ray" || clientType == "uri"
+}
+
+// prependSubInfoNodesToClash 把信息节点插到 clash YAML 的 proxies 开头,供 v2ray 分支在转换前调用。
+// 解析失败就原样返回并带出 error —— 信息节点是锦上添花,不该让订阅整个坏掉。
+func prependSubInfoNodesToClash(data []byte, config storage.SystemConfig, expireAt *time.Time, remainingTraffic int64) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return data, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return data, fmt.Errorf("unexpected clash yaml structure")
+	}
+	rootMap := root.Content[0]
+	for i := 0; i+1 < len(rootMap.Content); i += 2 {
+		if rootMap.Content[i].Value == "proxies" {
+			if proxiesNode := rootMap.Content[i+1]; proxiesNode.Kind == yaml.SequenceNode {
+				infoNodes := createSubInfoNodes(config, expireAt, remainingTraffic)
+				proxiesNode.Content = append(infoNodes, proxiesNode.Content...)
+			}
+			break
+		}
+	}
+	out, err := yaml.Marshal(&root)
+	if err != nil {
+		return data, err
+	}
+	return out, nil
 }
 
 // formatTrafficSize formats bytes to human readable format (GB/MB/KB)

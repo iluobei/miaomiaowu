@@ -17,8 +17,8 @@ type externalSubscriptionRequest struct {
 	Name                  string `json:"name"`
 	URL                   string `json:"url"`
 	UserAgent             string `json:"user_agent"`
-	TrafficMode           string `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
-	AutoUpdate            *bool  `json:"auto_update"` // 是否启用定时更新
+	TrafficMode           string `json:"traffic_mode"`            // 流量统计方式: "download", "upload", "both", "none"
+	AutoUpdate            *bool  `json:"auto_update"`             // 是否启用定时更新
 	UpdateIntervalMinutes *int   `json:"update_interval_minutes"` // 更新间隔（分钟）
 }
 
@@ -39,7 +39,6 @@ type externalSubscriptionResponse struct {
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 }
-
 
 func normalizeUpdateIntervalMinutes(minutes int) int {
 	if minutes < 0 {
@@ -173,7 +172,9 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		userAgent = "clash-meta/2.4.0"
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	// [安全] 用户可达接口(RequireToken),URL 由用户提供 —— 必须走 SSRF 安全客户端,
+	// 否则普通用户可让服务端去打云元数据(169.254.169.254)/内网。
+	client := newSSRFSafeHTTPClient(30 * time.Second)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		logger.Info("[外部订阅] 创建请求失败", "name", name, "error", err)

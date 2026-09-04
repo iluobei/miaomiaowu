@@ -28,8 +28,8 @@ func TestBatchCreate_DefaultsEnabled(t *testing.T) {
 	h := NewNodesHandler(repo, t.TempDir())
 
 	body := `{"nodes":[
-		{"node_name":"WithEnabled","clash_config":"{\"name\":\"WithEnabled\",\"type\":\"ss\",\"server\":\"a.com\",\"port\":443}","enabled":true},
-		{"node_name":"NoEnabled","clash_config":"{\"name\":\"NoEnabled\",\"type\":\"ss\",\"server\":\"b.com\",\"port\":443}"}
+		{"node_name":"WithEnabled","protocol":"ss","clash_config":"{\"name\":\"WithEnabled\",\"type\":\"ss\",\"server\":\"a.com\",\"port\":443}","enabled":true},
+		{"node_name":"NoEnabled","protocol":"ss","clash_config":"{\"name\":\"NoEnabled\",\"type\":\"ss\",\"server\":\"b.com\",\"port\":443}"}
 	]}`
 	rec := postNodes(t, h, user, "/batch", body)
 	if rec.Code != http.StatusCreated {
@@ -57,12 +57,12 @@ func TestCreate_DefaultsEnabled(t *testing.T) {
 	h := NewNodesHandler(repo, t.TempDir())
 
 	// 不带 enabled → 默认启用
-	rec := postNodes(t, h, user, "", `{"node_name":"DefaultOn","clash_config":"{\"name\":\"DefaultOn\",\"type\":\"ss\",\"server\":\"a.com\",\"port\":443}"}`)
+	rec := postNodes(t, h, user, "", `{"node_name":"DefaultOn","protocol":"ss","clash_config":"{\"name\":\"DefaultOn\",\"type\":\"ss\",\"server\":\"a.com\",\"port\":443}"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	// 显式 enabled:false → 仍可禁用
-	rec2 := postNodes(t, h, user, "", `{"node_name":"ExplicitOff","clash_config":"{\"name\":\"ExplicitOff\",\"type\":\"ss\",\"server\":\"b.com\",\"port\":443}","enabled":false}`)
+	rec2 := postNodes(t, h, user, "", `{"node_name":"ExplicitOff","protocol":"ss","clash_config":"{\"name\":\"ExplicitOff\",\"type\":\"ss\",\"server\":\"b.com\",\"port\":443}","enabled":false}`)
 	if rec2.Code != http.StatusCreated {
 		t.Fatalf("create2 status=%d body=%s", rec2.Code, rec2.Body.String())
 	}

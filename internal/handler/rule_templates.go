@@ -116,7 +116,7 @@ func (h *RuleTemplatesHandler) handleListTemplates(w http.ResponseWriter, r *htt
 	var templates []string
 	for _, entry := range entries {
 		name := strings.ToLower(entry.Name())
-		if !entry.IsDir() && h.canView(r, entry.Name()) && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".conf")) {
+		if !entry.IsDir() && h.canView(r, entry.Name()) && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".conf") || strings.HasSuffix(name, ".lcf")) {
 			templates = append(templates, entry.Name())
 		}
 	}
@@ -282,9 +282,12 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 
 	// Preserve the template kind when the user omits an extension.
 	lowerNewName := strings.ToLower(newName)
-	if !strings.HasSuffix(lowerNewName, ".yaml") && !strings.HasSuffix(lowerNewName, ".yml") && !strings.HasSuffix(lowerNewName, ".conf") {
-		if strings.HasSuffix(strings.ToLower(oldName), ".conf") {
+	if !strings.HasSuffix(lowerNewName, ".yaml") && !strings.HasSuffix(lowerNewName, ".yml") && !strings.HasSuffix(lowerNewName, ".conf") && !strings.HasSuffix(lowerNewName, ".lcf") {
+		lowerOld := strings.ToLower(oldName)
+		if strings.HasSuffix(lowerOld, ".conf") {
 			newName += ".conf"
+		} else if strings.HasSuffix(lowerOld, ".lcf") {
+			newName += ".lcf"
 		} else {
 			newName += ".yaml"
 		}
@@ -347,11 +350,11 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 	// Validate file extension
 	filename := header.Filename
 	lowerFilename := strings.ToLower(filename)
-	if !strings.HasSuffix(lowerFilename, ".yaml") && !strings.HasSuffix(lowerFilename, ".yml") && !strings.HasSuffix(lowerFilename, ".conf") {
+	if !strings.HasSuffix(lowerFilename, ".yaml") && !strings.HasSuffix(lowerFilename, ".yml") && !strings.HasSuffix(lowerFilename, ".conf") && !strings.HasSuffix(lowerFilename, ".lcf") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "只支持 .yaml、.yml 或 Surge .conf 文件",
+			"error": "只支持 .yaml、.yml、Surge .conf 或 Loon .lcf 文件",
 		})
 		return
 	}

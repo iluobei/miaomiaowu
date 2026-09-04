@@ -26,12 +26,30 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Topbar } from '@/components/layout/topbar'
 import { NodeProbePanel } from '@/components/node-probe-dialog'
+import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
+
+// 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
+const SETTINGS_TABS = [
+  { value: 'sub', label: '订阅同步' },
+  { value: 'features', label: '功能' },
+  { value: 'security', label: '安全' },
+  { value: 'advanced', label: '高级' },
+  { value: 'probe', label: '节点探测' },
+  { value: 'appearance', label: '外观' },
+] as const
 
 interface NotifyConfig {
   notify_enabled: boolean
@@ -66,6 +84,7 @@ interface UserConfig {
   node_name_filter: string
   append_sub_info: boolean
   enable_sub_info_nodes: boolean
+  sub_info_v2ray_only: boolean
   sub_info_expire_prefix: string
   sub_info_traffic_prefix: string
   enable_sub_traffic_header: boolean
@@ -98,9 +117,10 @@ export const Route = createFileRoute('/system-settings')({
 function SystemSettingsPage() {
   const queryClient = useQueryClient()
   const { auth } = useAuthStore()
+  const [settingsTab, setSettingsTab] = useState<string>('sub')
   const [forceSyncExternal, setForceSyncExternal] = useState(false)
   const [matchRule, setMatchRule] = useState<
-    'node_name' | 'server_port' | 'type_server_port'
+    'node_name' | 'server_port' | 'type_server_port' | 'type_server_port_cred'
   >('node_name')
   const [syncScope, setSyncScope] = useState<'saved_only' | 'all'>('saved_only')
   const [keepNodeName, setKeepNodeName] = useState(true)
@@ -120,6 +140,7 @@ function SystemSettingsPage() {
     useState('剩余|流量|到期|订阅|时间|重置')
   const [appendSubInfo, setAppendSubInfo] = useState(false)
   const [enableSubInfoNodes, setEnableSubInfoNodes] = useState(false)
+  const [subInfoV2RayOnly, setSubInfoV2RayOnly] = useState(false)
   const [subInfoExpirePrefix, setSubInfoExpirePrefix] = useState('📅过期时间')
   const [subInfoTrafficPrefix, setSubInfoTrafficPrefix] = useState('⌛剩余流量')
   const [enableSubTrafficHeader, setEnableSubTrafficHeader] = useState(true)
@@ -229,6 +250,7 @@ function SystemSettingsPage() {
           | 'node_name'
           | 'server_port'
           | 'type_server_port'
+          | 'type_server_port_cred'
       )
       setSyncScope(
         (userConfig.sync_scope as 'saved_only' | 'all') || 'saved_only'
@@ -251,6 +273,7 @@ function SystemSettingsPage() {
       )
       setAppendSubInfo(userConfig.append_sub_info || false)
       setEnableSubInfoNodes(userConfig.enable_sub_info_nodes || false)
+      setSubInfoV2RayOnly(userConfig.sub_info_v2ray_only || false)
       setSubInfoExpirePrefix(userConfig.sub_info_expire_prefix || '📅过期时间')
       setSubInfoTrafficPrefix(
         userConfig.sub_info_traffic_prefix || '⌛剩余流量'
@@ -287,7 +310,11 @@ function SystemSettingsPage() {
       }
       setForceSyncExternal(variables.force_sync_external)
       setMatchRule(
-        variables.match_rule as 'node_name' | 'server_port' | 'type_server_port'
+        variables.match_rule as
+          | 'node_name'
+          | 'server_port'
+          | 'type_server_port'
+          | 'type_server_port_cred'
       )
       setSyncScope(variables.sync_scope as 'saved_only' | 'all')
       setKeepNodeName(variables.keep_node_name)
@@ -304,6 +331,7 @@ function SystemSettingsPage() {
       setNodeNameFilter(variables.node_name_filter)
       setAppendSubInfo(variables.append_sub_info)
       setEnableSubInfoNodes(variables.enable_sub_info_nodes)
+      setSubInfoV2RayOnly(variables.sub_info_v2ray_only)
       setSubInfoExpirePrefix(variables.sub_info_expire_prefix)
       setSubInfoTrafficPrefix(variables.sub_info_traffic_prefix)
       setEnableSubTrafficHeader(variables.enable_sub_traffic_header)
@@ -351,6 +379,7 @@ function SystemSettingsPage() {
       node_name_filter: nodeNameFilter,
       append_sub_info: appendSubInfo,
       enable_sub_info_nodes: enableSubInfoNodes,
+      sub_info_v2ray_only: subInfoV2RayOnly,
       sub_info_expire_prefix: subInfoExpirePrefix,
       sub_info_traffic_prefix: subInfoTrafficPrefix,
       enable_sub_traffic_header: enableSubTrafficHeader,
@@ -374,14 +403,42 @@ function SystemSettingsPage() {
 
   return (
     <div className='bg-background min-h-svh'>
-      <Topbar />
       <main className='mx-auto w-full max-w-4xl px-4 py-8 pt-24 sm:px-6'>
         <section className='space-y-2'>
           <h1 className='text-3xl font-semibold tracking-tight'>系统设置</h1>
           <p className='text-muted-foreground'>管理订阅同步和功能开关</p>
         </section>
 
-        <div className='mt-8 space-y-6'>
+        <Tabs
+          value={settingsTab}
+          onValueChange={setSettingsTab}
+          className='mt-8'
+        >
+          {/* 移动端:下拉切换选项卡(省空间) */}
+          <div className='mb-4 sm:hidden'>
+            <Select value={settingsTab} onValueChange={setSettingsTab}>
+              <SelectTrigger className='w-full'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SETTINGS_TABS.map((tt) => (
+                  <SelectItem key={tt.value} value={tt.value}>
+                    {tt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* 桌面:选项卡(空间不够自动换行) */}
+          <TabsList className='mb-6 hidden h-auto w-full flex-wrap sm:flex'>
+            {SETTINGS_TABS.map((tt) => (
+              <TabsTrigger key={tt.value} value={tt.value}>
+                {tt.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value='sub' className='space-y-6'>
           {/* 外部订阅同步设置 */}
           <Card>
             <CardHeader className='pb-4'>
@@ -505,7 +562,11 @@ function SystemSettingsPage() {
                     <RadioGroup
                       value={matchRule}
                       onValueChange={(
-                        value: 'node_name' | 'server_port' | 'type_server_port'
+                        value:
+                          | 'node_name'
+                          | 'server_port'
+                          | 'type_server_port'
+                          | 'type_server_port_cred'
                       ) => {
                         setMatchRule(value)
                         updateConfig({ match_rule: value })
@@ -547,6 +608,18 @@ function SystemSettingsPage() {
                           className='cursor-pointer font-normal'
                         >
                           类型:服务器:端口
+                        </Label>
+                      </div>
+                      <div className='flex items-center space-x-2'>
+                        <RadioGroupItem
+                          value='type_server_port_cred'
+                          id='match-type-server-port-cred'
+                        />
+                        <Label
+                          htmlFor='match-type-server-port-cred'
+                          className='cursor-pointer font-normal'
+                        >
+                          类型:服务器:端口:凭据
                         </Label>
                       </div>
                     </RadioGroup>
@@ -659,6 +732,9 @@ function SystemSettingsPage() {
             </CardContent>
           </Card>
 
+          </TabsContent>
+
+          <TabsContent value='features' className='space-y-6'>
           {/* 功能开关 */}
           <Card>
             <CardHeader className='pb-4'>
@@ -1309,6 +1385,28 @@ function SystemSettingsPage() {
                   />
                 </div>
                 {enableSubInfoNodes && (
+                  <div className='flex items-start justify-between gap-4 border-t pt-3'>
+                    <div className='flex-1 space-y-1'>
+                      <Label htmlFor='sub-info-v2ray-only'>
+                        仅 v2ray 系客户端注入
+                      </Label>
+                      <p className='text-muted-foreground text-xs'>
+                        开启后信息节点只出现在 v2ray / base64
+                        订阅里(转换前塞进节点列表);Clash 等 YAML
+                        客户端不再注入,避免在支持流量头的客户端里重复显示。
+                      </p>
+                    </div>
+                    <Switch
+                      id='sub-info-v2ray-only'
+                      checked={subInfoV2RayOnly}
+                      onCheckedChange={(checked) =>
+                        updateConfig({ sub_info_v2ray_only: checked })
+                      }
+                      disabled={loadingConfig || updateConfigMutation.isPending}
+                    />
+                  </div>
+                )}
+                {enableSubInfoNodes && (
                   <div className='grid grid-cols-2 gap-3 border-t pt-3'>
                     <div className='space-y-2'>
                       <Label htmlFor='sub-info-expire-prefix'>
@@ -1356,6 +1454,9 @@ function SystemSettingsPage() {
             </CardContent>
           </Card>
 
+          </TabsContent>
+
+          <TabsContent value='security' className='space-y-6'>
           {/* 安全配置 */}
           <Card>
             <CardHeader className='pb-4'>
@@ -1390,11 +1491,11 @@ function SystemSettingsPage() {
 
               <div className='flex items-start justify-between gap-4'>
                 <div className='flex-1'>
-                  <h4 className='text-sm font-medium'>拦截未知订阅客户端</h4>
+                  <h4 className='text-sm font-medium'>禁止浏览器访问订阅</h4>
                   <p className='text-muted-foreground mt-1 text-xs'>
-                    仅允许 Clash、Stash、Loon、Quantumult
+                    开启后仅允许 Clash、Stash、Loon、Quantumult
                     X、Surge、sing-box、v2ray
-                    等已识别客户端获取订阅，避免浏览器预览和爬虫误触。
+                    等可识别的代理客户端获取订阅;浏览器、爬虫等未知 UA 一律拦截。
                   </p>
                 </div>
                 <Switch
@@ -1608,6 +1709,9 @@ function SystemSettingsPage() {
             </CardContent>
           </Card>
 
+          </TabsContent>
+
+          <TabsContent value='advanced' className='space-y-6'>
           {/* 代理组配置同步 */}
           <Card>
             <CardHeader className='pb-4'>
@@ -1674,6 +1778,11 @@ function SystemSettingsPage() {
             </CardContent>
           </Card>
 
+          {/* 访问控制:仅本机访问开关(issue #106) */}
+          <AccessControlCard />
+          </TabsContent>
+
+          <TabsContent value='probe' className='space-y-6'>
           {/* 节点探测:开关 + 探测源 + 勾选节点 + 掉线自动重同步。
               与节点管理页的「节点探测」弹窗是同一个组件、同一组接口,不会两处对不上。 */}
           <Card>
@@ -1687,9 +1796,69 @@ function SystemSettingsPage() {
               <NodeProbePanel />
             </CardContent>
           </Card>
-        </div>
+          </TabsContent>
+
+          <TabsContent value='appearance' className='space-y-6'>
+          {/* 面板壁纸 / 液态玻璃外观 */}
+          <PanelWallpaperCard />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
+  )
+}
+
+// 访问控制:仅本机访问开关(issue #106)。自成一体,不进大配置对象。
+function AccessControlCard() {
+  const queryClient = useQueryClient()
+  const { data } = useQuery({
+    queryKey: ['access-control'],
+    queryFn: async () =>
+      (await api.get('/api/admin/access-control')).data as {
+        local_only: boolean
+        is_docker: boolean
+      },
+  })
+  const localOnly = data?.local_only ?? false
+  const isDocker = data?.is_docker ?? false
+
+  const mutation = useMutation({
+    mutationFn: async (v: boolean) =>
+      (await api.put('/api/admin/access-control', { local_only: v })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['access-control'] })
+      toast.success('已保存,重启后生效')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || '保存失败'),
+  })
+
+  return (
+    <Card>
+      <CardHeader className='pb-4'>
+        <CardTitle>访问控制</CardTitle>
+        <CardDescription>限制服务的监听范围</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className='flex items-start justify-between gap-4'>
+          <div className='flex-1 space-y-1'>
+            <Label htmlFor='ac-local-only'>仅本机访问</Label>
+            <p className='text-muted-foreground text-xs'>
+              开启后服务只监听 127.0.0.1,仅能通过本机或隧道(SSH 转发 /
+              反向代理)访问。
+              <span className='text-foreground'> 保存后需重启服务才生效。</span>
+              {isDocker &&
+                ' 当前为 Docker 环境,此开关会被忽略——容器内 127.0.0.1 收不到宿主转发进来的端口。'}
+            </p>
+          </div>
+          <Switch
+            id='ac-local-only'
+            checked={localOnly}
+            disabled={isDocker || mutation.isPending}
+            onCheckedChange={(v) => mutation.mutate(v)}
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

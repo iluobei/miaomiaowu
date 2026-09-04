@@ -143,7 +143,6 @@ import {
 } from '@/components/ui/tooltip'
 import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
 import { FlagEmojiPicker } from '@/components/flag-emoji-picker'
-import { Topbar } from '@/components/layout/topbar'
 import { NodeProbeDialog } from '@/components/node-probe-dialog'
 import { SpeedTestDialog } from '@/components/speedtest-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -3465,7 +3464,6 @@ function NodesPage() {
 
   return (
     <div className='bg-background min-h-svh'>
-      <Topbar />
       <main className='mx-auto w-full max-w-7xl px-4 py-8 pt-24 sm:px-6'>
         <section className='space-y-4'>
           <div>

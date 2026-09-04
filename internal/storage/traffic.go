@@ -256,7 +256,7 @@ type SubscribeFile struct {
 type UserSettings struct {
 	Username                     string
 	ForceSyncExternal            bool
-	MatchRule                    string     // "node_name", "server_port", or "type_server_port"
+	MatchRule                    string     // "node_name", "server_port", "type_server_port", or "type_server_port_cred"
 	SyncScope                    string     // "saved_only" or "all"
 	KeepNodeName                 bool       // Keep current node name when syncing
 	CacheExpireMinutes           int        // Cache expiration time in minutes
@@ -270,6 +270,7 @@ type UserSettings struct {
 	AppendSubInfo                bool       // Append remaining traffic and days to node names during sync
 	DefaultTemplateFilename      string     // Personal Clash template
 	DefaultSurgeTemplateFilename string     // Personal Surge template
+	DefaultLoonTemplateFilename  string     // Personal Loon template
 	DebugEnabled                 bool       // Enable debug logging to file
 	DebugLogPath                 string     // Path to current debug log file
 	DebugStartedAt               *time.Time // When debug logging was started
@@ -284,6 +285,7 @@ type SystemConfig struct {
 	SilentMode               bool   // Silent mode: return 404 for all requests except subscription
 	SilentModeTimeout        int    // Minutes to allow access after subscription fetch (default 15)
 	EnableSubInfoNodes       bool   // Enable subscription info nodes (expire time and remaining traffic)
+	SubInfoV2RayOnly         bool   // 仅在 v2ray/base64 输出里注入信息节点(转换前塞进 clash proxies);开启后 clash 客户端不再注入
 	SubInfoExpirePrefix      string // Prefix for expire time node, default "📅过期时间"
 	SubInfoTrafficPrefix     string // Prefix for remaining traffic node, default "⌛剩余流量"
 	EnableShortLink          bool   // 启用短链接（全局设置）
@@ -972,6 +974,9 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 	if err := r.ensureUserSettingsColumn("default_surge_template_filename", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := r.ensureUserSettingsColumn("default_loon_template_filename", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 
 	// Add file_short_code column to subscribe_files table (3-character code)
 	if err := r.ensureSubscribeFileColumn("file_short_code", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -1054,6 +1059,10 @@ WHERE NOT EXISTS (SELECT 1 FROM system_config WHERE id = 1);
 		return err
 	}
 
+	// Add sub_info_v2ray_only column to system_config table
+	if err := r.ensureSystemConfigColumn("sub_info_v2ray_only", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	// Add enable_sub_info_nodes column to system_config table
 	if err := r.ensureSystemConfigColumn("enable_sub_info_nodes", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
@@ -1342,6 +1351,27 @@ CREATE TABLE IF NOT EXISTS speed_testers (
 	if _, err := r.db.Exec(speedTestersSchema); err != nil {
 		return fmt.Errorf("migrate speed_testers: %w", err)
 	}
+
+	// 规则集(clash rule-providers)托管。存库而不落盘,内容随自动备份一起走。详见 rule_providers.go。
+	ruleProvidersSchema := `
+CREATE TABLE IF NOT EXISTS rule_providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'manual',
+    remote_url TEXT NOT NULL DEFAULT '',
+    refresh_minutes INTEGER NOT NULL DEFAULT 1440,
+    content TEXT NOT NULL DEFAULT '',
+    last_fetch_at TIMESTAMP,
+    last_fetch_error TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`
+	if _, err := r.db.Exec(ruleProvidersSchema); err != nil {
+		return fmt.Errorf("migrate rule_providers: %w", err)
+	}
+
 	if err := r.migrateLogTables(); err != nil {
 		return err
 	}
@@ -3806,11 +3836,11 @@ func (r *TrafficRepository) GetUserSettings(ctx context.Context, username string
 		return settings, errors.New("username is required")
 	}
 
-	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(template_version, 'v2'), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(node_name_filter, '剩余|流量|到期|订阅|时间|重置'), COALESCE(append_sub_info, 0), COALESCE(default_template_filename, ''), COALESCE(default_surge_template_filename, ''), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
+	const stmt = `SELECT username, force_sync_external, COALESCE(match_rule, 'node_name'), COALESCE(sync_scope, 'saved_only'), COALESCE(keep_node_name, 1), COALESCE(cache_expire_minutes, 0), COALESCE(sync_traffic, 0), COALESCE(enable_probe_binding, 0), COALESCE(custom_rules_enabled, 0), COALESCE(template_version, 'v2'), COALESCE(enable_proxy_provider, 0), COALESCE(node_order, '[]'), COALESCE(node_name_filter, '剩余|流量|到期|订阅|时间|重置'), COALESCE(append_sub_info, 0), COALESCE(default_template_filename, ''), COALESCE(default_surge_template_filename, ''), COALESCE(default_loon_template_filename, ''), COALESCE(debug_enabled, 0), COALESCE(debug_log_path, ''), debug_started_at, created_at, updated_at FROM user_settings WHERE username = ? LIMIT 1`
 	var forceSyncInt, keepNodeNameInt, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, enableProxyProviderInt, appendSubInfoInt, debugEnabledInt int
 	var nodeOrderJSON string
 	var debugStartedAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &settings.TemplateVersion, &enableProxyProviderInt, &nodeOrderJSON, &settings.NodeNameFilter, &appendSubInfoInt, &settings.DefaultTemplateFilename, &settings.DefaultSurgeTemplateFilename, &debugEnabledInt, &settings.DebugLogPath, &debugStartedAt, &settings.CreatedAt, &settings.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, stmt, username).Scan(&settings.Username, &forceSyncInt, &settings.MatchRule, &settings.SyncScope, &keepNodeNameInt, &settings.CacheExpireMinutes, &syncTrafficInt, &enableProbeBindingInt, &customRulesEnabledInt, &settings.TemplateVersion, &enableProxyProviderInt, &nodeOrderJSON, &settings.NodeNameFilter, &appendSubInfoInt, &settings.DefaultTemplateFilename, &settings.DefaultSurgeTemplateFilename, &settings.DefaultLoonTemplateFilename, &debugEnabledInt, &settings.DebugLogPath, &debugStartedAt, &settings.CreatedAt, &settings.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return settings, ErrUserSettingsNotFound
@@ -3933,8 +3963,8 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 	}
 
 	const stmt = `
-		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, template_version, enable_proxy_provider, node_order, node_name_filter, append_sub_info, default_template_filename, default_surge_template_filename, debug_enabled, debug_log_path, debug_started_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO user_settings (username, force_sync_external, match_rule, sync_scope, keep_node_name, cache_expire_minutes, sync_traffic, enable_probe_binding, custom_rules_enabled, template_version, enable_proxy_provider, node_order, node_name_filter, append_sub_info, default_template_filename, default_surge_template_filename, default_loon_template_filename, debug_enabled, debug_log_path, debug_started_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(username) DO UPDATE SET
 			force_sync_external = excluded.force_sync_external,
 			match_rule = excluded.match_rule,
@@ -3951,13 +3981,14 @@ func (r *TrafficRepository) UpsertUserSettings(ctx context.Context, settings Use
 			append_sub_info = excluded.append_sub_info,
 			default_template_filename = excluded.default_template_filename,
 			default_surge_template_filename = excluded.default_surge_template_filename,
+			default_loon_template_filename = excluded.default_loon_template_filename,
 			debug_enabled = excluded.debug_enabled,
 			debug_log_path = excluded.debug_log_path,
 			debug_started_at = excluded.debug_started_at,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, templateVersion, enableProxyProviderInt, nodeOrderJSON, nodeNameFilter, appendSubInfoInt, settings.DefaultTemplateFilename, settings.DefaultSurgeTemplateFilename, debugEnabledInt, settings.DebugLogPath, settings.DebugStartedAt); err != nil {
+	if _, err := r.db.ExecContext(ctx, stmt, username, forceSyncInt, matchRule, syncScope, keepNodeNameInt, cacheExpireMinutes, syncTrafficInt, enableProbeBindingInt, customRulesEnabledInt, templateVersion, enableProxyProviderInt, nodeOrderJSON, nodeNameFilter, appendSubInfoInt, settings.DefaultTemplateFilename, settings.DefaultSurgeTemplateFilename, settings.DefaultLoonTemplateFilename, debugEnabledInt, settings.DebugLogPath, settings.DebugStartedAt); err != nil {
 		return fmt.Errorf("upsert user settings: %w", err)
 	}
 
@@ -4940,7 +4971,8 @@ SELECT proxy_groups_source_url, client_compatibility_mode, silent_mode, silent_m
        COALESCE(brute_force_enabled, 1), COALESCE(brute_force_max_failures, 5), COALESCE(brute_force_window, 1440), COALESCE(brute_force_block_duration, 1440),
        COALESCE(sub_rate_limit_enabled, 1), COALESCE(sub_rate_limit_max, 30), COALESCE(sub_rate_limit_window, 120),
 	       COALESCE(skip_local_ip, 1), COALESCE(block_unknown_subscription_ua, 0),
-	       COALESCE(notify_node_probe_offline, 0), COALESCE(notify_node_probe_online, 0)
+	       COALESCE(notify_node_probe_offline, 0), COALESCE(notify_node_probe_online, 0),
+	       COALESCE(sub_info_v2ray_only, 0)
 FROM system_config
 WHERE id = 1
 `
@@ -4952,6 +4984,7 @@ WHERE id = 1
 	var notifySilentModeInt, notifyDailyTrafficInt, notifyExpiryInt int
 	var notifyNodeProbeOfflineInt, notifyNodeProbeOnlineInt int
 	var bruteForceEnabledInt, subRateLimitEnabledInt, skipLocalIPInt, blockUnknownSubUAInt int
+	var subInfoV2RayOnlyInt int
 	err := r.db.QueryRowContext(ctx, query).Scan(
 		&cfg.ProxyGroupsSourceURL, &compatibilityMode, &silentMode, &silentModeTimeout,
 		&enableSubInfoNodes, &cfg.SubInfoExpirePrefix, &cfg.SubInfoTrafficPrefix,
@@ -4966,6 +4999,7 @@ WHERE id = 1
 		&subRateLimitEnabledInt, &cfg.SubRateLimitMax, &cfg.SubRateLimitWindow,
 		&skipLocalIPInt, &blockUnknownSubUAInt,
 		&notifyNodeProbeOfflineInt, &notifyNodeProbeOnlineInt,
+		&subInfoV2RayOnlyInt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -5000,6 +5034,7 @@ WHERE id = 1
 		cfg.SilentModeTimeout = 15
 	}
 	cfg.EnableSubInfoNodes = enableSubInfoNodes != 0
+	cfg.SubInfoV2RayOnly = subInfoV2RayOnlyInt != 0
 	cfg.EnableShortLink = enableShortLinkInt != 0
 	cfg.EnableSubTrafficHeader = enableSubTrafficHeaderInt != 0
 	cfg.EnableOverrideScripts = enableOverrideScriptsInt != 0
@@ -5095,6 +5130,7 @@ SET proxy_groups_source_url = ?,
 	    block_unknown_subscription_ua = ?,
     notify_node_probe_offline = ?,
     notify_node_probe_online = ?,
+    sub_info_v2ray_only = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 1
 `
@@ -5142,6 +5178,7 @@ WHERE id = 1
 		boolToInt(cfg.SubRateLimitEnabled), cfg.SubRateLimitMax, cfg.SubRateLimitWindow,
 		boolToInt(cfg.SkipLocalIP), boolToInt(cfg.BlockUnknownSubUA),
 		boolToInt(cfg.NotifyNodeProbeOffline), boolToInt(cfg.NotifyNodeProbeOnline),
+		boolToInt(cfg.SubInfoV2RayOnly),
 	)
 	if err != nil {
 		return fmt.Errorf("update system config: %w", err)

@@ -593,12 +593,14 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	oldFilename := existing.Filename
 	needRenameFile := false
 	if req.Filename != "" && req.Filename != existing.Filename {
-		// 验证新文件名
-		ext := filepath.Ext(req.Filename)
-		if ext != ".yaml" && ext != ".yml" {
-			writeError(w, http.StatusBadRequest, errors.New("文件名必须以 .yaml 或 .yml 结尾"))
+		// [安全] 必须走 sanitizeSubscribeFilename(和创建/上传一致):此前这里只校验扩展名,
+		// 漏了 ../、/ 校验,可把文件 os.Rename 到 subscribes/ 之外(路径穿越写)。
+		safeName, serr := sanitizeSubscribeFilename(req.Filename)
+		if serr != nil {
+			writeError(w, http.StatusBadRequest, serr)
 			return
 		}
+		req.Filename = safeName
 
 		// 检查新文件名是否已被其他订阅使用
 		if existingFile, err := h.repo.GetSubscribeFileByFilename(r.Context(), req.Filename); err == nil && existingFile.ID != id {

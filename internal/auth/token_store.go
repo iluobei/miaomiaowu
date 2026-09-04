@@ -128,6 +128,22 @@ func (s *TokenStore) UpdateUsername(oldUsername, newUsername string) {
 	s.mu.Unlock()
 }
 
+// RevokeByUsername 删除某个用户的全部内存会话。用于停用/删除用户时立即断开其登录态
+// —— 否则(RequireToken 只查内存、不复查用户是否仍存在/启用)该用户的 token 会一直有效到过期。
+func (s *TokenStore) RevokeByUsername(username string) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return
+	}
+	s.mu.Lock()
+	for token, sess := range s.tokens {
+		if sess.username == username {
+			delete(s.tokens, token)
+		}
+	}
+	s.mu.Unlock()
+}
+
 // Lookup returns the username associated with the provided token if the session is valid.
 func (s *TokenStore) Lookup(token string) (string, bool) {
 	token = strings.TrimSpace(token)

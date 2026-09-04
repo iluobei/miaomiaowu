@@ -17,6 +17,8 @@ import { ThemeProvider } from './context/theme-provider'
 import { routeTree } from './routeTree.gen'
 // Styles
 import './styles/index.css'
+// 液态玻璃主题:选中态「流动玻璃」滑块(非 glass 主题时自动 no-op)
+import { initGlassIndicator } from '@/lib/glass-indicator'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,3 +103,5 @@ if (!rootElement.innerHTML) {
     </StrictMode>
   )
 }
+
+initGlassIndicator()

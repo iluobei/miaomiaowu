@@ -1257,7 +1257,8 @@ func (h *nodesHandler) handleFetchSubscription(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// 创建HTTP客户端并获取订阅内容
+	// 创建HTTP客户端并获取订阅内容。
+	// 注:此处为管理员专用(RequireAdmin)的订阅导入,允许指向 LAN/自建订阅源,故不套 SSRF 客户端。
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}

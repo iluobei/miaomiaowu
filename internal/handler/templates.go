@@ -391,6 +391,8 @@ func templateToResponse(t storage.Template) templateResponse {
 }
 
 func fetchRemoteContent(url string, timeout time.Duration) (string, error) {
+	// 注:此处为管理员专用(RequireAdmin)的规则源抓取,允许指向 LAN/自建源(自托管常见需求),
+	// 故不套 SSRF 客户端。SSRF 防护只加在非管理员可达 / 用户可控 URL 的抓取路径上。
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
