@@ -1,3 +1,5 @@
+import { dump as dumpYAML } from 'js-yaml'
+
 import type { ProxyConfig, CustomRule, ProxyGroupCategory } from './types'
 import { deepCopy } from './utils'
 import { DEFAULT_CLASH_CONFIG, CLASH_SITE_RULE_SET_BASE_URL, CLASH_IP_RULE_SET_BASE_URL } from './clash-config'
@@ -79,8 +81,12 @@ export class ClashConfigBuilder {
       orderedConfig['rule-providers'] = ruleProviders
     }
 
-    // Convert to YAML
-    return this.toYAML(orderedConfig)
+    return dumpYAML(orderedConfig, {
+      indent: 2,
+      lineWidth: -1,
+      noRefs: true,
+      quotingType: '"',
+    })
   }
 
   private convertProxies(): void {
@@ -153,7 +159,7 @@ export class ClashConfigBuilder {
 
     this.config['rule-providers'] = ruleProviders
   }
-  
+
   public buildProxyGroups(): void {
     const proxyNames = this.proxies.map((p) => p.name)
     const groups: Record<string, unknown>[] = []
@@ -333,78 +339,5 @@ export class ClashConfigBuilder {
     rules.push(`MATCH,${translateOutbound('Fall Back')}`)
 
     this.config.rules = rules
-  }
-
-  private toYAML(obj: unknown, indent: number = 0): string {
-    const spaces = '  '.repeat(indent)
-    let yaml = ''
-
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        if (typeof item === 'object' && item !== null) {
-          const entries = Object.entries(item).filter(([_, v]) => v !== undefined)
-          if (entries.length > 0) {
-            const [firstKey, firstValue] = entries[0]
-            const restEntries = entries.slice(1)
-
-            if (Array.isArray(firstValue)) {
-              yaml += `${spaces}- ${firstKey}:\n${this.toYAML(firstValue, indent + 2)}`
-            } else if (typeof firstValue === 'object' && firstValue !== null) {
-              yaml += `${spaces}- ${firstKey}:\n${this.toYAML(firstValue, indent + 2)}`
-            } else {
-              yaml += `${spaces}- ${firstKey}: ${this.formatValue(firstValue, firstKey)}\n`
-            }
-
-            for (const [key, value] of restEntries) {
-              if (Array.isArray(value)) {
-                yaml += `${spaces}  ${key}:\n${this.toYAML(value, indent + 2)}`
-              } else if (typeof value === 'object' && value !== null) {
-                yaml += `${spaces}  ${key}:\n${this.toYAML(value, indent + 2)}`
-              } else {
-                yaml += `${spaces}  ${key}: ${this.formatValue(value, key)}\n`
-              }
-            }
-          }
-        } else {
-          yaml += `${spaces}- ${this.formatValue(item)}\n`
-        }
-      }
-    } else if (typeof obj === 'object' && obj !== null) {
-      for (const [key, value] of Object.entries(obj)) {
-        if (value === undefined) continue
-
-        if (Array.isArray(value)) {
-          yaml += `${spaces}${key}:\n${this.toYAML(value, indent + 1)}`
-        } else if (typeof value === 'object' && value !== null) {
-          yaml += `${spaces}${key}:\n${this.toYAML(value, indent + 1)}`
-        } else {
-          yaml += `${spaces}${key}: ${this.formatValue(value, key)}\n`
-        }
-      }
-    }
-
-    return yaml
-  }
-
-  private formatValue(value: unknown, key?: string): string {
-    if (typeof value === 'string') {
-      // 空字符串或 short-id 字段强制使用引号
-      if (value === '' || key === 'short-id') {
-        return `"${value}"`
-      }
-      if (
-        value.includes(':') ||
-        value.includes('#') ||
-        value.includes('[') ||
-        value.includes(']') ||
-        value.includes(',')
-      ) {
-        return `"${value}"`
-      } else if (value.startsWith('@')) {
-        return `"${value}"`
-      }
-      return value
-    }
-    return String(value)
   }
 }
