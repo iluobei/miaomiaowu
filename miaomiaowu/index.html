@@ -28,6 +28,20 @@
     <meta property="twitter:image" content="./safari-pinned-tab.svg" />
 
     <meta name="theme-color" content="#fff" />
+
+    <!--
+      PWA(从妙妙屋X 移植)。manifest 由 Go 动态提供(见 internal/web/pwa.go);
+      apple-* 三项给 iOS「添加到主屏幕」用 —— iOS 不读 manifest 里的图标和名称。
+      mmw-pwa 是系统设置里的开关,服务端把占位符换成 true/false,前端据此决定注册还是注销
+      service worker(src/lib/pwa.ts)。Vite 开发服务器不做替换,占位符原样留着(开发环境本来就不注册)。
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="妙妙屋" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mmw-pwa" content="__MMW_PWA_ENABLED__" />
     <script
       async
       defer

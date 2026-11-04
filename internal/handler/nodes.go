@@ -164,6 +164,9 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path = strings.Trim(path, "/")
 
 	switch {
+	// 节点管理列表的隐藏 / 取消隐藏(见 nodes_hidden.go)
+	case path == "hidden" && (r.Method == http.MethodGet || r.Method == http.MethodPost):
+		h.handleHiddenNodes(w, r)
 	case path == "" && r.Method == http.MethodGet:
 		h.handleList(w, r)
 	case path == "" && r.Method == http.MethodPost:

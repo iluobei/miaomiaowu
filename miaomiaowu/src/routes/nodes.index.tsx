@@ -37,6 +37,7 @@ import {
   Undo2,
   Activity,
   Eye,
+  EyeOff,
   Copy,
   ChevronDown,
   ChevronLeft,
@@ -143,6 +144,7 @@ import {
 } from '@/components/ui/tooltip'
 import { ExternalSyncNodeDialog } from '@/components/external-sync-node-dialog'
 import { FlagEmojiPicker } from '@/components/flag-emoji-picker'
+import { HideNodesDialog } from '@/components/hide-nodes-dialog'
 import { NodeProbeDialog } from '@/components/node-probe-dialog'
 import { SpeedTestDialog } from '@/components/speedtest-dialog'
 import { Twemoji } from '@/components/twemoji'
@@ -3249,8 +3251,71 @@ function NodesPage() {
     [selectedNodeIds, nodeOrder, savedNodes, debouncedSaveNodeOrder]
   )
 
+  // ===== 隐藏节点:只影响这里的列表显示,订阅 / 下发不受影响 =====
+  // 过滤放在列表这一层而不是 displayNodes:拖动排序要按全量节点算顺序,否则隐藏节点的位置会丢
+  const hiddenNodesQ = useQuery({
+    queryKey: ['nodes-hidden'],
+    queryFn: async () =>
+      (await api.get('/api/admin/nodes/hidden')).data as { ids: number[] },
+  })
+  const hiddenNodeIds = useMemo(
+    () => new Set<number>(hiddenNodesQ.data?.ids ?? []),
+    [hiddenNodesQ.data]
+  )
+  const [showHiddenNodes, setShowHiddenNodes] = useState(false)
+  const [hideDialogOpen, setHideDialogOpen] = useState(false)
+  const listNodes = useMemo(
+    () =>
+      showHiddenNodes || hiddenNodeIds.size === 0
+        ? displayNodes
+        : displayNodes.filter(
+            (n) => !(n.isSaved && n.dbId && hiddenNodeIds.has(n.dbId))
+          ),
+    [displayNodes, hiddenNodeIds, showHiddenNodes]
+  )
+  const hiddenCount = useMemo(
+    () => savedNodes.filter((n) => hiddenNodeIds.has(n.id)).length,
+    [savedNodes, hiddenNodeIds]
+  )
+  const hiddenBadge = (node: { isSaved?: boolean; dbId?: number }) =>
+    showHiddenNodes &&
+    node.isSaved &&
+    node.dbId &&
+    hiddenNodeIds.has(node.dbId) ? (
+      <Badge
+        variant='outline'
+        className='text-muted-foreground shrink-0 gap-1 text-[10px]'
+      >
+        <EyeOff className='size-3' />
+        已隐藏
+      </Badge>
+    ) : null
+  const saveHiddenNodes = async (next: Set<number>) => {
+    const toHide = [...next].filter((id) => !hiddenNodeIds.has(id))
+    const toShow = [...hiddenNodeIds].filter((id) => !next.has(id))
+    try {
+      if (toHide.length)
+        await api.post('/api/admin/nodes/hidden', { ids: toHide, hidden: true })
+      if (toShow.length)
+        await api.post('/api/admin/nodes/hidden', {
+          ids: toShow,
+          hidden: false,
+        })
+      toast.success(`已隐藏 ${toHide.length} 个,取消隐藏 ${toShow.length} 个`)
+    } catch (e) {
+      const err = e as {
+        response?: { data?: { error?: string } }
+        message?: string
+      }
+      toast.error(err.response?.data?.error || err.message || '保存失败')
+      throw e
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ['nodes-hidden'] })
+    }
+  }
+
   const filteredNodes = useMemo(() => {
-    let nodes = displayNodes
+    let nodes = listNodes
 
     // 按协议筛选
     if (selectedProtocol !== 'all') {
@@ -3266,7 +3331,7 @@ function NodesPage() {
     }
 
     return nodes
-  }, [displayNodes, selectedProtocol, tagFilter])
+  }, [listNodes, selectedProtocol, tagFilter])
 
   const deferredFilteredNodes = useDeferredValue(filteredNodes)
 
@@ -4351,6 +4416,24 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         <Button
                           variant='outline'
                           size='sm'
+                          onClick={() => setHideDialogOpen(true)}
+                        >
+                          <EyeOff className='mr-1 size-3.5' />
+                          隐藏节点
+                        </Button>
+                        {hiddenCount > 0 && (
+                          <Button
+                            variant={showHiddenNodes ? 'default' : 'outline'}
+                            size='sm'
+                            onClick={() => setShowHiddenNodes((v) => !v)}
+                          >
+                            <Eye className='mr-1 size-3.5' />
+                            显示已隐藏 ({hiddenCount})
+                          </Button>
+                        )}
+                        <Button
+                          variant='outline'
+                          size='sm'
                           onClick={() =>
                             setRenderMode((m) =>
                               m === 'virtual' ? 'expanded' : 'virtual'
@@ -4822,6 +4905,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                           <Twemoji>
                                             {node.name || '未知'}
                                           </Twemoji>
+                                          {hiddenBadge(node)}
                                         </div>
                                       </>
                                     )}
@@ -5226,6 +5310,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                                 <Twemoji>
                                                   {node.name || '未知'}
                                                 </Twemoji>
+                                                {hiddenBadge(node)}
                                               </div>
                                             </>
                                           )}
@@ -5752,6 +5837,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                               {node.isSaved && (
                                                 <Check className='size-4 shrink-0 text-green-600' />
                                               )}
+                                              {hiddenBadge(node)}
                                             </div>
                                             {/* 服务器地址显示在节点名称下方 */}
                                             {node.parsed && (
@@ -6470,6 +6556,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                           {node.isSaved && (
                                             <Check className='size-4 shrink-0 text-green-600' />
                                           )}
+                                          {hiddenBadge(node)}
                                           <Button
                                             variant='ghost'
                                             size='icon'
@@ -7042,6 +7129,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                             {node.isSaved && (
                                               <Check className='size-4 shrink-0 text-green-600' />
                                             )}
+                                            {hiddenBadge(node)}
                                             <Button
                                               variant='ghost'
                                               size='icon'
@@ -7938,6 +8026,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                                           {node.isSaved && (
                                             <Check className='size-4 shrink-0 text-green-600' />
                                           )}
+                                          {hiddenBadge(node)}
                                           <Button
                                             variant='ghost'
                                             size='icon'
@@ -9774,6 +9863,21 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
       </Dialog>
 
       <NodeProbeDialog open={nodeProbeOpen} onOpenChange={setNodeProbeOpen} />
+      <HideNodesDialog
+        open={hideDialogOpen}
+        onOpenChange={setHideDialogOpen}
+        hiddenIds={hiddenNodeIds}
+        onSave={saveHiddenNodes}
+        nodes={displayNodes
+          .filter((n) => n.isSaved && n.dbId)
+          .map((n) => ({
+            id: n.dbId!,
+            name: n.name || '',
+            protocol: n.parsed?.type || n.dbNode?.protocol || '',
+            group: (n.dbNode?.tags?.length ? n.dbNode.tags[0] : n.tag) || '',
+            server: n.parsed?.server || '',
+          }))}
+      />
       {/* 节点测速 */}
       <SpeedTestDialog
         open={speedDialogOpen && !speedDialogMin}

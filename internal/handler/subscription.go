@@ -763,6 +763,12 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ext = ".yaml"
 	}
 
+	// 静态订阅文件:残缺节点(缺 type/server/port)剔掉、一个都不剩时补占位节点,放在格式转换之前,
+	// 各客户端格式都受益(模板 / 标签动态生成那两条路已在节点表那一层处理)。
+	if !fromTemplate {
+		data = dropIncompleteProxiesFromStaticSubscription(data)
+	}
+
 	data = deduplicateProxies(data, username)
 
 	// v2ray 订阅信息节点(SubInfoV2RayOnly):v2ray/base64 输出没有 proxies 结构可供事后注入,
@@ -2457,6 +2463,11 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		normalizeProxyFields(proxyConfig)
 		// 确保节点名称正确（使用数据库中的名称）
 		proxyConfig["name"] = node.NodeName
+		// 残缺节点(缺 type/server/port)不发:一个就能让 mihomo 整份订阅加载失败
+		if missing := clashProxyMissingFields(proxyConfig); len(missing) > 0 {
+			logger.Warn("[模板生成] 节点 clash 配置残缺,本次不下发", "node_id", node.ID, "node", node.NodeName, "missing", missing)
+			return nil, false
+		}
 		// 链式代理：根据 chain_proxy_node_id 注入 dialer-proxy
 		if node.ChainProxyNodeID != nil {
 			if targetName, ok := nodeIDToName[*node.ChainProxyNodeID]; ok {
@@ -2539,6 +2550,13 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	}
 
 	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies), "tag_filter", hasTagFilter, "relay_groups", len(relayGroups))
+
+	if len(proxies) == 0 {
+		// 一个能发的节点都没有(全部禁用 / 标签没匹配到 / 配置全部残缺):给一份带占位节点的配置,
+		// 客户端能加载、看得到原因,而不是更新失败(见 no_available_node.go)。
+		logger.Warn("[模板生成] 没有可发的节点,下发占位配置", "subscribe", subscribeFile.Name, "user", username)
+		proxies = append(proxies, noAvailableNodeProxy())
+	}
 
 	// 3. 从代理集合表获取代理集合配置（用于 proxy-providers）
 	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, nodeOwner)
@@ -2667,6 +2685,11 @@ func (h *SubscriptionHandler) generateFromSelectedTags(ctx context.Context, user
 		}
 		normalizeProxyFields(proxyConfig)
 		proxyConfig["name"] = node.NodeName
+		// 残缺节点(缺 type/server/port)不发:一个就能让 mihomo 整份订阅加载失败
+		if missing := clashProxyMissingFields(proxyConfig); len(missing) > 0 {
+			logger.Warn("[标签动态生成] 节点 clash 配置残缺,本次不下发", "node_id", node.ID, "node", node.NodeName, "missing", missing)
+			continue
+		}
 		if node.ChainProxyNodeID != nil {
 			if targetName, ok := nodeIDToName[*node.ChainProxyNodeID]; ok {
 				proxyConfig["dialer-proxy"] = targetName
@@ -2677,6 +2700,13 @@ func (h *SubscriptionHandler) generateFromSelectedTags(ctx context.Context, user
 		}
 		proxies = append(proxies, proxyConfig)
 		proxyNames = append(proxyNames, node.NodeName)
+	}
+
+	if len(proxies) == 0 {
+		// 一个能发的节点都没有:下发占位节点而不是空配置,客户端能加载、看得到原因(见 no_available_node.go)
+		logger.Warn("[标签动态生成] 没有可发的节点,下发占位配置", "subscribe", subscribeFile.Name, "tags", subscribeFile.SelectedTags)
+		proxies = append(proxies, noAvailableNodeProxy())
+		proxyNames = append(proxyNames, noAvailableNodeName)
 	}
 
 	groupProxies := append([]string{}, proxyNames...)

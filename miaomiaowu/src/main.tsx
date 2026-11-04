@@ -19,6 +19,7 @@ import { routeTree } from './routeTree.gen'
 import './styles/index.css'
 // 液态玻璃主题:选中态「流动玻璃」滑块(非 glass 主题时自动 no-op)
 import { initGlassIndicator } from '@/lib/glass-indicator'
+import { setupPWA } from '@/lib/pwa'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,3 +106,6 @@ if (!rootElement.innerHTML) {
 }
 
 initGlassIndicator()
+
+// PWA:注册 service worker(仅生产构建 + 安全上下文 + 系统设置开着),关掉时注销已有的。
+setupPWA()
