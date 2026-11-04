@@ -282,6 +282,9 @@ func main() {
 	mux.HandleFunc("/api/branding", brandingHandler.PublicGet)
 	mux.HandleFunc("/api/branding/logo", brandingHandler.ServeLogo)
 	mux.HandleFunc("/api/branding/icon", brandingHandler.ServeIcon)
+	// PWA 开关:首屏 meta 与 /sw.js 跟着它走,启动时同步一次(见 internal/web/pwa.go)。
+	web.SetPWAEnabled(handler.LoadPWAEnabled(ctx, repo))
+	mux.Handle("/api/admin/system-settings/pwa", auth.RequireAdmin(tokenStore, userRepo, handler.NewPWASettingHandler(repo, web.SetPWAEnabled)))
 
 	// 仅本机访问开关(issue #106)。改后重启生效(监听地址启动时定死,见 getAddr)。
 	mux.Handle("/api/admin/access-control", auth.RequireAdmin(tokenStore, userRepo, handler.NewAccessControlHandler(repo)))

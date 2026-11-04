@@ -809,6 +809,10 @@ CREATE INDEX IF NOT EXISTS idx_nodes_enabled ON nodes(enabled);
 	if err := r.ensureNodeColumn("probe_enabled", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	// 节点管理列表里「隐藏」:只影响管理页显示,不影响订阅 / 下发。默认 0。
+	if err := r.ensureNodeColumn("hidden", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	// Create tag index after ensuring column exists
 	if _, err := r.db.Exec(`CREATE INDEX IF NOT EXISTS idx_nodes_tag ON nodes(tag);`); err != nil {

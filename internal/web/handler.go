@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,6 +100,8 @@ func rebuildServedIndexLocked() {
 	// 转义了 `a > b`、`content: "&"` 这类正常 CSS 全会坏掉。能把注入点顶出 <style>
 	// 的只有 `</style`,那一条在写入和读取两侧都被 handler.sanitizeCustomCSS 挡掉了。
 	s = bytes.ReplaceAll(s, []byte(customCSSPlaceholder), []byte(currentCustomCSS))
+	// PWA 开关进 <meta name="mmw-pwa">(见 pwa.go),只会是 true/false。
+	s = bytes.ReplaceAll(s, []byte(pwaEnabledPlaceholder), []byte(strconv.FormatBool(currentPWAEnabled)))
 	servedIndex = s
 	indexMod = time.Now()
 }
@@ -204,6 +207,16 @@ func Handler() http.Handler {
 
 		if cleaned == "/" {
 			serveIndex(w, r)
+			return
+		}
+
+		// 这两个不走静态文件:内容要按运行时设置生成 / 替换(见 pwa.go)。
+		switch cleaned {
+		case "/manifest.webmanifest":
+			serveManifest(w, r)
+			return
+		case "/sw.js":
+			serveServiceWorker(w, r)
 			return
 		}
 

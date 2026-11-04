@@ -47,6 +47,7 @@ import { BrandingCard } from '@/components/system-settings/branding-card'
 import { CustomCSSCard } from '@/components/system-settings/custom-css-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
 import { CACertNoPinCard } from '@/components/system-settings/ca-cert-no-pin-card'
+import { PWASettingCard } from '@/components/system-settings/pwa-setting-card'
 
 // 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
 const SETTINGS_TABS = [
@@ -1469,6 +1470,8 @@ function SystemSettingsPage() {
             active={settingsTab === 'features'}
             notifyEnabled={notifyConfig.notify_enabled}
           />
+          {/* 安装到桌面(PWA) */}
+          <PWASettingCard />
           </TabsContent>
 
           <TabsContent value='security' className='space-y-6'>
