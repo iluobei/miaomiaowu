@@ -119,11 +119,11 @@ func (h *RuleTemplatesHandler) handleListTemplates(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Clash templates use YAML; Surge templates use .conf.
+	// .yaml/.yml → Clash;.conf → Surge;.lcf → Loon;.qx → Quantumult X;.json → sing-box
 	var templates []string
 	for _, entry := range entries {
 		name := strings.ToLower(entry.Name())
-		if !entry.IsDir() && h.canView(r, entry.Name()) && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".conf") || strings.HasSuffix(name, ".lcf")) {
+		if !entry.IsDir() && h.canView(r, entry.Name()) && (strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".conf") || strings.HasSuffix(name, ".lcf") || strings.HasSuffix(name, ".qx") || strings.HasSuffix(name, ".json")) {
 			templates = append(templates, entry.Name())
 		}
 	}
@@ -206,6 +206,19 @@ func (h *RuleTemplatesHandler) handleUpdateTemplate(w http.ResponseWriter, r *ht
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	// sing-box 模板是一份 JSON,少个逗号整份配置就出不来 —— 保存前先查,别等用户拉订阅才发现。
+	// 其它种类是文本 / YAML,历来不在这里校验。
+	if isSingboxTemplateFile(templateName) {
+		if verr := validateSingboxTemplate(payload.Content); verr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": "sing-box 模板无效: " + verr.Error(),
+			})
+			return
+		}
 	}
 
 	// Write content to file
@@ -299,12 +312,16 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 
 	// Preserve the template kind when the user omits an extension.
 	lowerNewName := strings.ToLower(newName)
-	if !strings.HasSuffix(lowerNewName, ".yaml") && !strings.HasSuffix(lowerNewName, ".yml") && !strings.HasSuffix(lowerNewName, ".conf") && !strings.HasSuffix(lowerNewName, ".lcf") {
+	if !strings.HasSuffix(lowerNewName, ".yaml") && !strings.HasSuffix(lowerNewName, ".yml") && !strings.HasSuffix(lowerNewName, ".conf") && !strings.HasSuffix(lowerNewName, ".lcf") && !strings.HasSuffix(lowerNewName, ".qx") && !strings.HasSuffix(lowerNewName, ".json") {
 		lowerOld := strings.ToLower(oldName)
 		if strings.HasSuffix(lowerOld, ".conf") {
 			newName += ".conf"
 		} else if strings.HasSuffix(lowerOld, ".lcf") {
 			newName += ".lcf"
+		} else if strings.HasSuffix(lowerOld, ".qx") {
+			newName += ".qx"
+		} else if strings.HasSuffix(lowerOld, ".json") {
+			newName += ".json"
 		} else {
 			newName += ".yaml"
 		}
@@ -368,11 +385,11 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 	// Validate file extension
 	filename := header.Filename
 	lowerFilename := strings.ToLower(filename)
-	if !strings.HasSuffix(lowerFilename, ".yaml") && !strings.HasSuffix(lowerFilename, ".yml") && !strings.HasSuffix(lowerFilename, ".conf") && !strings.HasSuffix(lowerFilename, ".lcf") {
+	if !strings.HasSuffix(lowerFilename, ".yaml") && !strings.HasSuffix(lowerFilename, ".yml") && !strings.HasSuffix(lowerFilename, ".conf") && !strings.HasSuffix(lowerFilename, ".lcf") && !strings.HasSuffix(lowerFilename, ".qx") && !strings.HasSuffix(lowerFilename, ".json") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "只支持 .yaml、.yml、Surge .conf 或 Loon .lcf 文件",
+			"error": "只支持 .yaml、.yml、Surge .conf、Loon .lcf、Quantumult X .qx 或 sing-box .json 文件",
 		})
 		return
 	}
@@ -417,6 +434,23 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 		os.Remove(templatePath)
 		http.Error(w, "Failed to save template file", http.StatusInternalServerError)
 		return
+	}
+
+	// sing-box 模板同保存时一样先校验(见 handleUpdateTemplate),不合格的不留在目录里。
+	if isSingboxTemplateFile(filename) {
+		uploaded, rerr := os.ReadFile(templatePath)
+		if rerr == nil {
+			rerr = validateSingboxTemplate(string(uploaded))
+		}
+		if rerr != nil {
+			os.Remove(templatePath)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": "sing-box 模板无效: " + rerr.Error(),
+			})
+			return
+		}
 	}
 	_ = h.repo.SetRuleTemplateOwner(r.Context(), filename, auth.UsernameFromContext(r.Context()))
 	// 从链接导入的带上来源链接,之后可以「从链接更新」

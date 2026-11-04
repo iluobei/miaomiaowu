@@ -212,6 +212,9 @@ func main() {
 	mux.Handle("/api/admin/rule-templates/", auth.RequireToken(tokenStore, handler.NewRuleTemplatesHandler(repo)))
 	mux.Handle("/api/user/default-template", auth.RequireToken(tokenStore, handler.NewUserDefaultTemplateHandler(repo)))
 	mux.Handle("/api/admin/template-v3/", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateV3Handler(repo)))
+	// clash rule-provider → Loon 规则行的解析器。装在这里而不是转换模块里:
+	// 模块是纯函数不联网,而这边有 SSRF 安全的抓取客户端和缓存。
+	handler.InstallLoonRuleSetResolver()
 	mux.Handle("/api/admin/nodes", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodesHandler(repo, subscribeDir)))
 	mux.Handle("/api/admin/nodes/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodesHandler(repo, subscribeDir)))
 	mux.Handle("/api/admin/sync-external-subscriptions", auth.RequireAdmin(tokenStore, userRepo, handler.NewSyncExternalSubscriptionsHandler(repo, subscribeDir)))

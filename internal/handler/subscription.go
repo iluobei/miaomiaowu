@@ -368,7 +368,16 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	fromTemplate := false
 	fromSurgeTemplate := false
 	fromLoonTemplate := false
+	fromQXTemplate := false // Quantumult X 模板直出:data 已是 QX INI 文本
+	// sing-box 模板直出:data 已是完整的 sing-box 配置(JSON)。JSON 也是合法的 YAML,
+	// 下面那些「解析 YAML 再改写」的步骤遇到它不会报错、而是真的去改 —— 所以凡是会改写 data 的步骤都要看这个标记。
+	fromSingboxTemplate := false
 	effectiveTemplate := subscribeFile.TemplateFilename
+	// sing-box 模板(.json)只对 sing-box 客户端有意义。别的客户端遇到绑了它的订阅,当作没绑,
+	// 往下走个人默认模板 / 静态文件 —— 否则 Clash 客户端会收到一份 sing-box 配置。
+	if hasSubscribeFile && isSingboxTemplateFile(effectiveTemplate) && !isSingboxTemplateClientType(resolveClientType(r)) {
+		effectiveTemplate = ""
+	}
 	if hasSubscribeFile && effectiveTemplate == "" && username != "" {
 		if settings, err := h.repo.GetUserSettings(r.Context(), username); err == nil {
 			// Loon 判断在 Surge 之前(客户端类型独立,这里只是保持与文件判定一致的优先级)。
@@ -377,6 +386,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				effectiveTemplate = settings.DefaultLoonTemplateFilename
 			case isSurgeClientType(ct):
 				effectiveTemplate = settings.DefaultSurgeTemplateFilename
+			case isQXTemplateClientType(ct):
+				effectiveTemplate = settings.DefaultQXTemplateFilename
+			case isSingboxTemplateClientType(ct):
+				effectiveTemplate = settings.DefaultSingboxTemplateFilename
 			default:
 				effectiveTemplate = settings.DefaultTemplateFilename
 			}
@@ -395,6 +408,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			fromTemplate = true
 			fromSurgeTemplate = isSurgeTemplateFile(effectiveTemplate)
 			fromLoonTemplate = isLoonTemplateFile(effectiveTemplate)
+			fromQXTemplate = isQXTemplateFile(effectiveTemplate)
+			fromSingboxTemplate = isSingboxTemplateFile(effectiveTemplate)
 			logger.Info("[⏱️ 耗时监测] 模板生成完成", "step", "template_generate", "duration_ms", time.Since(stepStart).Milliseconds(), "bytes", len(data))
 		}
 	}
@@ -672,7 +687,8 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// 在转换之前根据节点排序配置调整原始 YAML
 	// 这样转换后的任何格式都会保持正确的节点顺序
-	if len(nodeOrder) > 0 && username != "" && h.repo != nil {
+	// sing-box 模板直出时跳过:节点顺序在生成时已按用户配置排好,这里再跑一遍会把那份 JSON 整份改写成 YAML。
+	if len(nodeOrder) > 0 && username != "" && h.repo != nil && !fromSingboxTemplate {
 		var yamlNode yaml.Node
 		if err := yaml.Unmarshal(data, &yamlNode); err == nil {
 			shouldRewrite := false
@@ -707,8 +723,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	logger.Info("[⏱️ 耗时监测] 节点排序完成", "step", "node_order", "duration_ms", time.Since(stepStart).Milliseconds())
 
 	// 执行覆写脚本（post_fetch 钩子），转换为客户端配置前执行，对所有客户端类型生效
+	// 覆写脚本改的是 Clash YAML。sing-box 模板直出的是另一种结构的 JSON,脚本按 Clash 的键去改,
+	// 轻则无效、重则把配置写坏,所以不跑。
 	stepStart = time.Now()
-	if hasSubscribeFile && subscribeFile.AutoSyncCustomRules {
+	if hasSubscribeFile && subscribeFile.AutoSyncCustomRules && !fromSingboxTemplate {
 		if username := auth.UsernameFromContext(r.Context()); username != "" {
 			if sysCfg, err := h.repo.GetSystemConfig(r.Context()); err == nil && sysCfg.EnableOverrideScripts {
 				selectedScriptIDs := makeIDSet(subscribeFile.SelectedOverrideScriptIDs)
@@ -735,14 +753,14 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				logger.Info("[OverrideScript] 覆写脚本功能未启用", "enable_override_scripts", sysCfg.EnableOverrideScripts, "err", err)
 			}
 		}
-	} else if hasSubscribeFile {
+	} else if hasSubscribeFile && !fromSingboxTemplate {
 		logger.Info("[OverrideScript] 订阅文件未开启自动应用", "auto_sync_custom_rules", subscribeFile.AutoSyncCustomRules)
 	}
 	logger.Info("[⏱️ 耗时监测] 覆写脚本执行完成", "step", "override_script", "duration_ms", time.Since(stepStart).Milliseconds())
 
-	// 动态应用自定义规则
+	// 动态应用自定义规则(自定义规则是 Clash 配置上的操作,sing-box 模板直出的 JSON 不套)
 	stepStart = time.Now()
-	if hasSubscribeFile && subscribeFile.AutoSyncCustomRules {
+	if hasSubscribeFile && subscribeFile.AutoSyncCustomRules && !fromSingboxTemplate {
 		selectedRuleIDs := makeIDSet(subscribeFile.SelectedCustomRuleIDs)
 		if modified, _, applyErr := applyCustomRulesToYamlFiltered(r.Context(), h.repo, data, selectedRuleIDs); applyErr != nil {
 			logger.Info("[Subscription] 应用自定义规则失败", "error", applyErr)
@@ -763,7 +781,9 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ext = ".yaml"
 	}
 
-	data = deduplicateProxies(data, username)
+	if !fromSingboxTemplate {
+		data = deduplicateProxies(data, username)
+	}
 
 	// v2ray 订阅信息节点(SubInfoV2RayOnly):v2ray/base64 输出没有 proxies 结构可供事后注入,
 	// 得在转换成 base64 之前就把信息节点塞进 clash proxies,让 v2ray producer 当普通节点吐出来。
@@ -805,6 +825,14 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// Loon 模板已是成品纯文本(段落式配置),直接下发,不进任何转换分支。
 		contentType = "text/plain; charset=utf-8"
 		ext = ".lcf"
+	} else if fromQXTemplate {
+		// Quantumult X 模板直出:同上,data 已是 QX INI 文本。
+		contentType = "text/plain; charset=utf-8"
+		ext = ".conf"
+	} else if fromSingboxTemplate {
+		// sing-box 模板直出:data 已是完整配置,不再转换。
+		contentType = "application/json; charset=utf-8"
+		ext = ".json"
 	} else if clientType == "" || clientType == "clash" || clientType == "clashmeta" {
 		data = filterSnellV6FromClashYAML(data)
 	} else if clientType != "clash-to-shadowrocket" {
@@ -1520,6 +1548,9 @@ func (h *SubscriptionHandler) convertSubscription(ctx context.Context, yamlData 
 			continue
 		}
 		proxies = append(proxies, substore.Proxy(proxyMap))
+	}
+	if isLoonClientType(clientType) {
+		normalizeLoonHysteria2Passwords(proxies)
 	}
 
 	if len(proxies) == 0 {
@@ -2592,6 +2623,27 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 		result, err := injectProxiesIntoSurgeTemplate(string(templateContent), rootProxies)
 		if err != nil {
 			return nil, fmt.Errorf("生成 Surge 配置失败: %w", err)
+		}
+		return []byte(result), nil
+	}
+	if isQXTemplateFile(subscribeFile.TemplateFilename) {
+		rootProxies := make([]map[string]any, 0, len(proxies)+len(extraProxies))
+		rootProxies = append(rootProxies, proxies...)
+		rootProxies = append(rootProxies, extraProxies...)
+		result, err := injectProxiesIntoQXTemplate(string(templateContent), rootProxies)
+		if err != nil {
+			return nil, fmt.Errorf("生成 Quantumult X 配置失败: %w", err)
+		}
+		return []byte(result), nil
+	}
+	if isSingboxTemplateFile(subscribeFile.TemplateFilename) {
+		// sing-box 模板的中转组要和节点一起放进去(节点的 detour 指向它们),不能像 Clash 那样事后追加。
+		rootProxies := make([]map[string]any, 0, len(proxies)+len(extraProxies))
+		rootProxies = append(rootProxies, proxies...)
+		rootProxies = append(rootProxies, extraProxies...)
+		result, err := injectProxiesIntoSingboxTemplate(string(templateContent), rootProxies, relayGroups)
+		if err != nil {
+			return nil, fmt.Errorf("生成 sing-box 配置失败: %w", err)
 		}
 		return []byte(result), nil
 	}

@@ -268,6 +268,14 @@ func (h *TemplateV3Handler) handlePreviewWithTags(w http.ResponseWriter, r *http
 
 // processV3Template processes a v3 template with the given proxies
 func (h *TemplateV3Handler) processV3Template(templateContent string, proxies []map[string]any) (string, error) {
+	// sing-box 模板是一份 JSON,与其它几种段落式文本都不重合,最先判。
+	if looksLikeSingboxTemplate(templateContent) {
+		return injectProxiesIntoSingboxTemplate(templateContent, proxies, nil)
+	}
+	// Quantumult X 的段名是小写带下划线的([server_local] / [filter_local] / [policy]),与 Loon / Surge 不重合。
+	if looksLikeQXTemplate(templateContent) {
+		return injectProxiesIntoQXTemplate(templateContent, proxies)
+	}
 	// Loon 判断必须在 Surge 之前:两者段头几乎一样([General]/[Proxy]/[Proxy Group]/[Rule]
 	// 都有),looksLikeSurgeTemplate 对 Loon 模板会全部命中,于是按 Surge 的节点行格式注入,
 	// 产出一份 Loon 读不了的配置。
@@ -299,6 +307,17 @@ func looksLikeSurgeTemplate(content string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "[general]", "[proxy]", "[proxy group]", "[rule]":
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeQXTemplate 按 QX 特有的段名认 Quantumult X 模板。
+func looksLikeQXTemplate(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "[server_local]", "[server_remote]", "[filter_local]", "[filter_remote]", "[rewrite_local]":
 			return true
 		}
 	}
@@ -768,6 +787,7 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Type:"clash"(.yaml/.yml)、"surge"(.conf)、"loon"(.lcf)、"qx"(.qx) 或 "singbox"(.json)
 	type templateInfo struct {
 		Name      string            `json:"name"`     // 显示名称（去掉 _v3.yaml 后缀）
 		Filename  string            `json:"filename"` // 完整文件名
@@ -783,18 +803,24 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 		name := entry.Name()
 		isSurge := isSurgeTemplateFile(name)
 		isLoon := isLoonTemplateFile(name)
-		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || isSurge || isLoon {
+		isQX := isQXTemplateFile(name)
+		isSingbox := isSingboxTemplateFile(name)
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") || isSurge || isLoon || isQX || isSingbox {
 			displayName := strings.TrimSuffix(name, ".yaml")
 			displayName = strings.TrimSuffix(displayName, ".yml")
 			displayName = strings.TrimSuffix(displayName, ".conf")
 			displayName = strings.TrimSuffix(displayName, ".lcf")
+			displayName = strings.TrimSuffix(displayName, ".qx")
+			displayName = strings.TrimSuffix(displayName, "__qx")
+			displayName = strings.TrimSuffix(displayName, ".json")
+			displayName = strings.TrimSuffix(displayName, "__singbox")
 			displayName = strings.TrimSuffix(displayName, "_v3")
 			displayName = strings.TrimSuffix(displayName, "__v3")
 			displayName = strings.ReplaceAll(displayName, "_", " ")
 
-			// 提取模板自定义变量(仅 clash 模板走 v3 变量系统;surge/loon 是纯文本段落)
+			// 提取模板自定义变量(仅 clash 模板走 v3 变量系统;surge/loon/qx 是纯文本段落,sing-box 是 JSON)
 			var variables map[string]string
-			if !isSurge && !isLoon {
+			if !isSurge && !isLoon && !isQX && !isSingbox {
 				content, err := os.ReadFile(filepath.Join(templatesDir, name))
 				if err == nil {
 					variables = substore.ExtractTemplateVariables(string(content))
@@ -805,6 +831,10 @@ func (h *TemplateV3Handler) handleListTemplates(w http.ResponseWriter, r *http.R
 				templateType = "surge"
 			} else if isLoon {
 				templateType = "loon"
+			} else if isQX {
+				templateType = "qx"
+			} else if isSingbox {
+				templateType = "singbox"
 			}
 
 			templates = append(templates, templateInfo{

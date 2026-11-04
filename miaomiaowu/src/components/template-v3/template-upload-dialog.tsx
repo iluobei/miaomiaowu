@@ -125,8 +125,8 @@ export function TemplateUploadDialog({
     const file = e.target.files?.[0]
     if (file) {
 		const lower = file.name.toLowerCase()
-		if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.conf') && !lower.endsWith('.lcf')) {
-		toast.error('请选择 YAML、Surge .conf 或 Loon .lcf 文件')
+		if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.conf') && !lower.endsWith('.lcf') && !lower.endsWith('.qx') && !lower.endsWith('.json')) {
+		toast.error('请选择 YAML、Surge .conf、Loon .lcf、Quantumult X .qx 或 sing-box .json 文件')
         return
       }
       setSelectedFile(file)
@@ -150,13 +150,18 @@ export function TemplateUploadDialog({
         return
       }
 		let name = newTemplateName.trim()
-		if (!name.endsWith('.yaml') && !name.endsWith('.yml') && !name.endsWith('.conf') && !name.endsWith('.lcf')) {
+		if (!name.endsWith('.yaml') && !name.endsWith('.yml') && !name.endsWith('.conf') && !name.endsWith('.lcf') && !name.endsWith('.qx') && !name.endsWith('.json')) {
+			// sing-box 模板是 JSON(以 { 开头);QX 的段名是小写带下划线的,与 Loon / Surge 不重合;
 			// Loon 独有段头优先判断(Loon 与 Surge 共用 [General]/[Proxy]/[Rule],不能只看那几个)。
-			name += /\[(Remote Rule|Proxy Chain|Plugin)\]/im.test(pasteContent)
-				? '.lcf'
-				: /^\s*\[(General|Proxy|Proxy Group|Rule)\]/im.test(pasteContent)
-					? '.conf'
-					: '.yaml'
+			name += /^\s*(\/\/[^\n]*\n\s*)*\{/.test(pasteContent)
+				? '.json'
+				: /^\s*\[(server_local|server_remote|filter_local|filter_remote|rewrite_local)\]/im.test(pasteContent)
+					? '.qx'
+					: /\[(Remote Rule|Proxy Chain|Plugin)\]/im.test(pasteContent)
+						? '.lcf'
+						: /^\s*\[(General|Proxy|Proxy Group|Rule)\]/im.test(pasteContent)
+							? '.conf'
+							: '.yaml'
       }
       onCreate(name, pasteContent)
     } else if (tab === 'blank') {
@@ -377,10 +382,10 @@ export function TemplateUploadDialog({
 
           <TabsContent value="upload" className="space-y-4 mt-4">
             <div className="space-y-2">
-			  <Label>选择 Clash YAML、Surge 或 Loon 配置</Label>
+			  <Label>选择 Clash YAML、Surge、Loon、Quantumult X 或 sing-box 配置</Label>
               <Input
                 type="file"
-				accept=".yaml,.yml,.conf,.lcf"
+				accept=".yaml,.yml,.conf,.lcf,.qx,.json"
                 onChange={handleFileChange}
               />
               {selectedFile && (
@@ -397,11 +402,11 @@ export function TemplateUploadDialog({
               <Input
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-				placeholder="my_template.yaml / surge.conf / loon.lcf"
+				placeholder="my_template.yaml / surge.conf / loon.lcf / quanx.qx / singbox.json"
               />
             </div>
             <div className="space-y-2">
-			  <Label>YAML / Surge / Loon 配置内容</Label>
+			  <Label>YAML / Surge / Loon / Quantumult X / sing-box 配置内容</Label>
               <Textarea
                 value={pasteContent}
                 onChange={(e) => setPasteContent(e.target.value)}
