@@ -70,6 +70,13 @@ func (h *RuleTemplatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		h.handleRenameTemplate(w, r)
 	case path == "/visibility":
 		h.handleVisibility(w, r)
+	case path == "/update-from-source":
+		// 从来源链接重新拉取覆盖
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.handleUpdateFromSource(w, r)
 	default:
 		// Extract template name from path (remove leading slash)
 		templateName := strings.TrimPrefix(path, "/")
@@ -127,9 +134,18 @@ func (h *RuleTemplatesHandler) handleListTemplates(w http.ResponseWriter, r *htt
 	for _, filename := range templates {
 		visibility[filename] = owners[filename] == "" || h.repo.IsRuleTemplatePublic(r.Context(), filename)
 	}
+	// 来源链接:只给能改这个模板的人(管理员全部,普通用户只有自己的)
+	sources := map[string]string{}
+	if all, err := h.repo.ListRuleTemplateSources(r.Context()); err == nil {
+		for fn, u := range all {
+			if h.canModify(r, fn) {
+				sources[fn] = u
+			}
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"templates": templates, "visibility": visibility, "owners": owners,
+		"templates": templates, "visibility": visibility, "owners": owners, "sources": sources,
 	})
 }
 
@@ -237,6 +253,7 @@ func (h *RuleTemplatesHandler) handleDeleteTemplate(w http.ResponseWriter, r *ht
 		return
 	}
 	_ = h.repo.DeleteRuleTemplateOwner(r.Context(), templateName)
+	_ = h.repo.SetRuleTemplateSource(r.Context(), templateName, "")
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")
@@ -323,6 +340,7 @@ func (h *RuleTemplatesHandler) handleRenameTemplate(w http.ResponseWriter, r *ht
 		return
 	}
 	_ = h.repo.RenameRuleTemplateOwner(r.Context(), oldName, newName)
+	_ = h.repo.RenameRuleTemplateSource(r.Context(), oldName, newName)
 
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")
@@ -401,6 +419,10 @@ func (h *RuleTemplatesHandler) handleUploadTemplate(w http.ResponseWriter, r *ht
 		return
 	}
 	_ = h.repo.SetRuleTemplateOwner(r.Context(), filename, auth.UsernameFromContext(r.Context()))
+	// 从链接导入的带上来源链接,之后可以「从链接更新」
+	if src, err := validTemplateSourceURL(r.FormValue("source_url")); err == nil {
+		_ = h.repo.SetRuleTemplateSource(r.Context(), filename, src)
+	}
 
 	// Return success response with filename
 	w.Header().Set("Content-Type", "application/json")

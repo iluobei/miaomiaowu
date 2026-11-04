@@ -29,7 +29,8 @@ interface TemplateUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUpload: (file: File) => void
-  onCreate: (name: string, content: string) => void
+  // 从链接导入时带上 sourceUrl,后端记下来源,之后可「从链接更新」
+  onCreate: (name: string, content: string, sourceUrl?: string) => void
   isLoading?: boolean
 }
 
@@ -259,7 +260,7 @@ export function TemplateUploadDialog({
         name += '.yaml'
       }
 
-      onCreate(name, content)
+      onCreate(name, content, importUrl.trim())
       resetForm()
     } catch (error: any) {
       toast.error(error.response?.data?.error || '获取模板内容失败')
