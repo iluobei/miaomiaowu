@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { NodeProbePanel } from '@/components/node-probe-dialog'
+import { NotifyChannelsCard } from '@/components/system-settings/notify-channels-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
 
 // 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
@@ -1199,8 +1200,8 @@ function SystemSettingsPage() {
                       <TooltipContent side='top' className='max-w-xs'>
                         <p>
                           开启后，系统会通过 Telegram
-                          发送关键事件通知。点击配置按钮设置 Bot Token
-                          和通知类型。
+                          及下方「推送渠道」里的邮件、Server酱等渠道发送关键事件通知。点击配置按钮设置
+                          Bot Token 和通知类型。
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -1455,6 +1456,11 @@ function SystemSettingsPage() {
             </CardContent>
           </Card>
 
+          {/* 推送渠道:邮件 SMTP / Server酱 / 飞书 / 钉钉 / Bark,按事件分发 */}
+          <NotifyChannelsCard
+            active={settingsTab === 'features'}
+            notifyEnabled={notifyConfig.notify_enabled}
+          />
           </TabsContent>
 
           <TabsContent value='security' className='space-y-6'>

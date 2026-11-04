@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"miaomiaowu/internal/auth"
-	"miaomiaowu/internal/notify"
 	"miaomiaowu/internal/storage"
 )
 
@@ -136,22 +135,9 @@ func handleUpdateNotifyConfig(w http.ResponseWriter, r *http.Request, repo *stor
 		return
 	}
 
-	// Hot-reload the global notifier
+	// Hot-reload the global notifier(带上内置 Telegram 渠道的启用 / 事件订阅,见 BuildNotifyConfig)
 	if n := GetNotifier(); n != nil {
-		n.UpdateConfig(notify.Config{
-			Enabled:                sysCfg.NotifyEnabled,
-			BotToken:               sysCfg.TelegramBotToken,
-			ChatID:                 sysCfg.TelegramChatID,
-			NotifySubscribeFetch:   sysCfg.NotifySubscribeFetch,
-			NotifyLogin:            sysCfg.NotifyLogin,
-			NotifyIPBan:            sysCfg.NotifyIPBan,
-			NotifySilentMode:       sysCfg.NotifySilentMode,
-			NotifyDailyTraffic:     sysCfg.NotifyDailyTraffic,
-			NotifyExpiry:           sysCfg.NotifyExpiry,
-			NotifyNodeProbeOffline: sysCfg.NotifyNodeProbeOffline,
-			NotifyNodeProbeOnline:  sysCfg.NotifyNodeProbeOnline,
-			DailyTrafficTime:       sysCfg.NotifyDailyTrafficTime,
-		})
+		n.UpdateConfig(BuildNotifyConfig(r.Context(), repo, sysCfg))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
