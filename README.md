@@ -250,6 +250,26 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.10.0 (2026-11-04)
+- 🗑️ 撤回自定义品牌与自定义 CSS 的移植(该功能不下放到妙妙屋)
+- 🛠️ fix: 节点页合并后缺少 DialogFooter 导入导致整页报错
+- 🌈 订阅健壮性补丁、节点列表隐藏与 PWA 开关(从妙妙屋X 移植)
+- 🌈 订阅获取开关:可关闭某个用户的全部订阅链接,支持限时打开到期自动关(从妙妙屋X 移植)
+- 🌈 自定义品牌(标题 / logo / favicon)与自定义 CSS(从妙妙屋X 移植)
+- 🌈 推送通知新增邮件 SMTP 与国内推送渠道,按事件分发(从妙妙屋X 移植)
+- 🌈 sing-box / Quantumult X 模板与 Loon 规则集解析(从妙妙屋X 移植)
+- 🌈 菜单排序与显隐(从妙妙屋X 移植)
+- 🛠️ .gitignore 忽略各包目录下 go test 生成的 data/logs/
+- 🌈 Passkey(WebAuthn)登录,与密码 + 两步验证并存(从妙妙屋X 移植)
+- 🌈 正规 CA 证书节点不固定证书指纹(从妙妙屋X 移植)
+- 🌈 规则模板从来源链接更新、批量开启 VLESS REALITY X25519MLKEM768(从妙妙屋X 移植)
+- 🌈 系统日志查看与日志文件管理(从妙妙屋X 移植)
+- 🛠️ ci: 恢复 Build and Release 工作流(#133 顺带删掉了它)
+- 🌈 自动备份到 WebDAV / S3 / Google Drive(从妙妙屋X 移植)
+- ⬆️ proxyparser 升到 v0.4.5:hysteria2 分享链接支持 fm=(finalmask);sing-box 1.15 导入报 headerType / certificate_sha256 未知字段;Shadowrocket 里 VLESS Encryption 节点改为跳过并留注释;Surge 带 salamander / gecko 混淆的 Hysteria2 节点不再消失
+- 缩短外部订阅节点名前缀的帮助文案 (#3)
+- CI 只发布 Docker，节点名前缀按原始名重匹配 (#2)
+- 外部订阅支持可选的节点展示名前缀 (#1)
 ### v0.9.3 (2026-10-22)
 - ⬆️ proxyparser 升到 v0.4.0:跟上游 Sub-Store 同步一轮
 - 🛠️ release.sh: changelog 排除版本号 commit 的 revert
