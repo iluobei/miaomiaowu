@@ -37,6 +37,7 @@ var taskTypes = []taskType{
 	{"ddns_reconciler", "DDNS 重试"},
 	{"cert_renewal", "证书续期"},
 	{"node_tls_fingerprint_backfill", "节点证书指纹补全"},
+	{"cert_probe_trust", "节点证书 CA 校验"},
 	{"probe_quality_alert", "探针质量告警"},
 }
 

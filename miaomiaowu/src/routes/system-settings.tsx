@@ -42,6 +42,7 @@ import {
 import { NodeProbePanel } from '@/components/node-probe-dialog'
 import { AutoBackupCard } from '@/components/system-settings/auto-backup-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
+import { CACertNoPinCard } from '@/components/system-settings/ca-cert-no-pin-card'
 
 // 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
 const SETTINGS_TABS = [
@@ -733,6 +734,9 @@ function SystemSettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* 正规 CA 证书节点不固定证书指纹(从妙妙屋X 移植) */}
+          <CACertNoPinCard />
 
           </TabsContent>
 

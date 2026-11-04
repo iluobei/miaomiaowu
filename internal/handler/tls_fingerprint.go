@@ -28,9 +28,19 @@ func certPEMSha256(certPEM string) (string, error) {
 }
 
 func fetchPeerCertSha256(ctx context.Context, address string, port int, sni, alpn string) (string, error) {
+	certs, err := fetchPeerCertChain(ctx, address, port, sni, alpn)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(certs[0].Raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// fetchPeerCertChain 握手一次,取回对端发来的整条证书链(叶子在前)。不校验证书 —— 调用方自己决定怎么验。
+func fetchPeerCertChain(ctx context.Context, address string, port int, sni, alpn string) ([]*x509.Certificate, error) {
 	address = strings.TrimSpace(address)
 	if address == "" || port <= 0 || port > 65535 {
-		return "", errors.New("invalid TLS target")
+		return nil, errors.New("invalid TLS target")
 	}
 	if sni == "" {
 		sni = address
@@ -49,13 +59,12 @@ func fetchPeerCertSha256(ctx context.Context, address string, port int, sni, alp
 	}
 	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: timeout}, "tcp", net.JoinHostPort(address, strconv.Itoa(port)), cfg)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer conn.Close()
 	certs := conn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
-		return "", errors.New("no peer certificate received")
+		return nil, errors.New("no peer certificate received")
 	}
-	sum := sha256.Sum256(certs[0].Raw)
-	return hex.EncodeToString(sum[:]), nil
+	return certs, nil
 }
