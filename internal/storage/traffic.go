@@ -339,7 +339,7 @@ type ExternalSubscription struct {
 	AutoUpdate            bool       // 是否定时自动更新此订阅
 	UpdateIntervalMinutes int        // 定时更新间隔（分钟），>0 且 AutoUpdate 时生效
 	NamePrefix            string     // 期望的节点展示名前缀；空字符串表示不加前缀
-	AppliedNamePrefix     string     // 上次同步实际写到节点名上的前缀。用户改 NamePrefix 时先不动它，下次同步用它把旧展示名还原成机场原始名
+	AppliedNamePrefix     string     // 已经写在节点名上的展示前缀。保存并完成即时改名后与 NamePrefix 对齐；同步仍用它把旧展示名还原成机场原始名
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 }
