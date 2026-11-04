@@ -247,6 +247,7 @@ func (h *TempSubscriptionAccessHandler) ServeHTTP(w http.ResponseWriter, r *http
 
 	// Fix emoji escape sequences in YAML output
 	result := RemoveUnicodeEscapeQuotes(string(yamlData))
+	result = string(unpinPublicCACertsInClashYAML([]byte(result))) // 正规 CA 证书节点不钉证书
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

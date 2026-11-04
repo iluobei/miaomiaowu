@@ -792,6 +792,11 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// 正规 CA 证书节点不钉证书(系统设置开了才动)。Surge / Loon 模板直出已在生成时按节点处理过,不是 Clash YAML。
+	if !fromSurgeTemplate && !fromLoonTemplate {
+		data = unpinPublicCACertsInClashYAML(data)
+	}
+
 	// clash/classmeta/clash-to-shadowrocket 直接输出 Clash YAML, 不需要转换
 	if fromSurgeTemplate {
 		contentType = "text/plain; charset=utf-8"
@@ -2539,6 +2544,10 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	}
 
 	logger.Info("[模板生成] 从节点表获取代理节点", "total", len(nodes), "enabled", len(proxies), "tag_filter", hasTagFilter, "relay_groups", len(relayGroups))
+
+	// 正规 CA 证书节点不钉证书(系统设置开了才动):各格式的模板都从这批节点出。
+	unpinPublicCACertProxies(proxies)
+	unpinPublicCACertProxies(extraProxies)
 
 	// 3. 从代理集合表获取代理集合配置（用于 proxy-providers）
 	providerConfigs, err := h.repo.ListProxyProviderConfigs(ctx, nodeOwner)

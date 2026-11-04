@@ -243,6 +243,10 @@ func main() {
 	// 仅本机访问开关(issue #106)。改后重启生效(监听地址启动时定死,见 getAddr)。
 	mux.Handle("/api/admin/access-control", auth.RequireAdmin(tokenStore, userRepo, handler.NewAccessControlHandler(repo)))
 
+	// 正规 CA 证书节点不固定证书指纹(从妙妙屋X 移植):订阅里 CA 签发证书的节点不钉证书、不跳过校验
+	handler.LoadCACertNoPin(context.Background(), repo)
+	mux.Handle("/api/admin/system-settings/ca-cert-no-pin", auth.RequireAdmin(tokenStore, userRepo, handler.NewCACertNoPinHandler(repo)))
+
 	// 规则集(clash rule-providers)托管:管理端 CRUD + 公开下载。
 	// 下载端点必须公开 —— 拉它的是 mihomo/clash 客户端,没有登录态;挂在 /rules/ 而非 /api/ 下。
 	ruleProvidersHandler := handler.NewRuleProvidersHandler(repo)
@@ -390,6 +394,7 @@ func main() {
 	go startDatabaseLogCleanup(collectorCtx, repo)
 	go bruteForceProtector.StartCleanup(collectorCtx)
 	go startTrafficCollector(collectorCtx, trafficHandler)
+	go handler.StartCertProbeTrustRefresher(collectorCtx, repo)
 
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	go handler.StartNotifyScheduler(notifyCtx, repo, trafficHandler)
