@@ -55,6 +55,8 @@ func main() {
 
 	tokenStore := auth.NewTokenStore(24 * time.Hour)
 	twoFactorStore := auth.NewTwoFactorPendingStore(5 * time.Minute)
+	// passkey 仪式的 challenge:一次性、进程内、5 分钟过期(与 2FA 同口径)。
+	passkeySessionStore := auth.NewWebAuthnSessionStore(5 * time.Minute)
 
 	// Load persisted sessions from database
 	ctx := context.Background()
@@ -175,6 +177,10 @@ func main() {
 	mux.Handle("/api/login", handler.NewLoginHandler(authManager, tokenStore, repo, loginRateLimiter, twoFactorStore, turnstileVerifier))
 	mux.Handle("/api/login/2fa", handler.NewTwoFactorLoginHandler(tokenStore, repo, twoFactorStore))
 	mux.Handle("/api/login/recovery", handler.NewRecoveryLoginHandler(tokenStore, repo, twoFactorStore))
+	// passkey 无密码登录:begin 不需要用户名(discoverable),finish 校验签名后直接签发登录态。
+	passkeyLoginHandler := handler.NewPasskeyLoginHandler(tokenStore, repo, passkeySessionStore, loginRateLimiter)
+	mux.Handle("/api/login/passkey/begin", passkeyLoginHandler)
+	mux.Handle("/api/login/passkey/finish", passkeyLoginHandler)
 
 	// Admin-only endpoints
 	mux.Handle("/api/admin/credentials", auth.RequireAdmin(tokenStore, userRepo, handler.NewCredentialsHandler(authManager, tokenStore)))
@@ -284,6 +290,10 @@ func main() {
 	mux.Handle("/api/user/2fa/setup", auth.RequireToken(tokenStore, handler.NewTwoFactorSetupHandler(authManager, repo)))
 	mux.Handle("/api/user/2fa/verify-setup", auth.RequireToken(tokenStore, handler.NewTwoFactorVerifySetupHandler(repo)))
 	mux.Handle("/api/user/2fa/disable", auth.RequireToken(tokenStore, handler.NewTwoFactorDisableHandler(authManager, repo)))
+	passkeyRegisterHandler := handler.NewPasskeyRegisterHandler(repo, passkeySessionStore)
+	mux.Handle("/api/user/passkey", auth.RequireToken(tokenStore, handler.NewPasskeyManageHandler(repo)))
+	mux.Handle("/api/user/passkey/register/begin", auth.RequireToken(tokenStore, passkeyRegisterHandler))
+	mux.Handle("/api/user/passkey/register/finish", auth.RequireToken(tokenStore, passkeyRegisterHandler))
 	mux.Handle("/api/user/token", auth.RequireToken(tokenStore, handler.NewUserTokenHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions/nodes", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionNodesHandler(repo)))

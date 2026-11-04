@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { Upload, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Upload, AlertTriangle, ArrowLeft, KeyRound } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -24,6 +24,7 @@ import {
   InputOTPSlot,
 } from '@/components/ui/input-otp'
 import { handleServerError } from '@/lib/handle-server-error'
+import { loginWithPasskey, passkeySupported } from '@/lib/passkey'
 
 export const Route = createFileRoute('/login')({
   beforeLoad: () => {
@@ -146,6 +147,22 @@ function LoginView() {
     },
   })
 
+  const passkeyLogin = useMutation({
+    mutationFn: async () => loginWithPasskey(form.getValues('remember_me')),
+    onSuccess: (payload) => {
+      // passkey 注册时已要求 UserVerification(生物识别 / PIN),本身即等价
+      // "这台设备 + 本人",所以不再走 2FA 那一步,直接落登录态。
+      form.reset()
+      handleLoginSuccess(payload as LoginResponse, auth, queryClient, navigate)
+    },
+    onError: (error) => {
+      // 用户在系统弹窗里点取消也会走到这里,不该当成错误刷屏。
+      if (error instanceof Error && error.name === 'NotAllowedError') return
+      handleServerError(error)
+      toast.error('passkey 登录失败')
+    },
+  })
+
   const onSubmit = form.handleSubmit((values) => {
 	if (captchaConfig?.enabled && !turnstileToken) {
 	  toast.error('请先完成人机验证')
@@ -210,9 +227,28 @@ function LoginView() {
             {captchaConfig?.enabled && captchaConfig.site_key && (
               <TurnstileWidget siteKey={captchaConfig.site_key} onToken={setTurnstileToken} />
             )}
-            <Button type='submit' className='w-full' disabled={login.isPending}>
-              {login.isPending ? '登录中...' : '登录'}
-            </Button>
+            {/* 两个入口并排一行。passkey 只在 https / localhost 下可用,裸 IP + http 部署里
+                整块隐藏 —— 浏览器在非安全上下文里根本没有 navigator.credentials;
+                隐藏后登录按钮由 flex-1 自然占满整行,不需要额外分支。 */}
+            <div className='flex gap-2'>
+              <Button type='submit' className='flex-1' disabled={login.isPending}>
+                {login.isPending ? '登录中...' : '登录'}
+              </Button>
+              {passkeySupported() && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  className='flex-1'
+                  disabled={passkeyLogin.isPending}
+                  onClick={() => passkeyLogin.mutate()}
+                >
+                  <KeyRound className='mr-2 h-4 w-4 shrink-0' />
+                  <span className='truncate'>
+                    {passkeyLogin.isPending ? '验证中...' : 'Passkey 登录'}
+                  </span>
+                </Button>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>

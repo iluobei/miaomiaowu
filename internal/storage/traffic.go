@@ -626,6 +626,25 @@ CREATE TABLE IF NOT EXISTS users (
 		return err
 	}
 
+	// passkey(WebAuthn)凭据。一个用户可有多把,故独立成表而不是像 totp_secret 那样加列。
+	// credential 列存 webauthn.Credential 的完整 JSON,详见 webauthn_credentials.go 的说明。
+	const webauthnCredentialsSchema = `
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    credential_id TEXT NOT NULL UNIQUE,
+    credential TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    aaguid TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_username ON webauthn_credentials(username);
+`
+	if _, err := r.db.Exec(webauthnCredentialsSchema); err != nil {
+		return fmt.Errorf("migrate webauthn credentials: %w", err)
+	}
+
 	const historySchema = `
 CREATE TABLE IF NOT EXISTS rule_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3339,6 +3358,12 @@ func (r *TrafficRepository) DeleteUser(ctx context.Context, username string) err
 	_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE username = ?`, username)
 	if err != nil {
 		return fmt.Errorf("delete user sessions: %w", err)
+	}
+
+	// 删号时清掉他的 passkey
+	_, err = tx.ExecContext(ctx, `DELETE FROM webauthn_credentials WHERE username = ?`, username)
+	if err != nil {
+		return fmt.Errorf("delete user webauthn credentials: %w", err)
 	}
 
 	// Delete user's nodes

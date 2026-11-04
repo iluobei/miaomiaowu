@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { Download } from 'lucide-react'
+import { Download, KeyRound } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { getCookie, setCookie } from '@/lib/cookies'
 import { handleServerError } from '@/lib/handle-server-error'
+import {
+  deletePasskey,
+  listPasskeys,
+  passkeySupported,
+  registerPasskey,
+} from '@/lib/passkey'
 import { profileQueryFn } from '@/lib/profile'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -535,6 +541,7 @@ function SettingsPage() {
             </Card>
 
             <TwoFactorCard />
+            <PasskeyCard />
           </div>
         </div>
       </main>
@@ -875,5 +882,122 @@ function TwoFactorCard() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// passkey(WebAuthn)管理。与 2FA 并列而非取代:passkey 绑定当前域名,换域名后全部失效,
+// 密码 + 2FA 必须留着兜底。
+function PasskeyCard() {
+  const queryClient = useQueryClient()
+  const [newName, setNewName] = useState('')
+
+  const passkeysQuery = useQuery({
+    queryKey: ['passkeys'],
+    queryFn: listPasskeys,
+    enabled: passkeySupported(),
+  })
+
+  const register = useMutation({
+    mutationFn: async () => registerPasskey(newName.trim() || 'Passkey'),
+    onSuccess: () => {
+      setNewName('')
+      queryClient.invalidateQueries({ queryKey: ['passkeys'] })
+      toast.success('passkey 添加成功')
+    },
+    onError: (error) => {
+      // 用户在系统弹窗点了取消,不算错误。
+      if (error instanceof Error && error.name === 'NotAllowedError') return
+      handleServerError(error)
+      toast.error('passkey 添加失败')
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: async (id: number) => deletePasskey(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['passkeys'] })
+      toast.success('passkey 已删除')
+    },
+    onError: handleServerError,
+  })
+
+  // 非安全上下文(裸 IP / http)下浏览器没有 navigator.credentials,直接说明原因,
+  // 免得用户对着一个永远失败的按钮反复试。
+  if (!passkeySupported()) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Passkey</CardTitle>
+          <CardDescription>
+            passkey 需要通过域名 + HTTPS 访问面板才能使用。当前是 IP 直连或
+            HTTP,浏览器不提供该能力。
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  const passkeys = passkeysQuery.data ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Passkey</CardTitle>
+        <CardDescription>
+          用指纹、面容或设备 PIN 登录,不必再输密码。支持 iCloud 钥匙串、Google
+          密码管理器、Windows Hello、1Password 等 ——
+          它们都是同一个标准,无需分别设置。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-4'>
+        {passkeys.length === 0 ? (
+          <p className='text-muted-foreground text-sm'>还没有添加 passkey。</p>
+        ) : (
+          <div className='space-y-2'>
+            {passkeys.map((item) => (
+              <div
+                key={item.id}
+                className='flex items-center justify-between border p-3'
+              >
+                <div className='min-w-0'>
+                  <div className='truncate text-sm font-medium'>
+                    {item.name}
+                  </div>
+                  <div className='text-muted-foreground text-xs'>
+                    添加于 {new Date(item.created_at).toLocaleDateString()}
+                    {item.last_used_at
+                      ? ` · 最近使用 ${new Date(item.last_used_at).toLocaleDateString()}`
+                      : ''}
+                  </div>
+                </div>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(item.id)}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className='flex gap-2'>
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder='给这把 passkey 起个名(如:我的 iPhone)'
+          />
+          <Button
+            disabled={register.isPending}
+            onClick={() => register.mutate()}
+          >
+            <KeyRound className='mr-2 h-4 w-4' />
+            {register.isPending ? '添加中...' : '添加 passkey'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
