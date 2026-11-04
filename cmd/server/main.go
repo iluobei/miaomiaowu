@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"miaomiaowu/internal/auth"
+	"miaomiaowu/internal/backupstore"
 	"miaomiaowu/internal/captcha"
 	"miaomiaowu/internal/handler"
 	"miaomiaowu/internal/logger"
@@ -219,6 +220,17 @@ func main() {
 	mux.Handle("/api/admin/templates/fetch-source", auth.RequireAdmin(tokenStore, userRepo, handler.NewTemplateFetchSourceHandler()))
 	mux.Handle("/api/admin/backup/download", auth.RequireAdmin(tokenStore, userRepo, handler.NewBackupDownloadHandler(repo)))
 	mux.Handle("/api/admin/backup/restore", auth.RequireAdmin(tokenStore, userRepo, handler.NewBackupRestoreHandler(repo)))
+	// 自动备份:定时打包 + 投递到 WebDAV / S3 兼容 / Google Drive + 按份数清理。
+	// 凭据用 data/backup_secret.key 里的种子派生的 key 加密后入库,读接口一律打码。
+	backupSeed, err := backupstore.LoadOrCreateMasterSeed(filepath.Join("data", "backup_secret.key"))
+	if err != nil {
+		logger.Error("备份密钥种子加载失败", "error", err)
+		os.Exit(1)
+	}
+	autoBackupHandler := handler.NewAutoBackupHandler(repo, backupSeed)
+	mux.Handle("/api/admin/backup/auto", auth.RequireAdmin(tokenStore, userRepo, autoBackupHandler))
+	mux.Handle("/api/admin/backup/auto/test", auth.RequireAdmin(tokenStore, userRepo, autoBackupHandler))
+	mux.Handle("/api/admin/backup/auto/run", auth.RequireAdmin(tokenStore, userRepo, autoBackupHandler))
 	mux.Handle("/api/admin/update/check", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateCheckHandler()))
 	mux.Handle("/api/admin/update/apply", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplyHandler()))
 	mux.Handle("/api/admin/update/apply-sse", auth.RequireAdmin(tokenStore, userRepo, handler.NewUpdateApplySSEHandler()))
@@ -390,6 +402,7 @@ func main() {
 	go startDatabaseLogCleanup(collectorCtx, repo)
 	go bruteForceProtector.StartCleanup(collectorCtx)
 	go startTrafficCollector(collectorCtx, trafficHandler)
+	autoBackupHandler.StartScheduler(collectorCtx)
 
 	notifyCtx, stopNotify := context.WithCancel(context.Background())
 	go handler.StartNotifyScheduler(notifyCtx, repo, trafficHandler)

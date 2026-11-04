@@ -687,6 +687,19 @@ function getStoredRenderMode(): RenderMode | null {
   return null
 }
 
+// 未手动改过前缀时，用订阅名生成默认展示名前缀；用户清空后保持为空。
+function resolveNodeNamePrefix(touched, current, subscriptionName) {
+  if (touched) return current || ''
+  const name = (subscriptionName || '').trim()
+  return name ? `〖${name}〗` : ''
+}
+
+function applyNodeNamePrefix(prefix, name) {
+  if (!prefix || !String(prefix).trim()) return name
+  if (typeof name === 'string' && name.startsWith(prefix)) return name
+  return `${prefix}${name}`
+}
+
 function NodesPage() {
   const externalSyncSelection = useExternalSyncSelection()
   const { auth } = useAuthStore()
@@ -768,6 +781,15 @@ function NodesPage() {
   const [subscriptionAutoUpdate, setSubscriptionAutoUpdate] = useState(false)
   const [subscriptionUpdateInterval, setSubscriptionUpdateInterval] =
     useState<number>(60)
+  // 节点展示名前缀。未手动编辑时随订阅名变为 〖订阅名〗，清空则不加前缀。
+  const [nodeNamePrefix, setNodeNamePrefix] = useState('')
+  const nodeNamePrefixTouched = useRef(false)
+
+  useEffect(() => {
+    if (nodeNamePrefixTouched.current) return
+    const tag = subscriptionTag.trim()
+    setNodeNamePrefix(tag ? `〖${tag}〗` : '')
+  }, [subscriptionTag])
 
   // 导入节点卡片折叠状态 - 默认折叠
   const [isInputCardExpanded, setIsInputCardExpanded] = useState(false)
@@ -2601,6 +2623,14 @@ function NodesPage() {
 
       let parsed: TempNode[] = []
 
+      // 优先使用用户输入的标签，如果没有则使用 defaultTag（从 Content-Disposition 提取或域名）
+      const finalTag = subscriptionTag.trim() || defaultTag
+      const namePrefix = resolveNodeNamePrefix(
+        nodeNamePrefixTouched.current,
+        nodeNamePrefix,
+        finalTag
+      )
+
       if (data.proxies) {
         // 后端已统一解析(v2ray / clash 均返回 proxies),并按 force_node_skip_cert 处理过证书字段，前端直接消费
         parsed = data.proxies.map((clashNode) => {
@@ -2611,7 +2641,10 @@ function NodesPage() {
             port: clashNode.port || 0,
             ...clashNode,
           }
-          const name = proxyNode.name || '未知'
+          const name = applyNodeNamePrefix(
+            namePrefix,
+            proxyNode.name || '未知'
+          )
           const parsedProxy = cloneProxyWithName(proxyNode, name)
           const clashProxy = cloneProxyWithName(clashNode, name)
 
@@ -2639,14 +2672,13 @@ function NodesPage() {
 
       // 保存外部订阅链接
       try {
-        // 优先使用用户输入的标签，如果没有则使用 defaultTag（从 Content-Disposition 提取或域名）
-        const finalTag = subscriptionTag.trim() || defaultTag
         await api.post('/api/user/external-subscriptions', {
           name: finalTag,
           url: variables.url,
           user_agent: variables.userAgent, // 保存 User-Agent
           auto_update: variables.autoUpdate,
           update_interval_minutes: variables.updateIntervalMinutes,
+          name_prefix: namePrefix,
         })
         // 刷新外部订阅列表和流量数据
         queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
@@ -3753,6 +3785,43 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                         </div>
                         <p className='text-muted-foreground text-xs'>
                           为订阅导入的节点设置标签，留空将使用服务器地址作为标签
+                        </p>
+                      </div>
+                      <div className='space-y-2'>
+                        <div className='flex items-center justify-between gap-2'>
+                          <Label
+                            htmlFor='subscription-name-prefix'
+                            className='text-sm font-medium'
+                          >
+                            节点名前缀
+                          </Label>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='sm'
+                            className='h-7 px-2 text-xs'
+                            onClick={() => {
+                              const tag = subscriptionTag.trim()
+                              if (!tag) return
+                              nodeNamePrefixTouched.current = true
+                              setNodeNamePrefix(`〖${tag}〗`)
+                            }}
+                          >
+                            使用订阅名
+                          </Button>
+                        </div>
+                        <Input
+                          id='subscription-name-prefix'
+                          placeholder='默认 〖订阅名〗，留空则不加前缀'
+                          value={nodeNamePrefix}
+                          onChange={(e) => {
+                            nodeNamePrefixTouched.current = true
+                            setNodeNamePrefix(e.target.value)
+                          }}
+                          className='font-mono text-sm'
+                        />
+                        <p className='text-muted-foreground text-xs'>
+                          给节点名加前缀，例如〖机场A〗香港。
                         </p>
                       </div>
                       <div className='space-y-2 rounded-md border p-3'>

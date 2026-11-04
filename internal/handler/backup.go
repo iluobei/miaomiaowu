@@ -2,6 +2,7 @@ package handler
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,31 +29,86 @@ func NewBackupDownloadHandler(repo *storage.TrafficRepository) http.Handler {
 			return
 		}
 
-		// Checkpoint WAL to ensure all data is written to the main database file
-		if err := repo.Checkpoint(); err != nil {
-			writeBackupError(w, http.StatusInternalServerError, fmt.Errorf("failed to checkpoint database: %w", err))
+		archive, err := BuildBackupArchive(r.Context(), repo)
+		if err != nil {
+			writeBackupError(w, http.StatusInternalServerError, err)
 			return
 		}
+		defer archive.Close()
 
-		// Create zip file
-		filename := fmt.Sprintf("miaomiaowu-backup-%s.zip", time.Now().Format("20060102-150405"))
 		w.Header().Set("Content-Type", "application/zip")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-
-		zipWriter := zip.NewWriter(w)
-		defer zipWriter.Close()
-
-		// Add data directory
-		if err := addDirToZip(zipWriter, "data", "data"); err != nil {
-			// Can't write error response after starting zip, just log
-			return
-		}
-
-		// Add subscribes directory
-		if err := addDirToZip(zipWriter, "subscribes", "subscribes"); err != nil {
-			return
-		}
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", archive.Filename))
+		w.Header().Set("Content-Length", fmt.Sprint(archive.Size))
+		_, _ = io.Copy(w, archive.File)
 	})
+}
+
+// BackupArchive 是一份打好的备份:落在临时文件里,读位置在开头。用完必须 Close。
+type BackupArchive struct {
+	File     *os.File
+	Filename string
+	Size     int64
+}
+
+// Close 关闭并删除临时文件。
+func (a *BackupArchive) Close() error {
+	if a == nil || a.File == nil {
+		return nil
+	}
+	name := a.File.Name()
+	err := a.File.Close()
+	_ = os.Remove(name)
+	return err
+}
+
+// BuildBackupArchive 打一份完整备份(data/ + subscribes/),写进临时文件并把读位置倒回开头。
+//
+// 抽成独立函数是为了让「手工下载」和「自动备份」共用同一份产物定义:两边各打各的,
+// 迟早会打出内容不一样的包,而备份最不能有的就是"恢复出来跟你以为的不一样"。
+func BuildBackupArchive(ctx context.Context, repo *storage.TrafficRepository) (*BackupArchive, error) {
+	// Checkpoint WAL to ensure all data is written to the main database file
+	if err := repo.Checkpoint(); err != nil {
+		return nil, fmt.Errorf("failed to checkpoint database: %w", err)
+	}
+	tmp, err := os.CreateTemp("", "miaomiaowu-backup-*.zip")
+	if err != nil {
+		return nil, fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	archive := &BackupArchive{
+		File:     tmp,
+		Filename: fmt.Sprintf("miaomiaowu-backup-%s.zip", time.Now().Format("20060102-150405")),
+	}
+	// 任何一步失败都要把临时文件收干净,别在 /tmp 里堆半成品。
+	ok := false
+	defer func() {
+		if !ok {
+			_ = archive.Close()
+		}
+	}()
+
+	zipWriter := zip.NewWriter(tmp)
+	if err := addDirToZip(zipWriter, "data", "data"); err != nil {
+		return nil, fmt.Errorf("打包 data 失败: %w", err)
+	}
+	if err := addDirToZip(zipWriter, "subscribes", "subscribes"); err != nil {
+		return nil, fmt.Errorf("打包 subscribes 失败: %w", err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("finalize zip: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	info, err := tmp.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat 备份文件失败: %w", err)
+	}
+	archive.Size = info.Size()
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek 备份文件失败: %w", err)
+	}
+	ok = true
+	return archive, nil
 }
 
 // NewBackupRestoreHandler returns a handler that restores from a backup zip file

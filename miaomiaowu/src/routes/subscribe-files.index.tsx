@@ -107,6 +107,7 @@ type ExternalSubscription = {
   traffic_mode: 'download' | 'upload' | 'both' | 'none'
   auto_update: boolean
   update_interval_minutes: number
+  name_prefix?: string
   created_at: string
   updated_at: string
 }
@@ -407,6 +408,7 @@ function SubscribeFilesPage() {
     traffic_mode: 'both' as 'download' | 'upload' | 'both' | 'none',
     auto_update: false,
     update_interval_minutes: 60,
+    name_prefix: '',
   })
 
   // 代理集合对话框状态
@@ -831,6 +833,7 @@ function SubscribeFilesPage() {
       traffic_mode: string
       auto_update?: boolean
       update_interval_minutes?: number
+      name_prefix?: string
     }) => {
       await api.put(`/api/user/external-subscriptions?id=${data.id}`, {
         name: data.name,
@@ -839,6 +842,7 @@ function SubscribeFilesPage() {
         traffic_mode: data.traffic_mode,
         auto_update: data.auto_update,
         update_interval_minutes: data.update_interval_minutes,
+        name_prefix: data.name_prefix,
       })
     },
     onSuccess: () => {
@@ -4305,6 +4309,9 @@ const handleUpload = () => {
                       cell: (sub) => (
                         <div className='flex flex-col gap-1'>
                           <span>{sub.name}</span>
+                          {sub.name_prefix ? (
+                            <span className='text-[10px] font-normal text-muted-foreground'>前缀 {sub.name_prefix}</span>
+                          ) : null}
                           {sub.auto_update && (
                             <Badge variant='secondary' className='w-fit text-[10px]'>
                               定时 {sub.update_interval_minutes >= 60
@@ -4534,6 +4541,7 @@ const handleUpload = () => {
                                 traffic_mode: sub.traffic_mode || 'both',
                                 auto_update: Boolean(sub.auto_update),
                                 update_interval_minutes: sub.update_interval_minutes > 0 ? sub.update_interval_minutes : 60,
+                                name_prefix: sub.name_prefix || '',
                               })
                               setEditExternalSubDialogOpen(true)
                             }}
@@ -4607,6 +4615,11 @@ const handleUpload = () => {
                             </TooltipContent>
                           </Tooltip>
                           <div className='font-medium text-sm truncate'>{sub.name}</div>
+                          {sub.name_prefix ? (
+                            <span className='max-w-[8rem] truncate text-[10px] text-muted-foreground' title={sub.name_prefix}>
+                              {sub.name_prefix}
+                            </span>
+                          ) : null}
                           {sub.auto_update && (
                             <div className='text-[10px] text-muted-foreground'>
                               定时更新 · {sub.update_interval_minutes >= 60
@@ -4630,6 +4643,7 @@ const handleUpload = () => {
                                 traffic_mode: sub.traffic_mode || 'both',
                                 auto_update: Boolean(sub.auto_update),
                                 update_interval_minutes: sub.update_interval_minutes > 0 ? sub.update_interval_minutes : 60,
+                                name_prefix: sub.name_prefix || '',
                               })
                               setEditExternalSubDialogOpen(true)
                             }}
@@ -6653,7 +6667,7 @@ const handleUpload = () => {
           <DialogHeader>
             <DialogTitle>编辑外部订阅</DialogTitle>
             <DialogDescription>
-              修改外部订阅的地址和流量统计方式
+              修改外部订阅的地址、节点名前缀和流量统计方式
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4'>
@@ -6664,6 +6678,34 @@ const handleUpload = () => {
                 onChange={(e) => setEditExternalSubForm(prev => ({ ...prev, url: e.target.value }))}
                 placeholder='https://example.com/subscribe'
               />
+            </div>
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between gap-2'>
+                <Label htmlFor='edit-sub-name-prefix'>节点名前缀</Label>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  className='h-7 px-2 text-xs'
+                  onClick={() => {
+                    const name = (editingExternalSub?.name || '').trim()
+                    if (!name) return
+                    setEditExternalSubForm(prev => ({ ...prev, name_prefix: `〖${name}〗` }))
+                  }}
+                >
+                  使用订阅名
+                </Button>
+              </div>
+              <Input
+                id='edit-sub-name-prefix'
+                value={editExternalSubForm.name_prefix}
+                onChange={(e) => setEditExternalSubForm(prev => ({ ...prev, name_prefix: e.target.value }))}
+                placeholder='例如 〖机场A〗，留空则不加前缀'
+                className='font-mono text-sm'
+              />
+              <p className='text-xs text-muted-foreground'>
+                给节点名加前缀，例如〖机场A〗香港。
+              </p>
             </div>
             <div className='space-y-2'>
               <Label>流量统计方式</Label>
@@ -6741,6 +6783,7 @@ const handleUpload = () => {
                     traffic_mode: editExternalSubForm.traffic_mode,
                     auto_update: editExternalSubForm.auto_update,
                     update_interval_minutes: editExternalSubForm.update_interval_minutes,
+                    name_prefix: editExternalSubForm.name_prefix,
                   })
                   setEditExternalSubDialogOpen(false)
                   setEditingExternalSub(null)

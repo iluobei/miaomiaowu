@@ -138,9 +138,9 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 	}
 
 	matchRuleDesc := map[string]string{
-		"node_name":        "节点名称",
-		"server_port":      "服务器:端口",
-		"type_server_port": "类型:服务器:端口",
+		"node_name":             "节点名称",
+		"server_port":           "服务器:端口",
+		"type_server_port":      "类型:服务器:端口",
 		"type_server_port_cred": "类型:服务器:端口:凭据",
 	}
 	syncScopeDesc := map[string]string{
@@ -221,9 +221,9 @@ func syncExternalSubscriptions(ctx context.Context, repo *storage.TrafficReposit
 	}
 
 	matchRuleDesc := map[string]string{
-		"node_name":        "节点名称",
-		"server_port":      "服务器:端口",
-		"type_server_port": "类型:服务器:端口",
+		"node_name":             "节点名称",
+		"server_port":           "服务器:端口",
+		"type_server_port":      "类型:服务器:端口",
 		"type_server_port_cred": "类型:服务器:端口:凭据",
 	}
 	syncScopeDesc := map[string]string{
@@ -518,6 +518,8 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 
 	// Convert to storage.Node format
 	nodesToUpdate := make([]storage.Node, 0, len(proxies))
+	// 与 nodesToUpdate 对齐：机场下发的原始节点名（尚未加展示前缀、也未加流量后缀）。
+	remoteOriginals := make([]string, 0, len(proxies))
 
 	for _, proxy := range proxies {
 		proxyMap, ok := proxy.(map[string]any)
@@ -529,6 +531,12 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		if !ok || proxyName == "" {
 			continue
 		}
+
+		// 机场原始名。展示前缀只在后面拼到 NodeName 上，匹配仍用这个原始名。
+		remoteOriginal := proxyName
+		// 空前缀时名字与原来一致；已有此前缀则不再叠加。
+		proxyName = applyNamePrefix(sub.NamePrefix, proxyName)
+		proxyMap["name"] = proxyName
 
 		// Append subscription info to node name
 		if subInfoSuffix != "" {
@@ -564,6 +572,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		}
 
 		nodesToUpdate = append(nodesToUpdate, node)
+		remoteOriginals = append(remoteOriginals, remoteOriginal)
 	}
 
 	if len(nodesToUpdate) == 0 {
@@ -589,7 +598,13 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		removedByFilterCount := 0
 
 		for _, existing := range existingNodes {
-			if existing.RawURL == sub.URL && filterRegex.MatchString(existing.NodeName) {
+			// 过滤仍针对机场原始节点名。去掉已写入的前缀后再匹配，避免前缀里的「订阅」等词误删节点。
+			// 前缀为空时比较的字符串与原来相同。旧前缀和新前缀都试一次，换前缀后历史节点不会被误删。
+			filterName := nodeNameWithoutPrefix(sub.NamePrefix, existing.NodeName)
+			if filterName == existing.NodeName {
+				filterName = nodeNameWithoutPrefix(sub.AppliedNamePrefix, existing.NodeName)
+			}
+			if existing.RawURL == sub.URL && filterRegex.MatchString(filterName) {
 				if err := repo.DeleteNodeForSync(ctx, existing.ID, username); err != nil {
 					logger.Info("[外部订阅同步] 删除已过滤历史节点失败", "node_name", existing.NodeName, "id", existing.ID, "error", err)
 					remainingNodes = append(remainingNodes, existing)
@@ -614,11 +629,19 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	createdCount := 0
 	skippedCount := 0
 	touchedNodeIDs := make(map[int64]bool)
+	displayRenameFailed := false
+	// 同一订阅里、原始名相同的多余节点（无前缀 + 有前缀，或旧前缀 + 新前缀）。更新成功后再删。
+	var prefixDuplicateIDs []int64
 	// 收集需要写回 YAML 的节点更新，循环结束后批量写入，避免每个节点都完整读写一次订阅文件
 	var yamlUpdates []NodeUpdate
 
-	for _, node := range nodesToUpdate {
+	for nodeIdx, node := range nodesToUpdate {
 		var existingNode *storage.Node
+		remoteOriginal := ""
+		if nodeIdx < len(remoteOriginals) {
+			remoteOriginal = remoteOriginals[nodeIdx]
+		}
+		var nameMatchDuplicateIDs []int64
 
 		// Parse new node's clash config for matching
 		var newNodeClashConfig map[string]any
@@ -717,15 +740,11 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				}
 			}
 		default:
-			// Default: match by node name
-			for i := range existingNodes {
-				if existingNodes[i].NodeName == node.NodeName {
-					existingNode = &existingNodes[i]
-					logger.Info("[外部订阅同步] 节点 按名称匹配成功", "node_name", node.NodeName)
-					break
-				}
-			}
-			if existingNode == nil {
+			// 默认按节点名。有展示前缀时，同一订阅里「原始名完全相同」的旧展示名也是同一节点。
+			existingNode, nameMatchDuplicateIDs = matchExternalNodeByName(existingNodes, sub.URL, node.NodeName, remoteOriginal, sub.AppliedNamePrefix, sub.NamePrefix)
+			if existingNode != nil {
+				logger.Info("[外部订阅同步] 节点 按名称匹配成功", "node_name", node.NodeName, "matched_node", existingNode.NodeName)
+			} else {
 				logger.Info("[外部订阅同步] 节点 按名称未找到匹配", "node_name", node.NodeName)
 			}
 		}
@@ -743,9 +762,11 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			existingNode.Tag = node.Tag
 			existingNode.Tags = node.Tags
 
-			// Handle node name based on keepNodeName setting
-			if !keepNodeName {
-				existingNode.NodeName = node.NodeName // Update to new name from external subscription
+			// KeepNodeName 只保住用户真正改过的本地名。
+			// 旧展示名（无前缀，或旧/新前缀 + 机场原始名）不是自定义名，要改成当前前缀。
+			renameToDisplay := !keepNodeName || shouldRenameManagedPrefix(oldNodeName, remoteOriginal, sub.AppliedNamePrefix, sub.NamePrefix)
+			if renameToDisplay {
+				existingNode.NodeName = node.NodeName
 				if oldNodeName != node.NodeName {
 					logger.Info("[外部订阅同步] 更新节点名称 ->", "value", oldNodeName, "node_name", node.NodeName)
 				}
@@ -771,10 +792,14 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			_, err := repo.UpdateNode(ctx, *existingNode)
 			if err != nil {
 				logger.Info("[外部订阅同步] 更新节点 失败", "node_name", existingNode.NodeName, "error", err)
+				displayRenameFailed = true
 				continue
 			}
 
 			touchedNodeIDs[existingNode.ID] = true
+			if len(nameMatchDuplicateIDs) > 0 {
+				prefixDuplicateIDs = append(prefixDuplicateIDs, nameMatchDuplicateIDs...)
+			}
 			logger.Info("[外部订阅同步] 成功更新节点 (ID)", "node_name", existingNode.NodeName, "id", existingNode.ID)
 
 			// Sync to YAML files (handle name change if needed)
@@ -818,6 +843,39 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 
 	logger.Info("[外部订阅同步] 订阅同步完成", "name", sub.Name, "synced_count", syncedCount, "total_count", len(nodesToUpdate), "updated", updatedCount, "created", createdCount, "skipped", skippedCount)
 
+	// 先删掉同一原始名的多余副本，再把保留节点的新名字写回 YAML，避免把刚改好的名字删掉。
+	if len(prefixDuplicateIDs) > 0 {
+		renamedFrom := make(map[string]bool, len(yamlUpdates))
+		for _, update := range yamlUpdates {
+			renamedFrom[update.OldName] = true
+		}
+		seenDup := make(map[int64]bool, len(prefixDuplicateIDs))
+		for _, id := range prefixDuplicateIDs {
+			if id == 0 || seenDup[id] || touchedNodeIDs[id] {
+				continue
+			}
+			seenDup[id] = true
+			dupName := ""
+			for _, existing := range existingNodes {
+				if existing.ID == id {
+					dupName = existing.NodeName
+					break
+				}
+			}
+			if err := repo.DeleteNodeForSync(ctx, id, username); err != nil {
+				logger.Info("[外部订阅同步] 删除前缀重复节点失败", "node_name", dupName, "id", id, "error", err)
+				continue
+			}
+			touchedNodeIDs[id] = true
+			logger.Info("[外部订阅同步] 删除前缀重复节点", "node_name", dupName, "id", id)
+			if subscribeDir != "" && dupName != "" && !renamedFrom[dupName] {
+				if err := deleteNodeFromYAMLFiles(subscribeDir, dupName); err != nil {
+					logger.Info("[外部订阅同步] 从YAML删除前缀重复节点失败", "node_name", dupName, "error", err)
+				}
+			}
+		}
+	}
+
 	if subscribeDir != "" && len(yamlUpdates) > 0 {
 		if err := batchSyncNodesToYAMLFiles(subscribeDir, yamlUpdates); err != nil {
 			logger.Info("[外部订阅同步] 批量同步节点到YAML文件失败", "count", len(yamlUpdates), "error", err)
@@ -838,6 +896,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				logger.Info("[外部订阅同步] 删除失效节点失败", "node_name", existing.NodeName, "id", existing.ID, "error", err)
 				continue
 			}
+			touchedNodeIDs[existing.ID] = true
 			removedOrphans++
 			logger.Info("[外部订阅同步] 删除失效节点", "node_name", existing.NodeName, "id", existing.ID)
 			if subscribeDir != "" {
@@ -849,6 +908,12 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		if removedOrphans > 0 {
 			logger.Info("[外部订阅同步] 清理失效节点完成", "name", sub.Name, "removed_count", removedOrphans)
 		}
+	}
+
+	// 节点展示名都写成功后，才把「已应用前缀」推进到当前期望值。
+	// 还有没改掉的旧前缀节点时先留着，下次同步仍能按旧前缀对上原始名。
+	if !displayRenameFailed && !untouchedAppliedPrefixRemains(existingNodes, sub, touchedNodeIDs) {
+		sub.AppliedNamePrefix = sub.NamePrefix
 	}
 
 	// 同步代理集合节点到 YAML（仅处理 mmw 模式）
@@ -1701,6 +1766,123 @@ func copyMapForSync(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+// displayPrefixActive reports whether this subscription has a display prefix to
+// reconcile: either the prefix last written onto nodes, or the prefix the user wants now.
+func displayPrefixActive(appliedPrefix, desiredPrefix string) bool {
+	return strings.TrimSpace(appliedPrefix) != "" || strings.TrimSpace(desiredPrefix) != ""
+}
+
+// sameRemoteNodeName reports whether localName is exactly the airport's original
+// proxy name, or that name plus the previously applied or newly desired display prefix.
+// Comparison is exact equality. 香港 does not match 香港1, and prefixes are not stacked.
+func sameRemoteNodeName(localName, remoteOriginal, appliedPrefix, desiredPrefix string) bool {
+	if localName == "" || remoteOriginal == "" {
+		return false
+	}
+	if localName == remoteOriginal {
+		return true
+	}
+	if strings.TrimSpace(appliedPrefix) != "" && localName == applyNamePrefix(appliedPrefix, remoteOriginal) {
+		return true
+	}
+	if strings.TrimSpace(desiredPrefix) != "" && localName == applyNamePrefix(desiredPrefix, remoteOriginal) {
+		return true
+	}
+	return false
+}
+
+// shouldRenameManagedPrefix reports whether localName is only a display-layer form of
+// remoteOriginal (bare, old prefix, or new prefix). Truly custom names return false so
+// KeepNodeName can keep them. An empty prefix never forces a rename.
+func shouldRenameManagedPrefix(localName, remoteOriginal, appliedPrefix, desiredPrefix string) bool {
+	if !displayPrefixActive(appliedPrefix, desiredPrefix) {
+		return false
+	}
+	return sameRemoteNodeName(localName, remoteOriginal, appliedPrefix, desiredPrefix)
+}
+
+// matchExternalNodeByName finds the existing node for one remote proxy.
+// With no display prefix, only the full display name is compared (previous behavior).
+// With a prefix, nodes of this subscription whose name is exactly the original remote
+// name — or that name with the old or new prefix — are the same node. The lowest ID
+// is kept; the other IDs are prefix duplicates to remove after the update succeeds.
+func matchExternalNodeByName(existing []storage.Node, subURL, displayName, remoteOriginal, appliedPrefix, desiredPrefix string) (*storage.Node, []int64) {
+	if displayPrefixActive(appliedPrefix, desiredPrefix) && remoteOriginal != "" {
+		candidateIdx := make([]int, 0, 2)
+		for i := range existing {
+			if existing[i].RawURL != subURL {
+				continue
+			}
+			if existing[i].NodeName == displayName || sameRemoteNodeName(existing[i].NodeName, remoteOriginal, appliedPrefix, desiredPrefix) {
+				candidateIdx = append(candidateIdx, i)
+			}
+		}
+		if len(candidateIdx) > 0 {
+			best := candidateIdx[0]
+			for _, i := range candidateIdx[1:] {
+				if existing[i].ID < existing[best].ID {
+					best = i
+				}
+			}
+			dupIDs := make([]int64, 0, len(candidateIdx)-1)
+			for _, i := range candidateIdx {
+				if i != best && existing[i].ID != 0 {
+					dupIDs = append(dupIDs, existing[i].ID)
+				}
+			}
+			return &existing[best], dupIDs
+		}
+	}
+
+	for i := range existing {
+		if existing[i].NodeName == displayName {
+			return &existing[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// untouchedAppliedPrefixRemains reports whether this subscription still has a node
+// whose name uses the previously applied prefix and was not updated or removed.
+func untouchedAppliedPrefixRemains(existing []storage.Node, sub storage.ExternalSubscription, touched map[int64]bool) bool {
+	applied := sub.AppliedNamePrefix
+	if strings.TrimSpace(applied) == "" || applied == sub.NamePrefix {
+		return false
+	}
+	for _, node := range existing {
+		if node.RawURL != sub.URL || touched[node.ID] {
+			continue
+		}
+		if strings.HasPrefix(node.NodeName, applied) && len(node.NodeName) > len(applied) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyNamePrefix prepends prefix to a remote node name.
+// An empty or whitespace-only prefix leaves name unchanged.
+// If name already starts with prefix, it is returned as-is so repeated syncs do not stack.
+func applyNamePrefix(prefix, name string) string {
+	if strings.TrimSpace(prefix) == "" {
+		return name
+	}
+	if strings.HasPrefix(name, prefix) {
+		return name
+	}
+	return prefix + name
+}
+
+// nodeNameWithoutPrefix strips a display prefix previously applied by applyNamePrefix.
+// An empty prefix, or a name that does not start with it, is returned unchanged so
+// node-name filters keep their previous behavior.
+func nodeNameWithoutPrefix(prefix, nodeName string) string {
+	if strings.TrimSpace(prefix) == "" || !strings.HasPrefix(nodeName, prefix) {
+		return nodeName
+	}
+	return strings.TrimPrefix(nodeName, prefix)
 }
 
 // buildSubInfoSuffix builds a suffix string with remaining traffic and days for node names.
