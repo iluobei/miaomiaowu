@@ -847,6 +847,7 @@ function SubscribeFilesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
       queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
       toast.success('外部订阅已更新')
     },
@@ -6704,7 +6705,7 @@ const handleUpload = () => {
                 className='font-mono text-sm'
               />
               <p className='text-xs text-muted-foreground'>
-                给节点名加前缀，例如〖机场A〗香港。
+                给节点名加前缀，例如〖机场A〗香港。保存后立即生效。
               </p>
             </div>
             <div className='space-y-2'>

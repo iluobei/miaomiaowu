@@ -19,7 +19,7 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	h := NewExternalSubscriptionsHandler(repo)
+	h := NewExternalSubscriptionsHandler(repo, "")
 	// 127.0.0.1 会被 SSRF 客户端拒绝，创建接口仍会落库，测试不依赖外网。
 	const subURL = "http://127.0.0.1:1/sub"
 
@@ -75,6 +75,13 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 	if cleared.NamePrefix != "" {
 		t.Fatalf("cleared prefix = %q", cleared.NamePrefix)
 	}
+	reloaded, err = repo.GetExternalSubscription(ctx, created.ID, "bob")
+	if err != nil {
+		t.Fatalf("reload after clear: %v", err)
+	}
+	if reloaded.AppliedNamePrefix != "" {
+		t.Fatalf("clearing the prefix with no remaining nodes left applied %q", reloaded.AppliedNamePrefix)
+	}
 
 	spaceBody := `{"name":"机场A","url":"` + subURL + `","name_prefix":"[机场A] "}`
 	rec = serveExternalSub(t, h, http.MethodPut, updateURL, spaceBody, "bob")
@@ -89,7 +96,7 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload after prefix edit: %v", err)
 	}
-	if reloaded.NamePrefix != "[机场A] " || reloaded.AppliedNamePrefix != "【aa】" {
+	if reloaded.NamePrefix != "[机场A] " || reloaded.AppliedNamePrefix != "[机场A] " {
 		t.Fatalf("prefix edit = name %q applied %q", reloaded.NamePrefix, reloaded.AppliedNamePrefix)
 	}
 
