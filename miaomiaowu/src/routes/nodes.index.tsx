@@ -837,6 +837,10 @@ function NodesPage() {
   >(null)
   const [batchRenameDialogOpen, setBatchRenameDialogOpen] = useState(false)
   const [batchRenameText, setBatchRenameText] = useState<string>('')
+  // VLESS REALITY 客户端参数批量配置:目前只有 X25519MLKEM768 一个开关
+  const [realityOptionsDialogOpen, setRealityOptionsDialogOpen] =
+    useState(false)
+  const [realityMlkemEnabled, setRealityMlkemEnabled] = useState(true)
   const [findText, setFindText] = useState<string>('')
   const [replaceText, setReplaceText] = useState<string>('')
   const [prefixText, setPrefixText] = useState<string>('')
@@ -2051,6 +2055,49 @@ function NodesPage() {
     },
     onError: (error: any) =>
       toast.error(error.response?.data?.error || '批量关闭证书验证失败'),
+  })
+
+  // 选中节点里 clash 配置为 vless 且带 reality-opts 的(REALITY 参数批量配置的候选)
+  const realityCandidates = useMemo(
+    () =>
+      (savedNodes as ParsedNode[]).filter((n) => {
+        if (!selectedNodeIds.has(n.id)) return false
+        try {
+          const cfg = JSON.parse(n.clash_config)
+          return (
+            cfg?.type?.toLowerCase() === 'vless' &&
+            !!cfg['reality-opts'] &&
+            typeof cfg['reality-opts'] === 'object'
+          )
+        } catch {
+          return false
+        }
+      }),
+    [savedNodes, selectedNodeIds]
+  )
+
+  const updateRealityOptionsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(
+        '/api/admin/nodes/batch-reality-options',
+        {
+          node_ids: realityCandidates.map((n) => n.id),
+          support_x25519mlkem768: realityMlkemEnabled,
+        }
+      )
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success(
+        `已更新 ${data.success} 个 VLESS REALITY 节点，跳过 ${data.skipped} 个`
+      )
+      setRealityOptionsDialogOpen(false)
+    },
+    onError: (error: any) =>
+      toast.error(
+        error.response?.data?.error || 'VLESS REALITY 参数修改失败'
+      ),
   })
 
   // 批量添加地区 emoji
@@ -4042,6 +4089,20 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           }
                         >
                           关闭证书跳过 ({selectedNodeIds.size})
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => {
+                            if (realityCandidates.length === 0) {
+                              toast.info('选中的节点里没有 VLESS REALITY 节点')
+                              return
+                            }
+                            setRealityMlkemEnabled(true)
+                            setRealityOptionsDialogOpen(true)
+                          }}
+                        >
+                          REALITY 参数 ({realityCandidates.length})
                         </Button>
                         <Button
                           variant='outline'
@@ -9265,6 +9326,84 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* VLESS REALITY 节点参数批量配置 */}
+      <Dialog
+        open={realityOptionsDialogOpen}
+        onOpenChange={setRealityOptionsDialogOpen}
+      >
+        <DialogContent className='flex max-h-[85vh] max-w-2xl flex-col'>
+          <DialogHeader>
+            <DialogTitle>VLESS REALITY 参数配置</DialogTitle>
+            <DialogDescription>
+              批量修改 VLESS REALITY
+              节点的客户端参数。仅影响订阅里的客户端配置，服务端不需要改。
+            </DialogDescription>
+          </DialogHeader>
+          <div className='flex items-center justify-between gap-3 rounded-lg border p-3'>
+            <div>
+              <Label htmlFor='reality-mlkem-switch'>
+                X25519MLKEM768 后量子密钥交换
+              </Label>
+              <p className='text-muted-foreground text-xs'>
+                客户端开启 X25519MLKEM768 后量子密钥交换（mihomo
+                reality-opts.support-x25519mlkem768）。关闭时删除该参数
+              </p>
+            </div>
+            <Switch
+              id='reality-mlkem-switch'
+              checked={realityMlkemEnabled}
+              onCheckedChange={setRealityMlkemEnabled}
+            />
+          </div>
+          <div className='min-h-0 flex-1 space-y-1 overflow-y-auto rounded-lg border p-2'>
+            {realityCandidates.map((node) => {
+              let mlkem = false
+              try {
+                mlkem =
+                  JSON.parse(node.clash_config)?.['reality-opts']?.[
+                    'support-x25519mlkem768'
+                  ] === true
+              } catch {
+                // 候选已按可解析过滤,这里只做兜底
+              }
+              return (
+                <div
+                  key={node.id}
+                  className='flex items-center gap-3 rounded-md px-2 py-2'
+                >
+                  <span className='min-w-0 flex-1 truncate text-sm'>
+                    {node.node_name}
+                  </span>
+                  <span className='text-muted-foreground shrink-0 text-xs'>
+                    MLKEM {mlkem ? '已开启' : '未开启'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => setRealityOptionsDialogOpen(false)}
+              disabled={updateRealityOptionsMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => updateRealityOptionsMutation.mutate()}
+              disabled={
+                updateRealityOptionsMutation.isPending ||
+                realityCandidates.length === 0
+              }
+            >
+              {updateRealityOptionsMutation.isPending
+                ? '保存中...'
+                : `保存 ${realityCandidates.length} 个节点`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

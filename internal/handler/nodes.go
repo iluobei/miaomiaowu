@@ -198,6 +198,8 @@ func (h *nodesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleBatchRename(w, r)
 	case path == "batch-disable-skip-cert" && r.Method == http.MethodPost:
 		h.handleBatchDisableSkipCert(w, r)
+	case path == "batch-reality-options" && r.Method == http.MethodPost:
+		h.handleBatchRealityOptions(w, r)
 	default:
 		allowed := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 		methodNotAllowed(w, allowed...)
@@ -1047,6 +1049,102 @@ func (h *nodesHandler) handleBatchDisableSkipCert(w http.ResponseWriter, r *http
 		"status": "disabled", "success": successCount, "failed": failCount,
 		"skipped": skippedCount, "total": len(req.NodeIDs), "nodes": updatedNodes,
 	})
+}
+
+// handleBatchRealityOptions 批量开关 VLESS REALITY 节点的 X25519MLKEM768 后量子密钥交换。
+// 只改客户端配置里的 reality-opts.support-x25519mlkem768,服务端不用动;关闭时直接删掉该键。
+func (h *nodesHandler) handleBatchRealityOptions(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, errors.New("用户未认证"))
+		return
+	}
+	var req struct {
+		NodeIDs               []int64 `json:"node_ids"`
+		SupportX25519MLKEM768 *bool   `json:"support_x25519mlkem768"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "请求格式不正确")
+		return
+	}
+	if len(req.NodeIDs) == 0 {
+		writeBadRequest(w, "节点列表不能为空")
+		return
+	}
+	if req.SupportX25519MLKEM768 == nil {
+		writeBadRequest(w, "至少选择一个需要修改的参数")
+		return
+	}
+	var successCount, failCount, skippedCount int
+	var updatedNodes []nodeDTO
+	var yamlUpdates []NodeUpdate
+	for _, nodeID := range req.NodeIDs {
+		node, err := h.repo.GetNode(r.Context(), nodeID, username)
+		if err != nil {
+			failCount++
+			continue
+		}
+		changed := updateRealityMLKEMInJSON(&node.ClashConfig, *req.SupportX25519MLKEM768)
+		changed = updateRealityMLKEMInJSON(&node.ParsedConfig, *req.SupportX25519MLKEM768) || changed
+		if !changed {
+			// 非 VLESS REALITY 节点,或已经是目标值
+			skippedCount++
+			continue
+		}
+		updated, err := h.repo.UpdateNode(r.Context(), node)
+		if err != nil {
+			failCount++
+			continue
+		}
+		if updated.ClashConfig != "" {
+			yamlUpdates = append(yamlUpdates, NodeUpdate{OldName: updated.NodeName, NewName: updated.NodeName, ClashConfigJSON: updated.ClashConfig})
+		}
+		successCount++
+		updatedNodes = append(updatedNodes, convertNode(updated))
+	}
+	if len(yamlUpdates) > 0 {
+		if err := h.yamlSyncManager.BatchSyncNodes(yamlUpdates); err != nil {
+			logger.Info("[批量修改REALITY参数] YAML 同步失败", "error", err)
+		}
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status": "updated", "success": successCount, "failed": failCount,
+		"skipped": skippedCount, "total": len(req.NodeIDs), "nodes": updatedNodes,
+	})
+}
+
+// updateRealityMLKEMInJSON 只处理 type=vless 且带 reality-opts 的 clash 配置:enable 写 true,disable 删键。
+func updateRealityMLKEMInJSON(raw *string, enable bool) bool {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return false
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(*raw), &m) != nil || !strings.EqualFold(fmt.Sprint(m["type"]), "vless") {
+		return false
+	}
+	opts, ok := m["reality-opts"].(map[string]any)
+	if !ok || opts == nil {
+		return false
+	}
+	const key = "support-x25519mlkem768"
+	old, has := opts[key]
+	if enable {
+		if v, ok := old.(bool); ok && v {
+			return false
+		}
+		opts[key] = true
+	} else {
+		if !has {
+			return false
+		}
+		delete(opts, key)
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return false
+	}
+	*raw = string(b)
+	return true
 }
 
 func disableSkipCertVerifyInJSON(raw *string) bool {

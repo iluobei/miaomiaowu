@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Eye, Upload, Save, X, Star, Globe2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Eye, Upload, Save, X, Star, Globe2, RefreshCw } from 'lucide-react'
 
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { ProxyGroupEditor } from '@/components/template-v3/proxy-group-editor'
 import { TemplatePreview } from '@/components/template-v3/template-preview'
 import { TemplateUploadDialog } from '@/components/template-v3/template-upload-dialog'
+import { TemplateSourceUpdateDialog } from '@/components/template-v3/template-source-update-dialog'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
@@ -105,7 +106,7 @@ function TemplatesV3Page() {
   const [listPreviewTemplateContent, setListPreviewTemplateContent] = useState('')
 
   // Fetch templates list
-  const { data: templateListData, isLoading } = useQuery<{ templates: string[]; visibility: Record<string, boolean> }>({
+  const { data: templateListData, isLoading } = useQuery<{ templates: string[]; visibility: Record<string, boolean>; sources?: Record<string, string> }>({
     queryKey: ['rule-templates'],
     queryFn: async () => {
       const response = await api.get('/api/admin/rule-templates')
@@ -114,6 +115,9 @@ function TemplatesV3Page() {
   })
 	const templates = templateListData?.templates ?? []
 	const visibility = templateListData?.visibility ?? {}
+	// 从链接导入的模板记着来源链接,「从链接更新」时直接用
+	const templateSources: Record<string, string> = templateListData?.sources ?? {}
+	const [sourceUpdating, setSourceUpdating] = useState<string | null>(null)
 	const { data: defaultTemplates } = useQuery({ queryKey: ['user-default-template'], queryFn: async () => (await api.get('/api/user/default-template')).data })
 	const { data: profile } = useQuery({ queryKey: ['user-profile'], queryFn: async () => (await api.get('/api/user/profile')).data })
 	const defaultMutation = useMutation({
@@ -228,10 +232,11 @@ function TemplatesV3Page() {
 
   // Create template mutation (for paste/blank)
   const createMutation = useMutation({
-    mutationFn: async ({ name, content }: { name: string; content: string }) => {
+    mutationFn: async ({ name, content, sourceUrl }: { name: string; content: string; sourceUrl?: string }) => {
       const formData = new FormData()
       const blob = new Blob([content], { type: 'text/yaml' })
       formData.append('template', blob, name)
+      if (sourceUrl) formData.append('source_url', sourceUrl)
       await api.post('/api/admin/rule-templates/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
@@ -593,6 +598,9 @@ function TemplatesV3Page() {
           <Button variant="ghost" size="icon" onClick={() => handleEdit(name)} title="编辑">
             <Pencil className="h-4 w-4" />
           </Button>
+          <Button variant="ghost" size="icon" onClick={() => setSourceUpdating(name)} title={templateSources[name] ? `从链接更新：${templateSources[name]}` : '从链接更新'}>
+            <RefreshCw className={cn('h-4 w-4', templateSources[name] && 'text-primary')} />
+          </Button>
 		  <Button variant="ghost" size="icon" onClick={() => handleListPreview(name)} title="预览">
             <Eye className="h-4 w-4" />
 		  </Button>
@@ -639,6 +647,9 @@ function TemplatesV3Page() {
                 <div className="flex flex-wrap items-center gap-2 w-full justify-between px-2">
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(name)} className="flex-1">
                     <Pencil className="h-4 w-4 mr-1.5" /> 编辑
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSourceUpdating(name)} className="flex-1">
+                    <RefreshCw className={cn('h-4 w-4 mr-1.5', templateSources[name] && 'text-primary')} /> 从链接更新
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleListPreview(name)} className="flex-1">
                     <Eye className="h-4 w-4 mr-1.5" /> 预览
@@ -805,8 +816,15 @@ function TemplatesV3Page() {
         open={isUploadDialogOpen}
         onOpenChange={setIsUploadDialogOpen}
         onUpload={(file) => uploadMutation.mutate(file)}
-        onCreate={(name, content) => createMutation.mutate({ name, content })}
+        onCreate={(name, content, sourceUrl) => createMutation.mutate({ name, content, sourceUrl })}
         isLoading={uploadMutation.isPending || createMutation.isPending}
+      />
+
+      {/* 从链接更新对话框 */}
+      <TemplateSourceUpdateDialog
+        name={sourceUpdating}
+        sourceUrl={sourceUpdating ? templateSources[sourceUpdating] : ''}
+        onClose={() => setSourceUpdating(null)}
       />
 
       {/* List Preview Dialog */}
