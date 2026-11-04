@@ -1,22 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import {
-  Activity,
-  Link as LinkIcon,
-  Radar,
-  Users,
-  Files,
-  Zap,
-  Network,
-  Menu,
-  FileCode,
-  Settings,
-  FileStack,
-	ScrollText,
-  ListChecks,
-} from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import {
+  adminNavLinks,
+  applyNavMenuConfig,
+  baseNavLinks,
+  navMenuQueryFn,
+} from '@/lib/nav-links'
 import { profileQueryFn } from '@/lib/profile'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,72 +20,6 @@ import {
 import { NavIcon } from '@/components/layout/nav-icon'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { UserMenu } from './user-menu'
-
-const baseNavLinks = [
-  {
-    title: '流量信息',
-    to: '/',
-    icon: Activity,
-  },
-  {
-    title: '订阅链接',
-    to: '/subscription',
-    icon: LinkIcon,
-  },
-  {
-    title: '模板管理',
-    to: '/templates-v3',
-    icon: FileStack,
-  },
-]
-
-const adminNavLinks = [
-  {
-    title: '生成订阅',
-    to: '/generator',
-    icon: Zap,
-  },
-  {
-    title: '节点管理',
-    to: '/nodes',
-    icon: Network,
-  },
-  {
-    title: '订阅管理',
-    to: '/subscribe-files',
-    icon: Files,
-  },
-  {
-    title: '覆写管理',
-    to: '/custom-rules',
-    icon: FileCode,
-  },
-  {
-    title: '规则集',
-    to: '/rule-providers',
-    icon: ListChecks,
-  },
-  {
-    title: '探针管理',
-    to: '/probe',
-    icon: Radar,
-  },
-  {
-    title: '用户管理',
-    to: '/users',
-    icon: Users,
-  },
-  {
-    title: '系统设置',
-    to: '/system-settings',
-    icon: Settings,
-  },
-	{
-	  title: '日志管理',
-	  to: '/logs',
-	  icon: ScrollText,
-	},
-]
 
 export function Topbar() {
   const { auth } = useAuthStore()
@@ -110,9 +36,23 @@ export function Topbar() {
   })
 
   const isAdmin = Boolean(profile?.is_admin)
-  const allNavLinks = isAdmin
-    ? [...baseNavLinks, ...adminNavLinks]
-    : baseNavLinks
+
+  // 管理员配的菜单顺序/隐藏。取不到就按默认顺序全显示 —— 导航不该因为一个
+  // 附属请求失败而变空。
+  const { data: navMenu } = useQuery({
+    queryKey: ['nav-menu'],
+    queryFn: navMenuQueryFn,
+    enabled: Boolean(auth.accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const allNavLinks = applyNavMenuConfig(
+    isAdmin ? [...baseNavLinks, ...adminNavLinks] : baseNavLinks,
+    navMenu
+  )
+  // 移动端:基础菜单直接摆在顶栏,管理菜单收进下拉。同一份配置也套上去,免得两处顺序不一致。
+  const mobileBaseLinks = applyNavMenuConfig(baseNavLinks, navMenu)
+  const mobileAdminLinks = applyNavMenuConfig(adminNavLinks, navMenu)
   const totalLinks = allNavLinks.length
 
   // 计算需要隐藏文字的按钮数量（从后往前）
@@ -241,7 +181,7 @@ export function Topbar() {
 
           {/* Mobile Base Navigation - Only show on mobile */}
           <nav className='flex items-center gap-2 md:hidden'>
-            {baseNavLinks.map(({ title, to, icon: Icon }) => (
+            {mobileBaseLinks.map(({ title, to, icon: Icon }) => (
               <Link
                 key={to}
                 to={to}
@@ -274,7 +214,7 @@ export function Topbar() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align='start' className='pixel-border w-48'>
-                {adminNavLinks.map(({ title, to, icon: Icon }) => (
+                {mobileAdminLinks.map(({ title, to, icon: Icon }) => (
                   <DropdownMenuItem key={to} asChild>
                     <Link
                       to={to}

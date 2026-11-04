@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/tooltip'
 import { NodeProbePanel } from '@/components/node-probe-dialog'
 import { AutoBackupCard } from '@/components/system-settings/auto-backup-card'
+import { NavMenuCard } from '@/components/system-settings/nav-menu-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
 import { CACertNoPinCard } from '@/components/system-settings/ca-cert-no-pin-card'
 
@@ -1814,6 +1815,8 @@ function SystemSettingsPage() {
           <TabsContent value='appearance' className='space-y-6'>
           {/* 面板壁纸 / 液态玻璃外观 */}
           <PanelWallpaperCard />
+          {/* 菜单排序与显隐 */}
+          <NavMenuCard />
           </TabsContent>
         </Tabs>
       </main>

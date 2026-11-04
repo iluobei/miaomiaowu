@@ -258,6 +258,8 @@ func main() {
 	syncPanelAppearance(handler.LoadPanelWallpaperConfig(ctx, repo)) // 启动预热
 	mux.Handle("/api/admin/system-settings/panel-wallpaper", auth.RequireAdmin(tokenStore, userRepo, systemSettingsHandler))
 	mux.Handle("/api/admin/system-settings/panel-wallpaper/upload", auth.RequireAdmin(tokenStore, userRepo, systemSettingsHandler))
+	// 菜单排序与显隐:读给所有登录用户(导航是每个人都渲染的),写只给管理员。
+	mux.Handle("/api/admin/system-settings/nav-menu", auth.RequireAdmin(tokenStore, userRepo, handler.NewNavMenuHandler(repo, true)))
 	mux.HandleFunc("/api/public/panel-wallpaper", systemSettingsHandler.GetPanelWallpaperPublic)
 	mux.HandleFunc("/wallpapers/", systemSettingsHandler.ServeWallpaperFile)
 
@@ -286,6 +288,7 @@ func main() {
 	mux.Handle("/api/user/profile", auth.RequireToken(tokenStore, handler.NewProfileHandler(repo)))
 	mux.Handle("/api/user/settings", auth.RequireToken(tokenStore, handler.NewUserSettingsHandler(repo, tokenStore)))
 	mux.Handle("/api/user/config", auth.RequireToken(tokenStore, handler.NewUserConfigHandler(repo)))
+	mux.Handle("/api/user/nav-menu", auth.RequireToken(tokenStore, handler.NewNavMenuHandler(repo, false)))
 	mux.Handle("/api/user/2fa/status", auth.RequireToken(tokenStore, handler.NewTwoFactorStatusHandler(repo)))
 	mux.Handle("/api/user/2fa/setup", auth.RequireToken(tokenStore, handler.NewTwoFactorSetupHandler(authManager, repo)))
 	mux.Handle("/api/user/2fa/verify-setup", auth.RequireToken(tokenStore, handler.NewTwoFactorVerifySetupHandler(repo)))
