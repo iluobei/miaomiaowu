@@ -5,6 +5,17 @@
     <link rel="icon" type="image/x-icon" href="./images/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!--
+      左上角品牌(标题 + logo)的首屏注入点。与标签页标题/favicon 是不同字段:
+      那两个管浏览器标签页,这两个管页面左上角。服务端把占位符换成管理员设置的值,
+      没设就留空,前端(lib/use-branding.ts)据此画第一帧,不用等 /api/branding 回来再跳变。
+      Vite 开发服务器不经过 Go 的注入,content 会原样留着 __XXX__ 占位符,读取侧据此忽略。
+      标签页标题与 favicon 没有占位符:构建期 scripts/inject-site-config.js 会按 site.json 重写它们,
+      运行时由 internal/web/handler.go 按标签直接替换。
+    -->
+    <meta name="brand-title" content="__MMW_BRAND_TITLE__" />
+    <meta name="brand-logo" content="__MMW_BRAND_LOGO__" />
+
     <!-- Primary Meta Tags -->
     <title>妙妙屋</title>
     <meta name="title" content="妙妙屋" />
@@ -44,6 +55,12 @@
   </head>
 
   <body>
+    <!--
+      自定义 CSS 注入点。服务端把 __MMW_CUSTOM_CSS__ 替换成管理员配置的样式,没配置就留空。
+      放在 <body> 开头而不是 <head> 里:Vite 把应用样式表插在 </head> 之前,注入点在 head 里
+      会被应用样式压过去,管理员得给每条规则都写 !important。
+    -->
+    <style id="mmw-custom-css">__MMW_CUSTOM_CSS__</style>
     <script>
       ;(function () {
         var c = document.cookie.match(/(?:^|; )mmw-theme-style=([^;]*)/)
@@ -52,8 +69,10 @@
           document.documentElement.classList.add('theme-flat')
         } else if (v === 'anime') {
           document.documentElement.classList.add('theme-anime')
+          // 只换内置图标;管理员自定义的 favicon(服务端注入)不动。
           var f = document.querySelector("link[rel~='icon']")
-          if (f) f.href = '/images/anime-favicon.png'
+          if (f && (f.getAttribute('href') || '').indexOf('images/favicon.ico') !== -1)
+            f.href = '/images/anime-favicon.png'
         } else if (v === 'glass') {
           document.documentElement.classList.add('theme-glass')
         }

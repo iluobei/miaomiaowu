@@ -40,6 +40,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { NodeProbePanel } from '@/components/node-probe-dialog'
+import { BrandingCard } from '@/components/system-settings/branding-card'
+import { CustomCSSCard } from '@/components/system-settings/custom-css-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
 
 // 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
@@ -1804,6 +1806,9 @@ function SystemSettingsPage() {
           </TabsContent>
 
           <TabsContent value='appearance' className='space-y-6'>
+          {/* 自定义品牌 / 自定义 CSS(从妙妙屋X 移植) */}
+          <BrandingCard />
+          <CustomCSSCard />
           {/* 面板壁纸 / 液态玻璃外观 */}
           <PanelWallpaperCard />
           </TabsContent>

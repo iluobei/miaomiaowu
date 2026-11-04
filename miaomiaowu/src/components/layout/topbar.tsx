@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { profileQueryFn } from '@/lib/profile'
+import { useBranding } from '@/lib/use-branding'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -101,6 +102,8 @@ export function Topbar() {
   const navRef = useRef<HTMLElement>(null)
   const [iconOnlyCount, setIconOnlyCount] = useState(0)
   const [hideLogoText, setHideLogoText] = useState(false)
+  // 自定义品牌:左上角标题 / logo,空 = 内置
+  const { brandTitle, logoUrl } = useBranding()
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -187,13 +190,13 @@ export function Topbar() {
             className='hover:text-primary flex shrink-0 items-center gap-3 text-lg font-semibold tracking-tight transition outline-none focus:outline-none'
           >
             <img
-              src={`${import.meta.env.BASE_URL}images/logo.webp`}
-              alt='妙妙屋 Logo'
+              src={logoUrl || `${import.meta.env.BASE_URL}images/logo.webp`}
+              alt={`${brandTitle || '妙妙屋'} Logo`}
               className='h-10 w-10 shrink-0 border-2 border-[color:rgba(241,140,110,0.4)] shadow-[4px_4px_0_rgba(0,0,0,0.2)]'
             />
             {!hideLogoText && (
               <span className='pixel-text text-primary hidden text-base whitespace-nowrap md:inline'>
-                妙妙屋
+                {brandTitle || '妙妙屋'}
               </span>
             )}
           </Link>

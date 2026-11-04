@@ -240,6 +240,26 @@ func main() {
 	mux.HandleFunc("/api/public/panel-wallpaper", systemSettingsHandler.GetPanelWallpaperPublic)
 	mux.HandleFunc("/wallpapers/", systemSettingsHandler.ServeWallpaperFile)
 
+	// 自定义品牌 / 自定义 CSS(从妙妙屋X 移植,无许可证门控):标签页标题、favicon、左上角品牌与
+	// 自定义 CSS 都注入首屏(见 internal/web/handler.go),配置变更时由回调同步。
+	// 上传的 logo / favicon 落到 data/branding/,经 /api/branding/{logo,icon} 公开可读。
+	brandingHandler := handler.NewBrandingHandler(repo)
+	brandingHandler.SetDataDir("data")
+	brandingHandler.SetOnSiteTitleChanged(web.SetSiteTitle)
+	brandingHandler.SetOnSiteIconChanged(web.SetSiteIcon)
+	brandingHandler.SetOnBrandMarkChanged(web.SetBrandMark)
+	brandingHandler.SetOnCustomCSSChanged(web.SetCustomCSS)
+	brandingHandler.SyncInjected(ctx) // 启动预热
+	mux.Handle("/api/admin/system-settings/branding", auth.RequireAdmin(tokenStore, userRepo, http.HandlerFunc(brandingHandler.Admin)))
+	mux.Handle("/api/admin/system-settings/branding/logo", auth.RequireAdmin(tokenStore, userRepo, http.HandlerFunc(brandingHandler.UploadLogo)))
+	mux.Handle("/api/admin/system-settings/branding/icon", auth.RequireAdmin(tokenStore, userRepo, http.HandlerFunc(brandingHandler.UploadIcon)))
+	mux.Handle("/api/admin/system-settings/custom-css", auth.RequireAdmin(tokenStore, userRepo, http.HandlerFunc(brandingHandler.CustomCSS)))
+	mux.Handle("/api/admin/system-settings/custom-css/fetch", auth.RequireAdmin(tokenStore, userRepo, http.HandlerFunc(brandingHandler.FetchCustomCSS)))
+	// 公开接口:登录页也要拿到品牌 / 显示上传的 logo 与图标。
+	mux.HandleFunc("/api/branding", brandingHandler.PublicGet)
+	mux.HandleFunc("/api/branding/logo", brandingHandler.ServeLogo)
+	mux.HandleFunc("/api/branding/icon", brandingHandler.ServeIcon)
+
 	// 仅本机访问开关(issue #106)。改后重启生效(监听地址启动时定死,见 getAddr)。
 	mux.Handle("/api/admin/access-control", auth.RequireAdmin(tokenStore, userRepo, handler.NewAccessControlHandler(repo)))
 
