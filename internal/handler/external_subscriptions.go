@@ -14,12 +14,13 @@ import (
 )
 
 type externalSubscriptionRequest struct {
-	Name                  string `json:"name"`
-	URL                   string `json:"url"`
-	UserAgent             string `json:"user_agent"`
-	TrafficMode           string `json:"traffic_mode"`            // 流量统计方式: "download", "upload", "both", "none"
-	AutoUpdate            *bool  `json:"auto_update"`             // 是否启用定时更新
-	UpdateIntervalMinutes *int   `json:"update_interval_minutes"` // 更新间隔（分钟）
+	Name                  string  `json:"name"`
+	URL                   string  `json:"url"`
+	UserAgent             string  `json:"user_agent"`
+	TrafficMode           string  `json:"traffic_mode"`            // 流量统计方式: "download", "upload", "both", "none"
+	AutoUpdate            *bool   `json:"auto_update"`             // 是否启用定时更新
+	UpdateIntervalMinutes *int    `json:"update_interval_minutes"` // 更新间隔（分钟）
+	NamePrefix            *string `json:"name_prefix"`             // 节点展示名前缀；nil 表示不修改（更新时保留原值）
 }
 
 type externalSubscriptionResponse struct {
@@ -36,8 +37,18 @@ type externalSubscriptionResponse struct {
 	TrafficMode           string  `json:"traffic_mode"` // 流量统计方式: "download", "upload", "both", "none"
 	AutoUpdate            bool    `json:"auto_update"`
 	UpdateIntervalMinutes int     `json:"update_interval_minutes"`
+	NamePrefix            string  `json:"name_prefix"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+}
+
+// namePrefixFromRequest returns the caller-supplied prefix, or fallback when the field is omitted.
+// The stored string is kept as-is so a trailing space (for example "[机场A] ") is significant.
+func namePrefixFromRequest(prefix *string, fallback string) string {
+	if prefix == nil {
+		return fallback
+	}
+	return *prefix
 }
 
 func normalizeUpdateIntervalMinutes(minutes int) int {
@@ -95,6 +106,7 @@ func toExternalSubscriptionResponse(sub storage.ExternalSubscription) externalSu
 		TrafficMode:           sub.TrafficMode,
 		AutoUpdate:            sub.AutoUpdate,
 		UpdateIntervalMinutes: sub.UpdateIntervalMinutes,
+		NamePrefix:            sub.NamePrefix,
 		CreatedAt:             sub.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:             sub.UpdatedAt.Format(time.RFC3339),
 	}
@@ -240,6 +252,7 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		Expire:                trafficExpire,
 		AutoUpdate:            autoUpdate,
 		UpdateIntervalMinutes: updateInterval,
+		NamePrefix:            namePrefixFromRequest(payload.NamePrefix, ""),
 	}
 
 	id, err := repo.CreateExternalSubscription(r.Context(), sub)
@@ -259,6 +272,9 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 				existing.TrafficMode = payload.TrafficMode
 			}
 			existing.AutoUpdate, existing.UpdateIntervalMinutes = resolveAutoUpdateSettings(payload, existing.AutoUpdate, existing.UpdateIntervalMinutes)
+			if payload.NamePrefix != nil {
+				existing.NamePrefix = *payload.NamePrefix
+			}
 			if trafficTotal > 0 || trafficUpload > 0 || trafficDownload > 0 {
 				existing.Upload = trafficUpload
 				existing.Download = trafficDownload
@@ -358,6 +374,9 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		Expire:                existing.Expire,
 		AutoUpdate:            autoUpdate,
 		UpdateIntervalMinutes: updateInterval,
+		NamePrefix:            namePrefixFromRequest(payload.NamePrefix, existing.NamePrefix),
+		// 已写到节点上的前缀只在同步成功后推进。这里改期望前缀不能把它清掉，否则下次同步对不上旧名字。
+		AppliedNamePrefix: existing.AppliedNamePrefix,
 	}
 
 	if err := repo.UpdateExternalSubscription(r.Context(), sub); err != nil {
