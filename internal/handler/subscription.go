@@ -234,6 +234,10 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	// Get username from context
 	username := auth.UsernameFromContext(r.Context())
+	// 订阅获取开关(见 subscription_fetch.go):token 长链接与短码都在这里汇合。
+	if rejectSubscriptionFetchDisabled(w, r, h.repo, username) {
+		return
+	}
 
 	// 文件查找
 	stepStart = time.Now()

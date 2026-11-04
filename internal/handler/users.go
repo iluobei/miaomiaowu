@@ -22,6 +22,10 @@ type userEntry struct {
 	IsActive            bool   `json:"is_active"`
 	Remark              string `json:"remark"`
 	CustomUserShortCode string `json:"custom_user_short_code,omitempty"`
+	// 订阅获取开关:on / off,见 subscription_fetch.go。
+	SubscriptionFetch string `json:"subscription_fetch"`
+	// 限时打开的到期时刻(unix 秒),只在 on 且限时打开时有值;已到期的这里已经折算成 off(#1497)。
+	SubscriptionFetchUntil int64 `json:"subscription_fetch_until,omitempty"`
 }
 
 type userStatusRequest struct {
@@ -67,10 +71,15 @@ func NewUserListHandler(repo *storage.TrafficRepository) http.Handler {
 			return
 		}
 
+		// 订阅获取开关一次查完(避免 N+1)。读失败时列表照常出,开关一律显示为开。
+		// 限时打开已到期的按 off 显示(只折算不写库,下次拉订阅时会写回)。
+		subFetchMap, _ := repo.ListUserSubscriptionFetch(r.Context())
+		subFetchNow := subscriptionFetchNow()
+
 		entries := make([]userEntry, 0, len(users))
 		for _, user := range users {
 			customCode, _ := repo.GetUserCustomShortCode(r.Context(), user.Username)
-			entries = append(entries, userEntry{
+			entry := userEntry{
 				Username:            user.Username,
 				Email:               user.Email,
 				Nickname:            user.Nickname,
@@ -79,7 +88,14 @@ func NewUserListHandler(repo *storage.TrafficRepository) http.Handler {
 				IsActive:            user.IsActive,
 				Remark:              user.Remark,
 				CustomUserShortCode: customCode,
-			})
+				SubscriptionFetch:   storage.SubscriptionFetchOn,
+			}
+			if st, ok := subFetchMap[user.Username]; ok {
+				st = st.Effective(subFetchNow)
+				entry.SubscriptionFetch = st.State
+				entry.SubscriptionFetchUntil = st.Until
+			}
+			entries = append(entries, entry)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

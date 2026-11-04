@@ -53,6 +53,15 @@ type UserRow = {
   is_active: boolean
   remark: string
   custom_user_short_code?: string
+  // 订阅获取开关:on / off;限时打开时 subscription_fetch_until 为到期时刻(unix 秒)
+  subscription_fetch?: string
+  subscription_fetch_until?: number
+}
+
+type SubscriptionFetchPayload = {
+  username: string
+  enabled: boolean
+  duration_seconds?: number
 }
 
 type ResetState = {
@@ -84,6 +93,72 @@ type SubscribeFile = {
   url: string
   created_at?: string
   updated_at?: string
+}
+
+// 限时打开可选时长,后端限制 60 秒 ~ 7 天
+const SUBSCRIPTION_FETCH_DURATIONS = [
+  { label: '10 分钟', seconds: 600 },
+  { label: '1 小时', seconds: 3600 },
+  { label: '1 天', seconds: 86400 },
+  { label: '7 天', seconds: 7 * 86400 },
+]
+
+const formatFetchUntil = (until: number) =>
+  new Date(until * 1000).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+// 订阅获取开关:关掉后该用户的所有订阅链接一律 403;限时打开到期自动回到关闭。
+function SubscriptionFetchControl({
+  user,
+  pending,
+  onChange,
+}: {
+  user: UserRow
+  pending: boolean
+  onChange: (payload: SubscriptionFetchPayload) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const enabled = user.subscription_fetch !== 'off'
+  const until = user.subscription_fetch_until ?? 0
+  return (
+    <div className='flex items-center gap-2'>
+      <Switch
+        checked={enabled}
+        disabled={pending}
+        onCheckedChange={(checked) => onChange({ username: user.username, enabled: checked })}
+      />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant='ghost' size='sm' className='h-7 px-2 text-xs' disabled={pending}>
+            {enabled && until > 0 ? (
+              <span className='text-muted-foreground'>{formatFetchUntil(until)} 自动关</span>
+            ) : (
+              '限时打开'
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className='w-40 p-2' align='start'>
+          <div className='space-y-1'>
+            <Label className='text-xs'>限时打开，到期自动关闭</Label>
+            {SUBSCRIPTION_FETCH_DURATIONS.map((item) => (
+              <Button
+                key={item.seconds}
+                size='sm'
+                variant='outline'
+                className='h-7 w-full text-xs'
+                disabled={pending}
+                onClick={() => {
+                  onChange({ username: user.username, enabled: true, duration_seconds: item.seconds })
+                  setOpen(false)
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
 }
 
 const generatePassword = (length = 12) => {
@@ -269,6 +344,17 @@ function UsersPage() {
       toast.success('自定义连接已更新')
       setCustomCodeEditUser(null)
       setCustomCodeInput('')
+    },
+    onError: handleServerError,
+  })
+
+  const subscriptionFetchMutation = useMutation({
+    mutationFn: async (payload: SubscriptionFetchPayload) => {
+      await api.post('/api/admin/users/subscription-fetch', payload)
+    },
+    onSuccess: (_, payload) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success(payload.enabled ? '订阅获取已打开' : '订阅获取已关闭，该用户的订阅链接将被拒绝')
     },
     onError: handleServerError,
   })
@@ -509,6 +595,17 @@ function UsersPage() {
                   width: '100px'
                 },
                 {
+                  header: '订阅获取',
+                  cell: (user) => (
+                    <SubscriptionFetchControl
+                      user={user}
+                      pending={subscriptionFetchMutation.isPending}
+                      onChange={(payload) => subscriptionFetchMutation.mutate(payload)}
+                    />
+                  ),
+                  width: '180px'
+                },
+                {
                   header: '操作',
                   cell: (user) => {
                     const isAdminRow = user.role === 'admin'
@@ -618,6 +715,16 @@ function UsersPage() {
                         </div>
                       )
                     }
+                  },
+                  {
+                    label: '订阅获取',
+                    value: (user) => (
+                      <SubscriptionFetchControl
+                        user={user}
+                        pending={subscriptionFetchMutation.isPending}
+                        onChange={(payload) => subscriptionFetchMutation.mutate(payload)}
+                      />
+                    )
                   }
                 ],
                 actions: (user) => {

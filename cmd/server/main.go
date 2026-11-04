@@ -184,6 +184,8 @@ func main() {
 	mux.Handle("/api/admin/users/reset-password", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserResetPasswordHandler(repo)))
 	mux.Handle("/api/admin/users/remark", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserRemarkHandler(repo)))
 	mux.Handle("/api/admin/users/custom-short-code", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserCustomShortCodeHandler(repo)))
+	// 订阅获取开关:关掉某个用户的全部订阅链接,支持限时打开到期自动关(见 handler/subscription_fetch.go)
+	mux.Handle("/api/admin/users/subscription-fetch", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserSubscriptionFetchHandler(repo)))
 	mux.Handle("/api/admin/users/", auth.RequireAdmin(tokenStore, userRepo, handler.NewUserSubscriptionsHandler(repo)))
 	securityLogHandler := handler.NewSecurityLogHandler(repo)
 	mux.Handle("/api/admin/security/", auth.RequireAdmin(tokenStore, userRepo, securityLogHandler))
@@ -312,7 +314,7 @@ func main() {
 
 	// Temporary subscription endpoints
 	mux.Handle("/api/admin/temp-subscription", auth.RequireAdmin(tokenStore, userRepo, handler.NewTempSubscriptionHandler()))
-	tempSubAccessHandler := handler.NewTempSubscriptionAccessHandler()
+	tempSubAccessHandler := handler.NewTempSubscriptionAccessHandler(repo)
 
 	// Combined handler for short links and web app
 	// 短链接默认为 3 + 3, 订阅code+用户code, 自定义最小为1+1, 不限制长度

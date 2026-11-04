@@ -153,6 +153,10 @@ func NewProxyProviderServeHandler(repo *storage.TrafficRepository) http.Handler 
 			writeError(w, http.StatusUnauthorized, errors.New("invalid token"))
 			return
 		}
+		// 代理集合是订阅的一部分,订阅获取关了也一起拒(见 subscription_fetch.go)。
+		if rejectSubscriptionFetchDisabled(w, r, repo, username) {
+			return
+		}
 
 		// Get proxy provider config
 		config, err := repo.GetProxyProviderConfig(r.Context(), configID)

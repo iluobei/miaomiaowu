@@ -625,6 +625,14 @@ CREATE TABLE IF NOT EXISTS users (
 	if err := r.ensureUserColumn("recovery_codes", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
+	// 订阅获取开关(on / off),见 subscription_fetch.go。默认 on,存量用户补列后全部是开。
+	if err := r.ensureUserColumn("subscription_fetch", "TEXT NOT NULL DEFAULT 'on'"); err != nil {
+		return err
+	}
+	// 限时打开的到期时刻(unix 秒,0 = 不限时),#1497。
+	if err := r.ensureUserColumn("subscription_fetch_until", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	const historySchema = `
 CREATE TABLE IF NOT EXISTS rule_versions (
