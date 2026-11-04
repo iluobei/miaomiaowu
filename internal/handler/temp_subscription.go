@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"miaomiaowu/internal/auth"
+	"miaomiaowu/internal/storage"
 	"miaomiaowu/internal/util"
 
 	"gopkg.in/yaml.v3"
@@ -23,6 +25,8 @@ type TempSubscription struct {
 	AccessCount  int       `json:"access_count"`
 	ExpireAt     time.Time `json:"expire_at"`
 	CreatedAt    time.Time `json:"created_at"`
+	// 签发人(生成这条临时订阅的用户),查其订阅获取开关用,见 subscription_fetch.go。
+	CreatedBy string `json:"-"`
 }
 
 // TempSubscriptionStore manages temporary subscriptions in memory
@@ -45,6 +49,11 @@ func generateTempSubCode() string {
 
 // Create creates a new temporary subscription
 func (s *TempSubscriptionStore) Create(proxies []any, maxAccess int, expireSeconds int) *TempSubscription {
+	return s.CreateFor("", proxies, maxAccess, expireSeconds)
+}
+
+// CreateFor 同 Create,并记下签发人(生成这条临时订阅的用户)。
+func (s *TempSubscriptionStore) CreateFor(createdBy string, proxies []any, maxAccess int, expireSeconds int) *TempSubscription {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -64,10 +73,22 @@ func (s *TempSubscriptionStore) Create(proxies []any, maxAccess int, expireSecon
 		AccessCount: 0,
 		ExpireAt:    time.Now().Add(time.Duration(expireSeconds) * time.Second),
 		CreatedAt:   time.Now(),
+		CreatedBy:   createdBy,
 	}
 
 	s.subscriptions[id] = sub
 	return sub
+}
+
+// Issuer 只读查询临时订阅 id 的签发人,不计访问次数。ok=false 表示不存在 / 已过期 / 已取满。
+func (s *TempSubscriptionStore) Issuer(id string) (createdBy string, ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sub, exists := s.subscriptions[id]
+	if !exists || time.Now().After(sub.ExpireAt) || sub.AccessCount >= sub.MaxAccess {
+		return "", false
+	}
+	return sub.CreatedBy, true
 }
 
 // Get retrieves a temporary subscription by ID and increments access count
@@ -173,7 +194,7 @@ func (h *TempSubscriptionHandler) handleCreate(w http.ResponseWriter, r *http.Re
 		req.ExpireSeconds = 3600 // Max 1 hour
 	}
 
-	sub := tempSubStore.Create(req.Proxies, req.MaxAccess, req.ExpireSeconds)
+	sub := tempSubStore.CreateFor(auth.UsernameFromContext(r.Context()), req.Proxies, req.MaxAccess, req.ExpireSeconds)
 
 	resp := CreateTempSubResponse{
 		ID:        sub.ID,
@@ -187,11 +208,13 @@ func (h *TempSubscriptionHandler) handleCreate(w http.ResponseWriter, r *http.Re
 }
 
 // TempSubscriptionAccessHandler handles access to temporary subscriptions
-type TempSubscriptionAccessHandler struct{}
+type TempSubscriptionAccessHandler struct {
+	repo *storage.TrafficRepository // 查签发人的订阅获取开关;nil = 不查
+}
 
 // NewTempSubscriptionAccessHandler creates a handler for accessing temporary subscriptions
-func NewTempSubscriptionAccessHandler() http.Handler {
-	return &TempSubscriptionAccessHandler{}
+func NewTempSubscriptionAccessHandler(repo *storage.TrafficRepository) http.Handler {
+	return &TempSubscriptionAccessHandler{repo: repo}
 }
 
 func (h *TempSubscriptionAccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -214,6 +237,14 @@ func (h *TempSubscriptionAccessHandler) ServeHTTP(w http.ResponseWriter, r *http
 	if id == "" || len(id) != 8 {
 		http.NotFound(w, r)
 		return
+	}
+
+	// 签发人关了订阅获取就拒(见 subscription_fetch.go)。放在 Get 之前:Get 会计一次访问,
+	// 拒掉的请求不该把一次性链接耗掉。
+	if createdBy, ok := tempSubStore.Issuer(id); ok && createdBy != "" {
+		if rejectSubscriptionFetchDisabled(w, r, h.repo, createdBy) {
+			return
+		}
 	}
 
 	sub, err := tempSubStore.Get(id)

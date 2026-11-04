@@ -630,6 +630,14 @@ CREATE TABLE IF NOT EXISTS users (
 	if err := r.ensureUserColumn("recovery_codes", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
+	// 订阅获取开关(on / off),见 subscription_fetch.go。默认 on,存量用户补列后全部是开。
+	if err := r.ensureUserColumn("subscription_fetch", "TEXT NOT NULL DEFAULT 'on'"); err != nil {
+		return err
+	}
+	// 限时打开的到期时刻(unix 秒,0 = 不限时),#1497。
+	if err := r.ensureUserColumn("subscription_fetch_until", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	// passkey(WebAuthn)凭据。一个用户可有多把,故独立成表而不是像 totp_secret 那样加列。
 	// credential 列存 webauthn.Credential 的完整 JSON,详见 webauthn_credentials.go 的说明。
