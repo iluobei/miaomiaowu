@@ -38,3 +38,5 @@ miaomiaowu.db
 VALIDATION_INTEGRATION_PLAN.md
 *.md
 bin/*
+# go test 里初始化 logger 会在各包目录下生成 data/logs/,不入库
+**/data/logs/
