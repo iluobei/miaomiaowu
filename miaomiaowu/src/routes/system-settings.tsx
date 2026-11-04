@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { NodeProbePanel } from '@/components/node-probe-dialog'
+import { NavMenuCard } from '@/components/system-settings/nav-menu-card'
 import { PanelWallpaperCard } from '@/components/system-settings/panel-wallpaper-card'
 
 // 系统设置分选项卡:订阅同步 / 功能 / 安全 / 高级 / 节点探测 / 外观(参照妙妙屋X)
@@ -1806,6 +1807,8 @@ function SystemSettingsPage() {
           <TabsContent value='appearance' className='space-y-6'>
           {/* 面板壁纸 / 液态玻璃外观 */}
           <PanelWallpaperCard />
+          {/* 菜单排序与显隐 */}
+          <NavMenuCard />
           </TabsContent>
         </Tabs>
       </main>
