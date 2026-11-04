@@ -8,7 +8,6 @@ import {
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { useAuthStore } from '@/stores/auth-store'
-import { applyDocumentBranding, useBranding } from '@/lib/use-branding'
 import { Toaster } from '@/components/ui/sonner'
 import { AnimeStarfield } from '@/components/anime-starfield'
 import { DebugFloatingViewer } from '@/components/debug-floating-viewer'
@@ -25,13 +24,6 @@ function RootComponent() {
   // (滑块靠对同一个持久 DOM 容器做布局动画,topbar 每页重建就没有「上一个位置」可动)。
   const showTopbar =
     Boolean(auth.accessToken) && pathname !== '/login' && pathname !== '/404'
-
-  // 标签页标题 / 图标:首屏已由服务端注入,这里在品牌接口回来后(含管理员刚改完)再套一次。
-  const { siteTitle, iconUrl, loaded: brandingLoaded } = useBranding()
-  useEffect(() => {
-    if (!brandingLoaded) return
-    applyDocumentBranding(siteTitle, iconUrl)
-  }, [brandingLoaded, iconUrl, siteTitle])
 
   useEffect(() => {
     const checkMobile = () => {

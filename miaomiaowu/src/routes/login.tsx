@@ -6,7 +6,6 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Upload, AlertTriangle, ArrowLeft, KeyRound } from 'lucide-react'
 import { api } from '@/lib/api'
-import { useBranding } from '@/lib/use-branding'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   Card,
@@ -112,9 +111,6 @@ function handleLoginSuccess(
 }
 
 function LoginView() {
-  // 自定义品牌:站点标题,空 = 内置
-  const { siteTitle } = useBranding()
-  const loginTitle = siteTitle || '妙妙屋'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { auth } = useAuthStore()
@@ -189,8 +185,8 @@ function LoginView() {
     <div className='login-pixel-bg flex min-h-svh items-center justify-center px-4 py-12'>
       <Card className='w-full max-w-sm shadow-lg'>
         <CardHeader className='space-y-2 text-center'>
-          <CardTitle className='text-2xl font-semibold'>登录{loginTitle}</CardTitle>
-          <CardDescription>请输入用户账号以访问{loginTitle}</CardDescription>
+          <CardTitle className='text-2xl font-semibold'>登录妙妙屋</CardTitle>
+          <CardDescription>请输入用户账号以访问妙妙屋</CardDescription>
         </CardHeader>
         <CardContent>
           <form className='space-y-6' onSubmit={onSubmit}>
