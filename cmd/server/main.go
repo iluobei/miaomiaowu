@@ -18,7 +18,6 @@ import (
 	"miaomiaowu/internal/captcha"
 	"miaomiaowu/internal/handler"
 	"miaomiaowu/internal/logger"
-	"miaomiaowu/internal/notify"
 	"miaomiaowu/internal/patches"
 	"miaomiaowu/internal/proxygroups"
 	"miaomiaowu/internal/storage"
@@ -134,20 +133,12 @@ func main() {
 	if allowList, err := repo.GetSystemSetting(context.Background(), handler.SSRFAllowListSettingKey); err == nil {
 		handler.SetSSRFAllowList(allowList)
 	}
-	handler.InitNotifier(notify.Config{
-		Enabled:                sysCfg.NotifyEnabled,
-		BotToken:               sysCfg.TelegramBotToken,
-		ChatID:                 sysCfg.TelegramChatID,
-		NotifySubscribeFetch:   sysCfg.NotifySubscribeFetch,
-		NotifyLogin:            sysCfg.NotifyLogin,
-		NotifyIPBan:            sysCfg.NotifyIPBan,
-		NotifySilentMode:       sysCfg.NotifySilentMode,
-		NotifyDailyTraffic:     sysCfg.NotifyDailyTraffic,
-		NotifyExpiry:           sysCfg.NotifyExpiry,
-		NotifyNodeProbeOffline: sysCfg.NotifyNodeProbeOffline,
-		NotifyNodeProbeOnline:  sysCfg.NotifyNodeProbeOnline,
-		DailyTrafficTime:       sysCfg.NotifyDailyTrafficTime,
-	})
+	handler.InitNotifier(handler.BuildNotifyConfig(context.Background(), repo, sysCfg))
+	// 额外推送渠道(邮件 / Server酱 / 飞书 / 钉钉 / Bark …)与发送状态回写
+	handler.AttachNotifyStatusSink(repo)
+	if err := handler.ReloadNotifyChannels(context.Background(), repo); err != nil {
+		logger.Warn("加载推送渠道失败", "error", err)
+	}
 
 	// 启动时初始化代理集合缓存
 	go handler.InitProxyProviderCacheOnStartup(repo)
@@ -249,6 +240,10 @@ func main() {
 	mux.Handle("/api/admin/proxy-groups/sync", auth.RequireAdmin(tokenStore, userRepo, handler.NewProxyGroupsSyncHandler(repo, proxyGroupsStore)))
 	mux.Handle("/api/admin/notify-config", auth.RequireAdmin(tokenStore, userRepo, handler.NewNotifyConfigHandler(repo)))
 	mux.Handle("/api/admin/notify-config/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNotifyConfigHandler(repo)))
+	// 推送渠道(邮件 SMTP / Server酱 / 飞书 / 钉钉 / Bark / 额外 Telegram),按事件分发
+	notifyChannelsHandler := auth.RequireAdmin(tokenStore, userRepo, handler.NewNotifyChannelsHandler(repo))
+	mux.Handle("/api/admin/notify-channels", notifyChannelsHandler)
+	mux.Handle("/api/admin/notify-channels/", notifyChannelsHandler)
 
 	// 面板壁纸 / 液态玻璃外观:配置变更时把壁纸 CSS、色调、降透明度同步进首屏注入(见 internal/web/handler.go)。
 	// 壁纸落盘到 data/wallpapers/,公开可读(登录页也在同一个玻璃壳里,背景要在登录前就正确)。

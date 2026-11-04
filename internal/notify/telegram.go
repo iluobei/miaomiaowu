@@ -9,9 +9,26 @@ import (
 	"time"
 )
 
-const telegramAPIBase = "https://api.telegram.org/bot"
+// telegramAPIBase 测试里替换成 httptest 地址。
+var telegramAPIBase = "https://api.telegram.org/bot"
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+// telegramChannel 内置 Telegram 渠道与额外添加的 Telegram 渠道共用。
+// 正文原样按 Telegram legacy Markdown 发,行为与多渠道之前完全一致。
+type telegramChannel struct {
+	token  string
+	chatID string
+}
+
+func (c *telegramChannel) Send(ctx context.Context, m Msg) error {
+	return sendTelegram(ctx, c.token, c.chatID, composeText(m.Title, m.Body))
+}
+
+// composeText 拼最终发给 TG 的正文(与多渠道之前的格式逐字相同)。
+func composeText(title, message string) string {
+	return fmt.Sprintf("*%s*\n%s", title, message)
+}
 
 func sendTelegram(ctx context.Context, botToken, chatID, text string) error {
 	if botToken == "" || chatID == "" {
