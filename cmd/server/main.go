@@ -192,6 +192,9 @@ func main() {
 	mux.Handle("/api/admin/security/fetch-allowlist", auth.RequireAdmin(tokenStore, userRepo, handler.NewSSRFAllowListSettingsHandler(repo)))
 	mux.Handle("/api/admin/tasks/", auth.RequireAdmin(tokenStore, userRepo, handler.NewTaskLogHandler(repo)))
 	mux.Handle("/api/admin/operations", auth.RequireAdmin(tokenStore, userRepo, handler.NewOperationLogHandler(repo)))
+	// 主控自身日志查看与日志文件管理（data/logs）
+	mux.Handle("/api/admin/logs/system", auth.RequireAdmin(tokenStore, userRepo, handler.NewSystemLogHandler()))
+	mux.Handle("/api/admin/logs/files", auth.RequireAdmin(tokenStore, userRepo, handler.NewLogFilesHandler()))
 	mux.Handle("/api/admin/subscriptions", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscriptionAdminHandler(subscribeDir, repo)))
 	mux.Handle("/api/admin/subscriptions/", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscriptionAdminHandler(subscribeDir, repo)))
 	mux.Handle("/api/admin/subscribe-files", auth.RequireAdmin(tokenStore, userRepo, handler.NewSubscribeFilesHandler(repo)))

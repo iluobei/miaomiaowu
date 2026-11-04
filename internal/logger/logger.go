@@ -3,11 +3,18 @@ package logger
 import (
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// SystemLogPath 主日志文件路径（主控自身日志），系统日志查看与日志文件管理接口都以它为准。
+const SystemLogPath = "data/logs/mmw.log"
 
 // Logger 封装slog，支持debug文件输出
 type Logger struct {
@@ -19,15 +26,66 @@ type Logger struct {
 var (
 	defaultLogger *Logger
 	once          sync.Once
+	// 主日志文件写入器（lumberjack 大小轮转：单文件 50MB，最多保留 4 个文件即当前+3备份，超出删最旧）
+	fileWriter *lumberjack.Logger
 )
 
-// Init 初始化全局logger
+// stdlogAdapter 把标准库 log 的裸文本行包装成与 slog 一致的 logfmt。
+//
+// 为什么需要它：NodeProbe / SpeedTester / DNSPatch 等处仍用 log.Printf，这些日志只进 stderr、
+// 不落主日志文件。直接 log.SetOutput 又会让文件里混进标准库自带的 "2009/11/10 23:00:00"
+// 时间戳格式，解析器得兼容两套 —— 故在此统一成 logfmt。
+//
+// 标准库 log 没有级别概念。历史调用点通常用 Failed/失败 等明确表达错误，
+// 适配时识别这些稳定标记，避免错误被写成 INFO 而无法按级别筛选。
+type stdlogAdapter struct{ w io.Writer }
+
+func inferStdLogLevel(msg string) string {
+	upper := strings.ToUpper(msg)
+	lower := strings.ToLower(msg)
+	if strings.Contains(upper, "ERROR:") ||
+		strings.Contains(lower, "failed") ||
+		strings.Contains(msg, "失败") {
+		return "ERROR"
+	}
+	if strings.Contains(upper, "WARNING:") || strings.Contains(msg, "警告") {
+		return "WARN "
+	}
+	return "INFO "
+}
+
+func (a stdlogAdapter) Write(p []byte) (int, error) {
+	msg := strings.TrimRight(string(p), "\n")
+	line := fmt.Sprintf("time=%q level=%q msg=%q\n",
+		time.Now().Format("2006-01-02 15:04:05"), inferStdLogLevel(msg), msg)
+	if _, err := a.w.Write([]byte(line)); err != nil {
+		return 0, err
+	}
+	// 必须返回入参长度而非改写后的长度：标准库 log 拿 n != len(p) 会当成写入不完整。
+	return len(p), nil
+}
+
+// Init 初始化全局logger — 日志真实落地到 data/logs/mmw.log，同时写 stdout 供容器（docker logs）查看。
 func Init() *Logger {
 	once.Do(func() {
-		handler := newTextHandler(os.Stdout, slog.LevelInfo)
+		var w io.Writer = os.Stdout
+		if err := os.MkdirAll("data/logs", 0755); err == nil {
+			fileWriter = &lumberjack.Logger{
+				Filename:   SystemLogPath,
+				MaxSize:    50, // MB
+				MaxBackups: 3,
+				MaxAge:     0, // 不按时间删，只看大小/数量
+				Compress:   false,
+			}
+			w = io.MultiWriter(os.Stdout, fileWriter)
+		}
+		handler := newTextHandler(w, slog.LevelInfo)
 		defaultLogger = &Logger{
 			Logger: slog.New(handler),
 		}
+		// 把标准库 log 也接进同一个 sink。SetFlags(0) 去掉它自带的时间戳，改由 adapter 统一加。
+		log.SetFlags(0)
+		log.SetOutput(stdlogAdapter{w: w})
 	})
 	return defaultLogger
 }
@@ -89,9 +147,12 @@ func (l *Logger) EnableDebugLog(filePath string) error {
 
 	l.debugFile = f
 
-	// 同时输出到控制台和文件
-	multiWriter := io.MultiWriter(os.Stdout, f)
-	handler := newTextHandler(multiWriter, slog.LevelDebug)
+	// 同时输出到控制台、主日志文件和临时 debug 文件
+	writers := []io.Writer{os.Stdout, f}
+	if fileWriter != nil {
+		writers = append(writers, fileWriter)
+	}
+	handler := newTextHandler(io.MultiWriter(writers...), slog.LevelDebug)
 	l.Logger = slog.New(handler)
 
 	l.Info("Debug日志已开启", "file", filePath)
@@ -115,8 +176,12 @@ func (l *Logger) DisableDebugLog() string {
 	l.debugFile.Close()
 	l.debugFile = nil
 
-	// 恢复仅控制台输出
-	handler := newTextHandler(os.Stdout, slog.LevelInfo)
+	// 恢复到控制台 + 主日志文件输出
+	var w io.Writer = os.Stdout
+	if fileWriter != nil {
+		w = io.MultiWriter(os.Stdout, fileWriter)
+	}
+	handler := newTextHandler(w, slog.LevelInfo)
 	l.Logger = slog.New(handler)
 
 	return filePath
