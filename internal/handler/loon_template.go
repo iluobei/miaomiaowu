@@ -147,7 +147,7 @@ func injectIntoLoonSections(templateContent, proxyLines, chainLines string) (out
 	return out, injectedProxy, hadChain
 }
 
-// templateKind 模板种类。靠**扩展名**区分:.yaml/.yml = Clash、.conf = Surge、.lcf = Loon。
+// templateKind 模板种类。靠**扩展名**区分:.yaml/.yml = Clash、.conf = Surge、.lcf = Loon、.qx = Quantumult X、.json = sing-box。
 //
 // 加 Loon 之前这里只有一个 bool(wantSurge),三种就表达不了了 ——
 // 而 `isSurgeTemplateFile(name) != wantSurge` 这种写法一旦有第三种,
@@ -158,6 +158,8 @@ const (
 	templateKindClash templateKind = iota
 	templateKindSurge
 	templateKindLoon
+	templateKindQX
+	templateKindSingbox
 )
 
 func templateKindOfFile(name string) templateKind {
@@ -166,6 +168,10 @@ func templateKindOfFile(name string) templateKind {
 		return templateKindSurge
 	case isLoonTemplateFile(name):
 		return templateKindLoon
+	case isQXTemplateFile(name):
+		return templateKindQX
+	case isSingboxTemplateFile(name):
+		return templateKindSingbox
 	default:
 		return templateKindClash
 	}
@@ -178,6 +184,10 @@ func templateKindForClient(clientType string) templateKind {
 		return templateKindSurge
 	case isLoonTemplateClientType(clientType):
 		return templateKindLoon
+	case isQXTemplateClientType(clientType):
+		return templateKindQX
+	case isSingboxTemplateClientType(clientType):
+		return templateKindSingbox
 	default:
 		return templateKindClash
 	}

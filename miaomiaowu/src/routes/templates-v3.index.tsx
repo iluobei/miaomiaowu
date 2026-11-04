@@ -76,8 +76,11 @@ function TemplatesV3Page() {
   const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null)
 	const isSurgeTemplate = editingTemplateName?.toLowerCase().endsWith('.conf') ?? false
 	const isLoonTemplate = editingTemplateName?.toLowerCase().endsWith('.lcf') ?? false
-	// Surge / Loon 模板都是纯文本段落式配置,只走文本编辑,不进可视化解析。
-	const isTextTemplate = isSurgeTemplate || isLoonTemplate
+	const isQXTemplate = editingTemplateName?.toLowerCase().endsWith('.qx') ?? false
+	const isSingboxTemplate = editingTemplateName?.toLowerCase().endsWith('.json') ?? false
+	// Surge / Loon / QX 模板都是纯文本段落式配置,sing-box 模板是 JSON:只走文本编辑,不进可视化解析。
+	const isTextTemplate = isSurgeTemplate || isLoonTemplate || isQXTemplate || isSingboxTemplate
+	const textTemplateLabel = isSurgeTemplate ? 'Surge' : isLoonTemplate ? 'Loon' : isQXTemplate ? 'Quantumult X' : isSingboxTemplate ? 'sing-box' : ''
   const [templateContent, setTemplateContent] = useState('')
   const [proxyGroups, setProxyGroups] = useState<ProxyGroupFormState[]>([])
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
@@ -121,10 +124,14 @@ function TemplatesV3Page() {
 		const lower = name.toLowerCase()
 		const isConf = lower.endsWith('.conf')
 		const isLcf = lower.endsWith('.lcf')
+		const isQx = lower.endsWith('.qx')
+		const isJson = lower.endsWith('.json')
 		return api.put('/api/user/default-template', {
-		  default_template_filename: isConf || isLcf ? (defaultTemplates?.default_template_filename ?? '') : name,
+		  default_template_filename: isConf || isLcf || isQx || isJson ? (defaultTemplates?.default_template_filename ?? '') : name,
 		  default_surge_template_filename: isConf ? name : (defaultTemplates?.default_surge_template_filename ?? ''),
 		  default_loon_template_filename: isLcf ? name : (defaultTemplates?.default_loon_template_filename ?? ''),
+		  default_qx_template_filename: isQx ? name : (defaultTemplates?.default_qx_template_filename ?? ''),
+		  default_singbox_template_filename: isJson ? name : (defaultTemplates?.default_singbox_template_filename ?? ''),
 		})
 	  },
 	  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user-default-template'] }); toast.success('默认模板已更新') },
@@ -584,7 +591,7 @@ function TemplatesV3Page() {
   const columns: DataTableColumn<string>[] = [
     {
       header: '模板名称',
-		cell: (name) => <span className="flex items-center gap-2 font-medium">{name}{(name === defaultTemplates?.default_template_filename || name === defaultTemplates?.default_surge_template_filename || name === defaultTemplates?.default_loon_template_filename) && <Badge>默认</Badge>}</span>,
+		cell: (name) => <span className="flex items-center gap-2 font-medium">{name}{(name === defaultTemplates?.default_template_filename || name === defaultTemplates?.default_surge_template_filename || name === defaultTemplates?.default_loon_template_filename || name === defaultTemplates?.default_qx_template_filename || name === defaultTemplates?.default_singbox_template_filename) && <Badge>默认</Badge>}</span>,
     },
     {
       header: '操作',
@@ -614,7 +621,7 @@ function TemplatesV3Page() {
           <div>
             <CardTitle>模板管理</CardTitle>
             <CardDescription>
-              管理 Clash/Mihomo、Surge 与 Loon 模板，并设置个人默认模板
+              管理 Clash/Mihomo、Surge、Loon、Quantumult X 与 sing-box 模板，并设置个人默认模板
             </CardDescription>
           </div>
           <Button onClick={() => setIsUploadDialogOpen(true)} className="w-full sm:w-auto">
@@ -627,6 +634,8 @@ function TemplatesV3Page() {
             <div><span className="text-muted-foreground">个人默认 Clash：</span>{defaultTemplates?.default_template_filename || '未设置'}</div>
             <div><span className="text-muted-foreground">个人默认 Surge：</span>{defaultTemplates?.default_surge_template_filename || '未设置'}</div>
             <div><span className="text-muted-foreground">个人默认 Loon：</span>{defaultTemplates?.default_loon_template_filename || '未设置'}</div>
+            <div><span className="text-muted-foreground">个人默认 Quantumult X：</span>{defaultTemplates?.default_qx_template_filename || '未设置'}</div>
+            <div><span className="text-muted-foreground">个人默认 sing-box：</span>{defaultTemplates?.default_singbox_template_filename || '未设置'}</div>
           </div>
           <DataTable
             columns={columns}
@@ -726,7 +735,7 @@ function TemplatesV3Page() {
               <Tabs value={editorTab} onValueChange={handleTabChange} className="flex flex-col h-full overflow-hidden">
 				<TabsList className={cn("flex-shrink-0 w-full grid", isTextTemplate ? "grid-cols-1" : "grid-cols-2")}>
 				  {!isTextTemplate && <TabsTrigger value="visual">可视化编辑</TabsTrigger>}
-				  <TabsTrigger value="yaml">{isSurgeTemplate ? 'Surge 配置' : isLoonTemplate ? 'Loon 配置' : 'YAML 代码'}</TabsTrigger>
+				  <TabsTrigger value="yaml">{isTextTemplate ? `${textTemplateLabel} 配置` : 'YAML 代码'}</TabsTrigger>
                 </TabsList>
 
 				{!isTextTemplate && <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
@@ -775,7 +784,7 @@ function TemplatesV3Page() {
                     value={templateContent}
                     onChange={(e) => handleYamlChange(e.target.value)}
                     className="flex-1 font-mono text-xs sm:text-sm resize-none p-4"
-					placeholder={isSurgeTemplate ? 'Surge .conf 配置内容...' : isLoonTemplate ? 'Loon .lcf 配置内容...' : 'YAML 内容...'}
+					placeholder={isSurgeTemplate ? 'Surge .conf 配置内容...' : isLoonTemplate ? 'Loon .lcf 配置内容...' : isQXTemplate ? 'Quantumult X .qx 配置内容...' : isSingboxTemplate ? 'sing-box .json 配置内容...' : 'YAML 内容...'}
                   />
                 </TabsContent>
               </Tabs>
