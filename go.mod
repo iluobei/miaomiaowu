@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.10
 
 require (
-	github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.5
+	github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.6
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/go-webauthn/webauthn v0.18.1
 	github.com/google/uuid v1.6.0

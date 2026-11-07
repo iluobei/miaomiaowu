@@ -1,5 +1,5 @@
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.5 h1:CZho4mWpq4tMpZTIUIlHScKi7l1gZnzpaVyEvotLS2I=
-github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.5/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.6 h1:cjynQLnYHXcP6IfTbZCiScTxhwYV00VtayQPeheUOcY=
+github.com/MMWOrg/mmwX-plugins/proxyparser v0.4.6/go.mod h1:miHawv/7rTDHml3wMs/iASCDpZGBoy+yStOZo8Kj4rM=
 github.com/Masterminds/semver/v3 v3.2.1 h1:RN9w6+7QoMeJVGyfmbcgs28Br8cvmnucEXnY0rYXWg0=
 github.com/Masterminds/semver/v3 v3.2.1/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
 github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc h1:biVzkmvwrH8WK8raXaxBx6fRVTlJILwEwQGL1I/ByEI=
