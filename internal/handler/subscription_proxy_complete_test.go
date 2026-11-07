@@ -26,6 +26,10 @@ func TestClashProxyMissingFields(t *testing.T) {
 		{"只有 server 的半个节点", map[string]any{"server": "209.248.57.93", "uuid": "u"}, []string{"name", "type", "port"}},
 		{"port 为 0", map[string]any{"name": "HK", "type": "vless", "server": "1.2.3.4", "port": float64(0)}, []string{"port"}},
 		{"空白 name / server", map[string]any{"name": " ", "type": "vless", "server": "", "port": float64(443)}, []string{"name", "server"}},
+		// #135:Tailscale 组网节点没有 server / port,不能当残缺剔掉
+		{"tailscale 节点", map[string]any{"name": "Tailscale-unraid", "type": "tailscale", "auth-key": "tskey-auth-x", "hostname": "mihomo-node", "udp": true}, nil},
+		{"tailscale 节点缺 name", map[string]any{"type": "tailscale", "auth-key": "tskey-auth-x"}, []string{"name"}},
+		{"direct 出站", map[string]any{"name": "直连", "type": "direct", "udp": true}, nil},
 	} {
 		if got := clashProxyMissingFields(tc.proxy); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: 得到 %v,期望 %v", tc.name, got, tc.want)

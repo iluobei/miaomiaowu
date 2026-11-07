@@ -17,8 +17,15 @@ import (
 // 必填字段),订阅生成再往里写节点名,就得到只有 name 的「半个节点」。
 //
 // 端口跳跃的节点可以没有 port:hysteria2 用 ports、mieru 用 port-range。
+// Tailscale 组网节点(auth-key / hostname)和 direct 出站本来就没有 server / port,只要求 name(#135)。
 func clashProxyMissingFields(proxy map[string]any) []string {
 	var missing []string
+	if isServerlessProxyType(proxy) {
+		if !clashFieldPresent(proxy["name"]) {
+			missing = append(missing, "name")
+		}
+		return missing
+	}
 	for _, k := range []string{"name", "type", "server"} {
 		if !clashFieldPresent(proxy[k]) {
 			missing = append(missing, k)
@@ -28,6 +35,16 @@ func clashProxyMissingFields(proxy map[string]any) []string {
 		missing = append(missing, "port")
 	}
 	return missing
+}
+
+// isServerlessProxyType mihomo 里不需要 server / port 的节点类型。
+func isServerlessProxyType(proxy map[string]any) bool {
+	typ, _ := proxy["type"].(string)
+	switch strings.ToLower(strings.TrimSpace(typ)) {
+	case "tailscale", "direct":
+		return true
+	}
+	return false
 }
 
 func clashFieldPresent(v any) bool {
