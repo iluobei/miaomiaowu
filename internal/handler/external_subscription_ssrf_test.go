@@ -28,7 +28,7 @@ func TestExternalSubscription_CreateBlocksSSRF(t *testing.T) {
 	}))
 	defer internal.Close()
 
-	h := NewExternalSubscriptionsHandler(repo)
+	h := NewExternalSubscriptionsHandler(repo, "")
 	body := `{"name":"x","url":"` + internal.URL + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/user/external-subscriptions", strings.NewReader(body))
 	req = req.WithContext(auth.ContextWithUsername(ctx, "bob"))

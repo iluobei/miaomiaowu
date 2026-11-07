@@ -302,7 +302,7 @@ func main() {
 	mux.Handle("/api/user/passkey/register/begin", auth.RequireToken(tokenStore, passkeyRegisterHandler))
 	mux.Handle("/api/user/passkey/register/finish", auth.RequireToken(tokenStore, passkeyRegisterHandler))
 	mux.Handle("/api/user/token", auth.RequireToken(tokenStore, handler.NewUserTokenHandler(repo)))
-	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo)))
+	mux.Handle("/api/user/external-subscriptions", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionsHandler(repo, subscribeDir)))
 	mux.Handle("/api/user/external-subscriptions/nodes", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionNodesHandler(repo)))
 	mux.Handle("/api/user/external-subscriptions/check-filter", auth.RequireToken(tokenStore, handler.NewExternalSubscriptionCheckFilterHandler(repo)))
 	mux.Handle("/api/user/proxy-provider-configs", auth.RequireToken(tokenStore, handler.NewProxyProviderConfigsHandler(repo)))

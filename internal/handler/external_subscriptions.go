@@ -112,7 +112,7 @@ func toExternalSubscriptionResponse(sub storage.ExternalSubscription) externalSu
 	}
 }
 
-func NewExternalSubscriptionsHandler(repo *storage.TrafficRepository) http.Handler {
+func NewExternalSubscriptionsHandler(repo *storage.TrafficRepository, subscribeDir string) http.Handler {
 	if repo == nil {
 		panic("external subscriptions handler requires repository")
 	}
@@ -130,7 +130,7 @@ func NewExternalSubscriptionsHandler(repo *storage.TrafficRepository) http.Handl
 		case http.MethodPost:
 			handleCreateExternalSubscription(w, r, repo, username)
 		case http.MethodPut:
-			handleUpdateExternalSubscription(w, r, repo, username)
+			handleUpdateExternalSubscription(w, r, repo, username, subscribeDir)
 		case http.MethodDelete:
 			handleDeleteExternalSubscription(w, r, repo, username)
 		default:
@@ -310,7 +310,7 @@ func handleCreateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 	_ = json.NewEncoder(w).Encode(toExternalSubscriptionResponse(created))
 }
 
-func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, username string) {
+func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, repo *storage.TrafficRepository, username, subscribeDir string) {
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		writeError(w, http.StatusBadRequest, errors.New("subscription id is required"))
@@ -358,6 +358,18 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 	}
 
 	autoUpdate, updateInterval := resolveAutoUpdateSettings(payload, existing.AutoUpdate, existing.UpdateIntervalMinutes)
+	newPrefix := namePrefixFromRequest(payload.NamePrefix, existing.NamePrefix)
+	appliedPrefix := existing.AppliedNamePrefix
+	// 前缀没变就不要动节点。变了则立刻改这一订阅的展示名，成功后再推进已应用前缀。
+	// 节点仍挂在旧地址上，所以即使用户同时改了 URL，也按保存前的地址找节点。
+	if newPrefix != existing.NamePrefix {
+		nextApplied, err := renameExternalSubscriptionNodePrefixes(r.Context(), repo, username, existing.URL, existing.AppliedNamePrefix, newPrefix, subscribeDir)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		appliedPrefix = nextApplied
+	}
 
 	sub := storage.ExternalSubscription{
 		ID:                    id,
@@ -374,9 +386,8 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		Expire:                existing.Expire,
 		AutoUpdate:            autoUpdate,
 		UpdateIntervalMinutes: updateInterval,
-		NamePrefix:            namePrefixFromRequest(payload.NamePrefix, existing.NamePrefix),
-		// 已写到节点上的前缀只在同步成功后推进。这里改期望前缀不能把它清掉，否则下次同步对不上旧名字。
-		AppliedNamePrefix: existing.AppliedNamePrefix,
+		NamePrefix:            newPrefix,
+		AppliedNamePrefix:     appliedPrefix,
 	}
 
 	if err := repo.UpdateExternalSubscription(r.Context(), sub); err != nil {
