@@ -250,6 +250,11 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.10.1 (2026-11-07)
+- ⬆️ proxyparser 升到 v0.4.6:clash-to-surge 规则关键字按 Surge 写法转换,一键导入不再报「存在无效配置」
+- 🛠️ fix: Tailscale 节点在 Clash 订阅下发时被当作残缺节点剔掉(#135)
+- 📝 changelog 去掉自定义品牌移植与撤回的两条互相抵消的记录
+- 保存外部订阅前缀时立即重命名已有节点
 ### v0.10.0 (2026-11-04)
 - 🛠️ fix: 节点页合并后缺少 DialogFooter 导入导致整页报错
 - 🌈 订阅健壮性补丁、节点列表隐藏与 PWA 开关(从妙妙屋X 移植)
