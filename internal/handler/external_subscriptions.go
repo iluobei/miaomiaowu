@@ -399,6 +399,15 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
+	// 订阅地址变了：先把旧地址下的节点改挂到新地址，避免同步按 raw_url==新 URL
+	// 匹配/清理时把它们当成「别的来源」而永久残留（issue #136）。
+	if url != existing.URL {
+		if _, err := repo.RebindNodesRawURL(r.Context(), username, existing.URL, url); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
 	updated, err := repo.GetExternalSubscription(r.Context(), id, username)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)

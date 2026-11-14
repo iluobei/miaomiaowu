@@ -303,7 +303,7 @@ func TestExternalSync_KeepNodeNameAndPrefix(t *testing.T) {
 		}
 	})
 
-	t.Run("node name match does not treat a custom name as the same node", func(t *testing.T) {
+	t.Run("node name match recognizes a custom name via credentials", func(t *testing.T) {
 		repo := relayTestRepo(t)
 		feed := clashFeed(t, proxyJSON("香港", "1.1.1.1", 443))
 		custom := seedProxyNode(t, repo, user, feed.URL, "我的香港", "1.1.1.1", 443)
@@ -314,8 +314,11 @@ func TestExternalSync_KeepNodeNameAndPrefix(t *testing.T) {
 		if len(nodes) != 1 || nodes[0].ID != custom.ID || nodes[0].NodeName != "我的香港" {
 			t.Fatalf("nodes = %+v", nodes)
 		}
-		if len(candidates) != 1 || candidates[0].Name != "〖机场A〗香港" {
-			t.Fatalf("candidates = %+v", candidates)
+		if len(candidates) != 0 {
+			t.Fatalf("custom-named node should be rematched in place, candidates = %+v", candidates)
+		}
+		if clashNameOf(t, nodes[0]) != "我的香港" {
+			t.Fatalf("clash name = %q", clashNameOf(t, nodes[0]))
 		}
 	})
 }
