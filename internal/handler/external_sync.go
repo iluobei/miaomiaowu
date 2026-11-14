@@ -52,6 +52,8 @@ var externalSyncSelections = struct {
 
 type manualExternalSyncResult struct {
 	UpdatedCount int
+	CreatedCount int
+	DeletedCount int
 	Candidates   []externalSyncCandidate
 }
 
@@ -176,24 +178,26 @@ func syncExternalSubscriptionsManual(ctx context.Context, repo *storage.TrafficR
 
 	for i, sub := range externalSubs {
 		logger.Info("[外部订阅同步-手动] 开始同步订阅", "index", i+1, "total", len(externalSubs), "name", sub.Name)
-		nodeCount, updatedSub, candidates, err := syncSingleExternalSubscriptionWithSelection(ctx, client, repo, subscribeDir, username, sub, userSettings, true)
+		stats, updatedSub, candidates, err := syncSingleExternalSubscriptionWithSelection(ctx, client, repo, subscribeDir, username, sub, userSettings, true)
 		if err != nil {
 			logger.Info("[外部订阅同步-手动] 同步订阅失败", "index", i+1, "total", len(externalSubs), "name", sub.Name, "error", err)
 			continue
 		}
 
-		totalNodesSynced += nodeCount
-		result.UpdatedCount += nodeCount
+		totalNodesSynced += stats.Applied()
+		result.UpdatedCount += stats.Updated
+		result.CreatedCount += stats.Created
+		result.DeletedCount += stats.Deleted
 		result.Candidates = append(result.Candidates, candidates...)
 
 		// Update last sync time and node count
 		now := time.Now()
 		updatedSub.LastSyncAt = &now
-		updatedSub.NodeCount = nodeCount
+		updatedSub.NodeCount = stats.Applied()
 		if err := repo.UpdateExternalSubscription(ctx, updatedSub); err != nil {
 			logger.Info("[外部订阅同步-手动] 更新订阅同步时间失败", "name", sub.Name, "error", err)
 		}
-		logger.Info("[外部订阅同步-手动] 订阅同步完成", "index", i+1, "total", len(externalSubs), "name", sub.Name, "node_count", nodeCount)
+		logger.Info("[外部订阅同步-手动] 订阅同步完成", "index", i+1, "total", len(externalSubs), "name", sub.Name, "summary", stats.Summary())
 	}
 
 	logger.Info("[外部订阅同步-手动] 同步完成", "user", username, "subscription_count", len(externalSubs), "total_nodes", totalNodesSynced)
@@ -362,8 +366,8 @@ func getUsedExternalSubscriptionURLs(ctx context.Context, repo *storage.TrafficR
 // syncSingleExternalSubscription fetches and syncs nodes from a single external subscription
 // Returns: node count, updated subscription info, error
 func syncSingleExternalSubscription(ctx context.Context, client *http.Client, repo *storage.TrafficRepository, subscribeDir, username string, sub storage.ExternalSubscription, settings storage.UserSettings) (int, storage.ExternalSubscription, error) {
-	count, updatedSub, _, err := syncSingleExternalSubscriptionWithSelection(ctx, client, repo, subscribeDir, username, sub, settings, false)
-	return count, updatedSub, err
+	stats, updatedSub, _, err := syncSingleExternalSubscriptionWithSelection(ctx, client, repo, subscribeDir, username, sub, settings, false)
+	return stats.Applied(), updatedSub, err
 }
 
 // nodeCredentialKey 从 clash 配置里提取能区分不同用户的凭据字段,拼成一个稳定的 key。
@@ -381,7 +385,7 @@ func nodeCredentialKey(cfg map[string]any) string {
 	return strings.Join(parts, "&")
 }
 
-func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *http.Client, repo *storage.TrafficRepository, subscribeDir, username string, sub storage.ExternalSubscription, settings storage.UserSettings, deferNewNodes bool) (int, storage.ExternalSubscription, []externalSyncCandidate, error) {
+func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *http.Client, repo *storage.TrafficRepository, subscribeDir, username string, sub storage.ExternalSubscription, settings storage.UserSettings, deferNewNodes bool) (externalSyncStats, storage.ExternalSubscription, []externalSyncCandidate, error) {
 	var candidates []externalSyncCandidate
 	matchRule := settings.MatchRule
 	syncScope := settings.SyncScope
@@ -390,13 +394,13 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	logger.Info("[外部订阅同步] 开始获取订阅内容", "name", sub.Name, "url", sub.URL)
 
 	if err := validateFetchURL(sub.URL); err != nil {
-		return 0, sub, nil, err
+		return externalSyncStats{}, sub, nil, err
 	}
 	// Fetch subscription content
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sub.URL, nil)
 	if err != nil {
 		logger.Info("[外部订阅同步] 创建HTTP请求失败", "error", err)
-		return 0, sub, nil, fmt.Errorf("create request: %w", err)
+		return externalSyncStats{}, sub, nil, fmt.Errorf("create request: %w", err)
 	}
 
 	// 使用订阅保存的 User-Agent，如果为空则使用默认值
@@ -410,7 +414,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Info("[外部订阅同步] 请求订阅URL失败", "error", err)
-		return 0, sub, nil, fmt.Errorf("fetch subscription: %w", err)
+		return externalSyncStats{}, sub, nil, fmt.Errorf("fetch subscription: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -418,7 +422,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Info("[外部订阅同步] 订阅返回非200状态码", "status_code", resp.StatusCode)
-		return 0, sub, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return externalSyncStats{}, sub, nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	// Parse subscription-userinfo header if sync_traffic is enabled
@@ -454,10 +458,10 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchBodyBytes+1))
 	if err != nil {
 		logger.Info("[外部订阅同步] 读取响应内容失败", "error", err)
-		return 0, sub, nil, fmt.Errorf("read response body: %w", err)
+		return externalSyncStats{}, sub, nil, fmt.Errorf("read response body: %w", err)
 	}
 	if len(body) > maxFetchBodyBytes {
-		return 0, sub, nil, errors.New("subscription content exceeds 10MB limit")
+		return externalSyncStats{}, sub, nil, errors.New("subscription content exceeds 10MB limit")
 	}
 
 	logger.Info("[外部订阅同步] 成功获取订阅内容", "size", len(body))
@@ -489,7 +493,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 
 	if len(proxies) == 0 {
 		logger.Info("[外部订阅同步] 订阅中未找到节点(proxies)数据")
-		return 0, sub, nil, fmt.Errorf("no proxies found in subscription")
+		return externalSyncStats{}, sub, nil, fmt.Errorf("no proxies found in subscription")
 	}
 
 	logger.Info("[外部订阅同步] 解析到节点", "name", sub.Name, "count", len(proxies))
@@ -577,7 +581,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 
 	if len(nodesToUpdate) == 0 {
 		logger.Info("[外部订阅同步] 没有有效的节点可以同步")
-		return 0, sub, nil, fmt.Errorf("no valid nodes to sync")
+		return externalSyncStats{}, sub, nil, fmt.Errorf("no valid nodes to sync")
 	}
 
 	logger.Info("[外部订阅同步] 准备同步节点", "count", len(nodesToUpdate))
@@ -586,10 +590,13 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	existingNodes, err := repo.ListNodes(ctx, username)
 	if err != nil {
 		logger.Info("[外部订阅同步] 获取已保存节点列表失败", "error", err)
-		return 0, sub, nil, fmt.Errorf("list existing nodes: %w", err)
+		return externalSyncStats{}, sub, nil, fmt.Errorf("list existing nodes: %w", err)
 	}
 
 	logger.Info("[外部订阅同步] 数据库中已有节点", "count", len(existingNodes))
+
+	var stats externalSyncStats
+	activeURLs := activeExternalSubscriptionURLs(ctx, repo, username, sub.URL)
 
 	// Cleanup previously synced nodes from this subscription that match current name filter.
 	// This keeps DB state consistent with filtering rules even when those nodes were synced before.
@@ -612,6 +619,11 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				}
 				removedByFilterCount++
 				logger.Info("[外部订阅同步] 删除已过滤历史节点", "node_name", existing.NodeName, "id", existing.ID)
+				if subscribeDir != "" {
+					if err := deleteNodeFromYAMLFiles(subscribeDir, existing.NodeName); err != nil {
+						logger.Info("[外部订阅同步] 从YAML删除已过滤历史节点失败", "node_name", existing.NodeName, "error", err)
+					}
+				}
 				continue
 			}
 			remainingNodes = append(remainingNodes, existing)
@@ -621,146 +633,54 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			logger.Info("[外部订阅同步] 清理历史过滤节点完成", "removed_count", removedByFilterCount)
 		}
 		existingNodes = remainingNodes
+		stats.Deleted += removedByFilterCount
 	}
 
-	// Sync nodes to database (replace nodes based on match rule)
-	syncedCount := 0
-	updatedCount := 0
-	createdCount := 0
-	skippedCount := 0
+	// Sync nodes to database (replace nodes based on match rule, scoped to this subscription)
 	touchedNodeIDs := make(map[int64]bool)
+	usedKeys := make(map[string]bool)
 	displayRenameFailed := false
 	// 同一订阅里、原始名相同的多余节点（无前缀 + 有前缀，或旧前缀 + 新前缀）。更新成功后再删。
 	var prefixDuplicateIDs []int64
 	// 收集需要写回 YAML 的节点更新，循环结束后批量写入，避免每个节点都完整读写一次订阅文件
 	var yamlUpdates []NodeUpdate
 
+	scopedExisting := make([]storage.Node, 0, len(existingNodes))
+	for _, existing := range existingNodes {
+		if nodeBelongsToExternalSubscription(existing, sub, activeURLs) {
+			scopedExisting = append(scopedExisting, existing)
+		}
+	}
+
 	for nodeIdx, node := range nodesToUpdate {
-		var existingNode *storage.Node
 		remoteOriginal := ""
 		if nodeIdx < len(remoteOriginals) {
 			remoteOriginal = remoteOriginals[nodeIdx]
 		}
-		var nameMatchDuplicateIDs []int64
 
-		// Parse new node's clash config for matching
 		var newNodeClashConfig map[string]any
 		if err := json.Unmarshal([]byte(node.ClashConfig), &newNodeClashConfig); err != nil {
 			continue
 		}
 
-		newServer, _ := newNodeClashConfig["server"].(string)
-		newPort := newNodeClashConfig["port"]
-		newType, _ := newNodeClashConfig["type"].(string)
-
-		// Match based on rule
-		switch matchRule {
-		case "type_server_port":
-			// Match by type:server:port
-			matchKey := fmt.Sprintf("%s:%s:%v", newType, newServer, newPort)
-			if newServer != "" && newPort != nil && newType != "" {
-				for i := range existingNodes {
-					var existingClashConfig map[string]any
-					if err := json.Unmarshal([]byte(existingNodes[i].ClashConfig), &existingClashConfig); err == nil {
-						// 使用解析IP前的域名匹配
-						existingServer, _ := existingClashConfig["server"].(string)
-						if existingNodes[i].OriginalServer != "" {
-							existingServer = existingNodes[i].OriginalServer
-						}
-						existingPort := existingClashConfig["port"]
-						existingType, _ := existingClashConfig["type"].(string)
-
-						// Compare type:server:port
-						if existingType == newType && existingServer == newServer && fmt.Sprintf("%v", existingPort) == fmt.Sprintf("%v", newPort) {
-							existingNode = &existingNodes[i]
-							logger.Info("[外部订阅同步] 节点 按 type:server:port 匹配成功 -> 已有节点", "node_name", node.NodeName, "param", matchKey, "node_name", existingNode.NodeName)
-							break
-						}
-					}
-				}
-				if existingNode == nil {
-					logger.Info("[外部订阅同步] 节点 按 type:server:port 未找到匹配", "node_name", node.NodeName, "param", matchKey)
-				}
-			}
-		case "server_port":
-			// Match by server:port
-			matchKey := fmt.Sprintf("%s:%v", newServer, newPort)
-			if newServer != "" && newPort != nil {
-				for i := range existingNodes {
-					var existingClashConfig map[string]any
-					if err := json.Unmarshal([]byte(existingNodes[i].ClashConfig), &existingClashConfig); err == nil {
-						// 优先使用原始域名匹配（IP 解析前的地址）
-						existingServer, _ := existingClashConfig["server"].(string)
-						if existingNodes[i].OriginalServer != "" {
-							existingServer = existingNodes[i].OriginalServer
-						}
-						existingPort := existingClashConfig["port"]
-
-						// Compare server:port
-						if existingServer == newServer && fmt.Sprintf("%v", existingPort) == fmt.Sprintf("%v", newPort) {
-							existingNode = &existingNodes[i]
-							logger.Info("[外部订阅同步] 节点 按 server:port 匹配成功 -> 已有节点", "node_name", node.NodeName, "param", matchKey, "node_name", existingNode.NodeName)
-							break
-						}
-					}
-				}
-				if existingNode == nil {
-					logger.Info("[外部订阅同步] 节点 按 server:port 未找到匹配", "node_name", node.NodeName, "param", matchKey)
-				}
-			}
-		case "type_server_port_cred":
-			// Match by type:server:port + 凭据(uuid/password/username 等)。
-			// 用于一个端口被上游分配给多个用户的场景(issue #113):仅靠 type:server:port
-			// 会把 a、b 两个用户的同端口节点混为一个,同步 a 时覆盖掉 b。带上凭据即可区分。
-			newCred := nodeCredentialKey(newNodeClashConfig)
-			matchKey := fmt.Sprintf("%s:%s:%v#%s", newType, newServer, newPort, newCred)
-			if newServer != "" && newPort != nil && newType != "" {
-				for i := range existingNodes {
-					var existingClashConfig map[string]any
-					if err := json.Unmarshal([]byte(existingNodes[i].ClashConfig), &existingClashConfig); err == nil {
-						existingServer, _ := existingClashConfig["server"].(string)
-						if existingNodes[i].OriginalServer != "" {
-							existingServer = existingNodes[i].OriginalServer
-						}
-						existingPort := existingClashConfig["port"]
-						existingType, _ := existingClashConfig["type"].(string)
-						existingCred := nodeCredentialKey(existingClashConfig)
-
-						if existingType == newType && existingServer == newServer &&
-							fmt.Sprintf("%v", existingPort) == fmt.Sprintf("%v", newPort) &&
-							existingCred == newCred {
-							existingNode = &existingNodes[i]
-							logger.Info("[外部订阅同步] 节点 按 type:server:port:凭据 匹配成功 -> 已有节点", "node_name", node.NodeName, "param", matchKey, "matched_node", existingNode.NodeName)
-							break
-						}
-					}
-				}
-				if existingNode == nil {
-					logger.Info("[外部订阅同步] 节点 按 type:server:port:凭据 未找到匹配", "node_name", node.NodeName, "param", matchKey)
-				}
-			}
-		default:
-			// 默认按节点名。有展示前缀时，同一订阅里「原始名完全相同」的旧展示名也是同一节点。
-			existingNode, nameMatchDuplicateIDs = matchExternalNodeByName(existingNodes, sub.URL, node.NodeName, remoteOriginal, sub.AppliedNamePrefix, sub.NamePrefix)
-			if existingNode != nil {
-				logger.Info("[外部订阅同步] 节点 按名称匹配成功", "node_name", node.NodeName, "matched_node", existingNode.NodeName)
-			} else {
-				logger.Info("[外部订阅同步] 节点 按名称未找到匹配", "node_name", node.NodeName)
-			}
-		}
+		identityKey := incomingIdentityKey(matchRule, newNodeClashConfig, remoteOriginal)
+		existingNode, nameMatchDuplicateIDs := matchIncomingExternalNode(
+			matchRule, scopedExisting, touchedNodeIDs, newNodeClashConfig,
+			node.NodeName, remoteOriginal, sub.AppliedNamePrefix, sub.NamePrefix,
+		)
 
 		if existingNode != nil {
-			// Update existing node
 			oldNodeName := existingNode.NodeName
 
-			// Update node fields from external subscription
 			existingNode.RawURL = node.RawURL
 			existingNode.Protocol = node.Protocol
 			existingNode.ParsedConfig = node.ParsedConfig
 			existingNode.ClashConfig = node.ClashConfig
-			existingNode.Enabled = node.Enabled
-			existingNode.Tag = node.Tag
-			existingNode.Tags = node.Tags
+			// 保留用户的启用状态、探测、链式/中转组、created_at；标签仅在仍是订阅默认标签时更新。
+			if shouldRefreshSubscriptionTags(*existingNode, sub.Name) {
+				existingNode.Tag = node.Tag
+				existingNode.Tags = node.Tags
+			}
 
 			// KeepNodeName 只保住用户真正改过的本地名。
 			// 旧展示名（无前缀，或旧/新前缀 + 机场原始名）不是自定义名，要改成当前前缀。
@@ -772,7 +692,6 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				}
 			} else {
 				logger.Info("[外部订阅同步] 保留原节点名称 (外部订阅名称)", "value", oldNodeName, "node_name", node.NodeName)
-				// 更新 ClashConfig 和 ParsedConfig 中的 name 字段为保留的节点名称
 				var clashConfig map[string]any
 				if err := json.Unmarshal([]byte(existingNode.ClashConfig), &clashConfig); err == nil {
 					clashConfig["name"] = oldNodeName
@@ -789,59 +708,66 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				}
 			}
 
-			_, err := repo.UpdateNode(ctx, *existingNode)
-			if err != nil {
+			if _, err := repo.UpdateNode(ctx, *existingNode); err != nil {
 				logger.Info("[外部订阅同步] 更新节点 失败", "node_name", existingNode.NodeName, "error", err)
 				displayRenameFailed = true
 				continue
 			}
 
 			touchedNodeIDs[existingNode.ID] = true
+			usedKeys[identityKey] = true
 			if len(nameMatchDuplicateIDs) > 0 {
 				prefixDuplicateIDs = append(prefixDuplicateIDs, nameMatchDuplicateIDs...)
 			}
 			logger.Info("[外部订阅同步] 成功更新节点 (ID)", "node_name", existingNode.NodeName, "id", existingNode.ID)
 
-			// Sync to YAML files (handle name change if needed)
 			yamlUpdates = append(yamlUpdates, NodeUpdate{
 				OldName:         oldNodeName,
 				NewName:         existingNode.NodeName,
 				ClashConfigJSON: existingNode.ClashConfig,
 			})
 
-			syncedCount++
-			updatedCount++
-		} else {
-			// New node not found in existing nodes
-			if deferNewNodes {
-				candidate := externalSyncCandidate{
-					SubscriptionName: sub.Name, Name: node.NodeName,
-					Protocol: node.Protocol, node: node,
-				}
-				candidate.Server, _ = newNodeClashConfig["server"].(string)
-				candidate.Port = newNodeClashConfig["port"]
-				candidates = append(candidates, candidate)
+			stats.Updated++
+			continue
+		}
+
+		if usedKeys[identityKey] {
+			logger.Info("[外部订阅同步] 跳过本轮重复节点", "node_name", node.NodeName, "key", identityKey)
+			stats.Skipped++
+			continue
+		}
+
+		if deferNewNodes {
+			candidate := externalSyncCandidate{
+				SubscriptionName: sub.Name, Name: node.NodeName,
+				Protocol: node.Protocol, node: node,
+			}
+			candidate.Server, _ = newNodeClashConfig["server"].(string)
+			candidate.Port = newNodeClashConfig["port"]
+			candidates = append(candidates, candidate)
+			usedKeys[identityKey] = true
+			continue
+		}
+
+		if syncScope == "all" {
+			createdNode, err := repo.CreateNode(ctx, node)
+			if err != nil {
+				logger.Info("[外部订阅同步] 创建新节点 失败", "node_name", node.NodeName, "error", err)
 				continue
 			}
-			// Check sync scope: only create new nodes if syncScope is "all"
-			if syncScope == "all" {
-				createdNode, err := repo.CreateNode(ctx, node)
-				if err != nil {
-					logger.Info("[外部订阅同步] 创建新节点 失败", "node_name", node.NodeName, "error", err)
-					continue
-				}
-				touchedNodeIDs[createdNode.ID] = true
-				logger.Info("[外部订阅同步] 成功创建新节点", "node_name", node.NodeName)
-				syncedCount++
-				createdCount++
-			} else {
-				logger.Info("[外部订阅同步] 跳过新节点 (同步范围: 仅已保存节点)", "node_name", node.NodeName)
-				skippedCount++
-			}
+			touchedNodeIDs[createdNode.ID] = true
+			usedKeys[identityKey] = true
+			scopedExisting = append(scopedExisting, createdNode)
+			existingNodes = append(existingNodes, createdNode)
+			logger.Info("[外部订阅同步] 成功创建新节点", "node_name", node.NodeName)
+			stats.Created++
+		} else {
+			logger.Info("[外部订阅同步] 跳过新节点 (同步范围: 仅已保存节点)", "node_name", node.NodeName)
+			stats.Skipped++
 		}
 	}
 
-	logger.Info("[外部订阅同步] 订阅同步完成", "name", sub.Name, "synced_count", syncedCount, "total_count", len(nodesToUpdate), "updated", updatedCount, "created", createdCount, "skipped", skippedCount)
+	logger.Info("[外部订阅同步] 订阅同步完成", "name", sub.Name, "summary", stats.Summary(), "total_count", len(nodesToUpdate), "skipped", stats.Skipped)
 
 	// 先删掉同一原始名的多余副本，再把保留节点的新名字写回 YAML，避免把刚改好的名字删掉。
 	if len(prefixDuplicateIDs) > 0 {
@@ -867,6 +793,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 				continue
 			}
 			touchedNodeIDs[id] = true
+			stats.Deleted++
 			logger.Info("[外部订阅同步] 删除前缀重复节点", "node_name", dupName, "id", id)
 			if subscribeDir != "" && dupName != "" && !renamedFrom[dupName] {
 				if err := deleteNodeFromYAMLFiles(subscribeDir, dupName); err != nil {
@@ -886,7 +813,6 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	// 同一订阅更换 URL 后，旧 raw_url 已不在当前订阅列表里，也要按标签回收，否则会永久残留（issue #136）。
 	if syncScope == "all" {
 		removedOrphans := 0
-		activeURLs := activeExternalSubscriptionURLs(ctx, repo, username, sub.URL)
 		for _, existing := range existingNodes {
 			if touchedNodeIDs[existing.ID] {
 				continue
@@ -900,6 +826,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			}
 			touchedNodeIDs[existing.ID] = true
 			removedOrphans++
+			stats.Deleted++
 			logger.Info("[外部订阅同步] 删除失效节点", "node_name", existing.NodeName, "id", existing.ID, "raw_url", existing.RawURL)
 			if subscribeDir != "" {
 				if err := deleteNodeFromYAMLFiles(subscribeDir, existing.NodeName); err != nil {
@@ -927,7 +854,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	// 刷新绑定模板的订阅，使聚合/模板订阅及时反映节点变化
 	go RefreshAllTemplateSubscriptions(repo, username)
 
-	return syncedCount, sub, candidates, nil
+	return stats, sub, candidates, nil
 }
 
 // ParseTrafficInfoHeader parses subscription-userinfo header and returns traffic info
@@ -1161,7 +1088,7 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 
 	client := newSSRFSafeHTTPClient(30 * time.Second)
 
-	nodeCount, updatedSub, candidates, err := syncSingleExternalSubscriptionWithSelection(r.Context(), client, h.repo, h.subscribeDir, username, *targetSub, userSettings, true)
+	stats, updatedSub, candidates, err := syncSingleExternalSubscriptionWithSelection(r.Context(), client, h.repo, h.subscribeDir, username, *targetSub, userSettings, true)
 	if err != nil {
 		logger.Info("[Sync API] Failed to sync subscription", "name", targetSub.Name, "error", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -1175,7 +1102,7 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 	// Update last sync time and node count
 	now := time.Now()
 	updatedSub.LastSyncAt = &now
-	updatedSub.NodeCount = nodeCount
+	updatedSub.NodeCount = stats.Applied()
 	if err := h.repo.UpdateExternalSubscription(r.Context(), updatedSub); err != nil {
 		logger.Info("[Sync API] 更新订阅 的同步时间失败", "name", targetSub.Name, "error", err)
 	}
@@ -1185,12 +1112,17 @@ func (h *SyncSingleExternalSubscriptionHandler) ServeHTTP(w http.ResponseWriter,
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("create selection session: %w", err))
 		return
 	}
-	logger.Info("[Sync API] Successfully synced subscription , synced nodes", "name", targetSub.Name, "param", nodeCount)
+	logger.Info("[Sync API] Successfully synced subscription", "name", targetSub.Name, "summary", stats.Summary())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
-		"message": fmt.Sprintf("订阅 %s 同步成功", targetSub.Name), "node_count": nodeCount,
-		"updated_count": nodeCount, "session_id": sessionID, "new_nodes": candidates,
+		"message":       fmt.Sprintf("订阅 %s 同步成功，%s", targetSub.Name, stats.Summary()),
+		"node_count":    stats.Applied(),
+		"updated_count": stats.Updated,
+		"created_count": stats.Created,
+		"deleted_count": stats.Deleted,
+		"session_id":    sessionID,
+		"new_nodes":     candidates,
 	})
 }
 
@@ -1226,12 +1158,17 @@ func (h *SyncExternalSubscriptionsHandler) ServeHTTP(w http.ResponseWriter, r *h
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("create selection session: %w", err))
 		return
 	}
-	logger.Info("[Sync API] Successfully synced external subscriptions for user", "user", username)
+	summary := fmt.Sprintf("更新 %d 个、新增 %d 个、删除 %d 个", result.UpdatedCount, result.CreatedCount, result.DeletedCount)
+	logger.Info("[Sync API] Successfully synced external subscriptions for user", "user", username, "summary", summary)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
-		"message": "外部订阅同步成功", "updated_count": result.UpdatedCount,
-		"session_id": sessionID, "new_nodes": result.Candidates,
+		"message":       "外部订阅同步成功，" + summary,
+		"updated_count": result.UpdatedCount,
+		"created_count": result.CreatedCount,
+		"deleted_count": result.DeletedCount,
+		"session_id":    sessionID,
+		"new_nodes":     result.Candidates,
 	})
 }
 
@@ -1858,50 +1795,6 @@ func shouldPruneExternalSyncNode(node storage.Node, sub storage.ExternalSubscrip
 	return nodeTaggedWithSubscription(node, sub.Name)
 }
 
-// matchExternalNodeByName finds the existing node for one remote proxy.
-// With no display prefix, only the full display name is compared (previous behavior).
-// With a prefix, nodes of this subscription whose name is exactly the original remote
-// name — or that name with the old or new prefix — are the same node. The lowest ID
-// is kept; the other IDs are prefix duplicates to remove after the update succeeds.
-func matchExternalNodeByName(existing []storage.Node, subURL, displayName, remoteOriginal, appliedPrefix, desiredPrefix string) (*storage.Node, []int64) {
-
-	if displayPrefixActive(appliedPrefix, desiredPrefix) && remoteOriginal != "" {
-		candidateIdx := make([]int, 0, 2)
-		for i := range existing {
-			if existing[i].RawURL != subURL {
-				continue
-			}
-			if existing[i].NodeName == displayName || sameRemoteNodeName(existing[i].NodeName, remoteOriginal, appliedPrefix, desiredPrefix) {
-				candidateIdx = append(candidateIdx, i)
-			}
-		}
-		if len(candidateIdx) > 0 {
-			best := candidateIdx[0]
-			for _, i := range candidateIdx[1:] {
-				if existing[i].ID < existing[best].ID {
-					best = i
-				}
-			}
-			dupIDs := make([]int64, 0, len(candidateIdx)-1)
-			for _, i := range candidateIdx {
-				if i != best && existing[i].ID != 0 {
-					dupIDs = append(dupIDs, existing[i].ID)
-				}
-			}
-			return &existing[best], dupIDs
-		}
-	}
-
-	for i := range existing {
-		if existing[i].NodeName == displayName {
-			return &existing[i], nil
-		}
-	}
-	return nil, nil
-}
-
-// untouchedAppliedPrefixRemains reports whether this subscription still has a node
-// whose name uses the previously applied prefix and was not updated or removed.
 func untouchedAppliedPrefixRemains(existing []storage.Node, sub storage.ExternalSubscription, touched map[int64]bool) bool {
 	applied := sub.AppliedNamePrefix
 	if strings.TrimSpace(applied) == "" || applied == sub.NamePrefix {

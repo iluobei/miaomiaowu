@@ -447,6 +447,7 @@ func (r *TrafficRepository) DeleteNodeForSync(ctx context.Context, id int64, use
 	}
 
 	_, _ = r.db.ExecContext(ctx, `UPDATE nodes SET chain_proxy_node_id = NULL WHERE chain_proxy_node_id = ? AND username = ?`, id, username)
+	r.pruneRelayGroupMember(ctx, id, username)
 
 	return nil
 }

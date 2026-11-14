@@ -81,3 +81,45 @@ func TestDeleteNode_PrunesRelayGroupMember(t *testing.T) {
 		t.Errorf("after deleting all members, RelayGroupNodeIDs = %v, want empty", got.RelayGroupNodeIDs)
 	}
 }
+
+func TestDeleteNodeForSync_PrunesRelayGroupMember(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	const user = "admin"
+
+	memberA := mustCreateNode(t, repo, Node{
+		Username: user, NodeName: "Member-A", Protocol: "trojan",
+		ClashConfig: `{"name":"Member-A","type":"trojan","server":"a.example.com","port":443}`,
+		Enabled:     true,
+	})
+	memberB := mustCreateNode(t, repo, Node{
+		Username: user, NodeName: "Member-B", Protocol: "trojan",
+		ClashConfig: `{"name":"Member-B","type":"trojan","server":"b.example.com","port":443}`,
+		Enabled:     true,
+	})
+	source := mustCreateNode(t, repo, Node{
+		Username: user, NodeName: "Source", Protocol: "vmess",
+		ClashConfig:       `{"name":"Source","type":"vmess","server":"s.example.com","port":443}`,
+		Enabled:           true,
+		RelayGroupName:    "中转HK",
+		RelayGroupNodeIDs: []int64{memberA.ID, memberB.ID},
+		ChainProxyNodeID:  &memberA.ID,
+	})
+
+	if err := repo.DeleteNodeForSync(ctx, memberA.ID, user); err != nil {
+		t.Fatalf("DeleteNodeForSync(memberA): %v", err)
+	}
+	got, err := repo.GetNode(ctx, source.ID, user)
+	if err != nil {
+		t.Fatalf("GetNode(source): %v", err)
+	}
+	if got.ChainProxyNodeID != nil {
+		t.Errorf("ChainProxyNodeID = %v, want nil", got.ChainProxyNodeID)
+	}
+	if got.RelayGroupName != "中转HK" {
+		t.Errorf("RelayGroupName = %q, want 中转HK", got.RelayGroupName)
+	}
+	if len(got.RelayGroupNodeIDs) != 1 || got.RelayGroupNodeIDs[0] != memberB.ID {
+		t.Errorf("RelayGroupNodeIDs = %v, want [%d]", got.RelayGroupNodeIDs, memberB.ID)
+	}
+}
