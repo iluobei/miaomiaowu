@@ -882,14 +882,16 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		}
 	}
 
-	// 清理该外部订阅中已不存在的节点（仅 syncScope=all），保证聚合订阅能随源节点减少而减少
+	// 清理该外部订阅中已不存在的节点（仅 syncScope=all），保证聚合订阅能随源节点减少而减少。
+	// 同一订阅更换 URL 后，旧 raw_url 已不在当前订阅列表里，也要按标签回收，否则会永久残留（issue #136）。
 	if syncScope == "all" {
 		removedOrphans := 0
+		activeURLs := activeExternalSubscriptionURLs(ctx, repo, username, sub.URL)
 		for _, existing := range existingNodes {
-			if existing.RawURL != sub.URL {
+			if touchedNodeIDs[existing.ID] {
 				continue
 			}
-			if touchedNodeIDs[existing.ID] {
+			if !shouldPruneExternalSyncNode(existing, sub, activeURLs) {
 				continue
 			}
 			if err := repo.DeleteNodeForSync(ctx, existing.ID, username); err != nil {
@@ -898,7 +900,7 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			}
 			touchedNodeIDs[existing.ID] = true
 			removedOrphans++
-			logger.Info("[外部订阅同步] 删除失效节点", "node_name", existing.NodeName, "id", existing.ID)
+			logger.Info("[外部订阅同步] 删除失效节点", "node_name", existing.NodeName, "id", existing.ID, "raw_url", existing.RawURL)
 			if subscribeDir != "" {
 				if err := deleteNodeFromYAMLFiles(subscribeDir, existing.NodeName); err != nil {
 					logger.Info("[外部订阅同步] 从YAML删除失效节点失败", "node_name", existing.NodeName, "error", err)
@@ -1803,12 +1805,66 @@ func shouldRenameManagedPrefix(localName, remoteOriginal, appliedPrefix, desired
 	return sameRemoteNodeName(localName, remoteOriginal, appliedPrefix, desiredPrefix)
 }
 
+func activeExternalSubscriptionURLs(ctx context.Context, repo *storage.TrafficRepository, username, currentURL string) map[string]bool {
+	urls := make(map[string]bool)
+	if strings.TrimSpace(currentURL) != "" {
+		urls[currentURL] = true
+	}
+	if repo == nil {
+		return urls
+	}
+	subs, err := repo.ListExternalSubscriptions(ctx, username)
+	if err != nil {
+		logger.Info("[外部订阅同步] 列举订阅地址失败，仅按当前 URL 清理", "error", err)
+		return urls
+	}
+	for _, item := range subs {
+		if strings.TrimSpace(item.URL) != "" {
+			urls[item.URL] = true
+		}
+	}
+	return urls
+}
+
+func nodeTaggedWithSubscription(node storage.Node, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	if node.Tag == name {
+		return true
+	}
+	for _, tag := range node.Tags {
+		if tag == name {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldPruneExternalSyncNode reports whether a leftover node belongs to this
+// subscription and was not present in the latest fetch.
+func shouldPruneExternalSyncNode(node storage.Node, sub storage.ExternalSubscription, activeURLs map[string]bool) bool {
+	if node.RawURL == sub.URL {
+		return true
+	}
+	// 旧订阅地址已从列表里消失，但节点仍打着本订阅的标签：视为更换 URL 后的残留。
+	if strings.TrimSpace(node.RawURL) == "" {
+		return false
+	}
+	if activeURLs[node.RawURL] {
+		return false
+	}
+	return nodeTaggedWithSubscription(node, sub.Name)
+}
+
 // matchExternalNodeByName finds the existing node for one remote proxy.
 // With no display prefix, only the full display name is compared (previous behavior).
 // With a prefix, nodes of this subscription whose name is exactly the original remote
 // name — or that name with the old or new prefix — are the same node. The lowest ID
 // is kept; the other IDs are prefix duplicates to remove after the update succeeds.
 func matchExternalNodeByName(existing []storage.Node, subURL, displayName, remoteOriginal, appliedPrefix, desiredPrefix string) (*storage.Node, []int64) {
+
 	if displayPrefixActive(appliedPrefix, desiredPrefix) && remoteOriginal != "" {
 		candidateIdx := make([]int, 0, 2)
 		for i := range existing {

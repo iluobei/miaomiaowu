@@ -451,6 +451,34 @@ func (r *TrafficRepository) DeleteNodeForSync(ctx context.Context, id int64, use
 	return nil
 }
 
+// RebindNodesRawURL 把某个用户下 raw_url=fromURL 的节点改挂到 toURL。
+// 外部订阅更换地址时调用，这样后续同步仍能按「同一订阅」匹配并清理旧源节点。
+func (r *TrafficRepository) RebindNodesRawURL(ctx context.Context, username, fromURL, toURL string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("traffic repository not initialized")
+	}
+
+	username = strings.TrimSpace(username)
+	fromURL = strings.TrimSpace(fromURL)
+	toURL = strings.TrimSpace(toURL)
+	if username == "" {
+		return 0, errors.New("username is required")
+	}
+	if fromURL == "" || toURL == "" || fromURL == toURL {
+		return 0, nil
+	}
+
+	res, err := r.db.ExecContext(ctx, `UPDATE nodes SET raw_url = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND raw_url = ?`, toURL, username, fromURL)
+	if err != nil {
+		return 0, fmt.Errorf("rebind node raw_url: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rebind node raw_url rows affected: %w", err)
+	}
+	return affected, nil
+}
+
 // BatchCreateNodes creates multiple nodes in a single transaction.
 func (r *TrafficRepository) BatchCreateNodes(ctx context.Context, nodes []Node) ([]Node, error) {
 	if r == nil || r.db == nil {
