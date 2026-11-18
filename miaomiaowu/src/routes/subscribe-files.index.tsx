@@ -862,11 +862,11 @@ function SubscribeFilesPage() {
       const response = await api.post('/api/admin/sync-external-subscriptions')
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['external-subscriptions'] })
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       queryClient.invalidateQueries({ queryKey: ['traffic-summary'] })
-		  if (!externalSyncSelection.present(data)) toast.success('外部订阅同步成功')
+		  if (!externalSyncSelection.present(data)) toast.success(data.message || '外部订阅同步成功')
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '同步失败')

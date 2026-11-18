@@ -100,12 +100,24 @@ func TestExternalSync_SharedPort_CredMatchProtectsOtherUser(t *testing.T) {
 		}
 	})
 
-	// 对照组:旧规则 type_server_port 下,a 的新节点会匹配到 b 的同端口节点并覆盖之,
-	// b(uuid=BBBB)因此丢失 —— 复现原 bug,证明测试命中了脆弱路径。
-	t.Run("type_server_port 复现原 bug(b 丢失)", func(t *testing.T) {
-		nodes, _ := run(t, "type_server_port")
-		if b := findByUUID(nodes, "BBBB"); b != nil {
-			t.Errorf("预期复现 bug(b 被覆盖),但 b 仍在 name=%q —— 测试未命中脆弱路径", b.NodeName)
+	// 匹配已限制在本订阅内,即使是 type_server_port 也不再改写其他订阅的同端口节点。
+	t.Run("type_server_port 也不再覆盖其他订阅", func(t *testing.T) {
+		nodes, candidates := run(t, "type_server_port")
+		b := findByUUID(nodes, "BBBB")
+		if b == nil {
+			t.Fatalf("b 的节点(uuid=BBBB)丢失了;nodes=%+v", nodes)
+		}
+		if b.NodeName != "B-node" {
+			t.Errorf("b 的节点被改写: name=%q(应为 B-node)", b.NodeName)
+		}
+		aInCand := false
+		for _, c := range candidates {
+			if uuidOf(c.node) == "AAAA" {
+				aInCand = true
+			}
+		}
+		if !aInCand && findByUUID(nodes, "AAAA") == nil {
+			t.Errorf("a 的新节点(uuid=AAAA)既不在候选也不在已存节点里;candidates=%+v", candidates)
 		}
 	})
 }
